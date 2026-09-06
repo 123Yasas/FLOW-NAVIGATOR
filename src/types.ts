@@ -1,11 +1,13 @@
 /**
  * FlowNavigator - Data Types and Interfaces
+ * Core 5-Pillar Architecture: PLAN → MONITOR → PREDICT → GUIDE → MANAGE
  */
 
 export type ZoneStatus = 'SAFE' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 
 export interface Zone {
   id: string;
+  code: string; // e.g. "ZONE A"
   name: string;
   capacity: number;
   currentCount: number;
@@ -14,8 +16,12 @@ export interface Zone {
   status: ZoneStatus;
   accessRestricted: boolean;
   isEvacuationPath: boolean;
-  code: string; // e.g. "ZONE A"
   description: string;
+  // Coordinates for digital twin venue canvas (relative % or px)
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
 
 export type RouteRecommendation = 'RECOMMENDED' | 'MODERATE' | 'HEAVY_TRAFFIC' | 'AVOID' | 'EVACUATION_ROUTE';
@@ -26,14 +32,16 @@ export interface Route {
   startZoneId: string;
   destinationZoneId: string;
   destinationName: string;
+  distanceMeters: number;
   occupancyPercentage: number;
   estimatedWaitMinutes: number;
   estimatedWalkMinutes: number;
   status: ZoneStatus;
   tag: RouteRecommendation;
-  color: string; // Tailwind color string or hex
+  color: string; // Hex or Tailwind color
   description: string;
   pathZones: string[]; // List of zone IDs in this route
+  explainableReason: string; // Why this route is chosen / avoided
 }
 
 export type SensorStatus = 'ONLINE' | 'WARNING' | 'OFFLINE';
@@ -50,10 +58,12 @@ export interface IoTSensor {
   signalStrengthDbm: number;
   lastUpdated: string;
   firmwareVersion: string;
-  hardwareType: string; // e.g. "ESP32-IR-Counter"
+  hardwareType: string; // e.g. "ESP32 Dual-Beam IR Counter", "ToF LiDAR", "mmWave Radar"
+  isEdgeBuffered?: boolean;
+  bufferedCount?: number;
 }
 
-export type AlertSeverity = 'info' | 'warning' | 'critical' | 'emergency';
+export type AlertSeverity = 'info' | 'warning' | 'high' | 'critical' | 'emergency';
 
 export interface AlertNotification {
   id: string;
@@ -63,6 +73,9 @@ export interface AlertNotification {
   severity: AlertSeverity;
   zoneId?: string;
   read: boolean;
+  acknowledged?: boolean;
+  resolved?: boolean;
+  recommendedAction?: string;
 }
 
 export interface AIRecommendation {
@@ -73,6 +86,13 @@ export interface AIRecommendation {
   zoneId?: string;
   impactEstimate: string;
   timestamp: string;
+  factors?: {
+    currentOccupancy: number;
+    entryRate: number;
+    exitRate: number;
+    occupancyTrend: string;
+    zoneCapacity: number;
+  };
 }
 
 export interface LocationVenue {
@@ -95,6 +115,93 @@ export interface AnalyticsDataPoint {
   routeCWait: number;
   routeDWait: number;
 }
+
+export type EventType = 
+  | 'Pilgrimage & Religious Gathering' 
+  | 'Music Concert & Festival' 
+  | 'Sports Tournament' 
+  | 'Transit & Rail Terminal' 
+  | 'Exhibition & Trade Fair';
+
+export interface VenuePlanInput {
+  venueName: string;
+  eventName: string;
+  eventType: EventType;
+  length: number;
+  width: number;
+  unit: 'sqft' | 'sqm';
+  expectedCrowd: number;
+  eventDurationHours: number;
+  accessPointsCount: number;
+  destinationAreaName: string;
+  hasEmergencyAccess: boolean;
+  hasMedicalPoint: boolean;
+  hasWaterPoint: boolean;
+  hasToilet: boolean;
+  hasSecurityPoint: boolean;
+}
+
+export interface FacilityPoint {
+  id: string;
+  type: 'emergency_exit' | 'medical' | 'water' | 'toilet' | 'security' | 'sensor';
+  name: string;
+  x: number; // 0-100%
+  y: number; // 0-100%
+  icon: string;
+  zoneId?: string;
+}
+
+export interface GeneratedLayout {
+  input: VenuePlanInput;
+  totalArea: number; // in chosen unit
+  maxSafeCapacity: number;
+  densityThresholdSqUnitPerPerson: number;
+  zones: {
+    id: string;
+    code: string;
+    name: string;
+    capacity: number;
+    expectedCrowd: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+  }[];
+  pathways: {
+    id: string;
+    name: string;
+    fromZone: string;
+    toZone: string;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    direction: 'forward' | 'bidirectional';
+  }[];
+  facilities: FacilityPoint[];
+  sensorsCount: number;
+  recommendedStaffCount: number;
+}
+
+export type VenueGenerationStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type UserRole = 'landing' | 'admin' | 'visitor' | 'public_kiosk';
+
+export type AdminTab = 
+  | 'overview' 
+  | 'smart_plan' 
+  | 'live_monitor' 
+  | 'crowd_intelligence' 
+  | 'route_management' 
+  | 'sensors' 
+  | 'alerts' 
+  | 'analytics' 
+  | 'system_status';
+
+export type CitizenTab = 'live_crowd' | 'route_finder' | 'notifications' | 'emergency';
+
+export type OfflineSyncStatus = 'online' | 'offline_buffering' | 'synchronizing' | 'synchronized';
 
 export interface PreEventPlannerInput {
   eventName: string;
@@ -123,18 +230,3 @@ export interface PreEventPlanOutput {
   staffDeploymentAreas: { area: string; personnelNeeded: number; primaryTask: string }[];
   bottleneckPredictions: string[];
 }
-
-export type UserRole = 'visitor' | 'admin' | 'public_kiosk' | 'landing';
-
-export type AdminTab = 
-  | 'dashboard' 
-  | 'venue_planner'
-  | 'sensors' 
-  | 'access_control' 
-  | 'ai_recommendations' 
-  | 'analytics' 
-  | 'event_planner' 
-  | 'architecture' 
-  | 'settings';
-
-export type CitizenTab = 'live_crowd' | 'route_finder' | 'notifications' | 'emergency';

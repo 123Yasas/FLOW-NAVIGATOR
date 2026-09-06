@@ -5,8 +5,6 @@ import { LandingPage } from './components/LandingPage';
 import { CitizenView } from './components/citizen/CitizenView';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { PublicKioskDisplay } from './components/public/PublicKioskDisplay';
-import { HackathonDemoBar } from './components/demo/HackathonDemoBar';
-
 function MainAppContent() {
   const { role } = useCrowd();
 
@@ -15,7 +13,6 @@ function MainAppContent() {
     return (
       <div className="min-h-screen bg-slate-950 font-sans">
         <PublicKioskDisplay />
-        <HackathonDemoBar />
       </div>
     );
   }
@@ -29,8 +26,6 @@ function MainAppContent() {
         {role === 'visitor' && <CitizenView />}
         {role === 'admin' && <AdminDashboard />}
       </main>
-
-      <HackathonDemoBar />
     </div>
   );
 }

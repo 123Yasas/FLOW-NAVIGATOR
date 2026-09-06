@@ -161,6 +161,7 @@ export const INITIAL_ROUTES: Route[] = [
     startZoneId: 'zone-a',
     destinationZoneId: 'zone-c',
     destinationName: 'Main Shrine / Sanctum',
+    distanceMeters: 300,
     occupancyPercentage: 92,
     estimatedWaitMinutes: 28,
     estimatedWalkMinutes: 7,
@@ -168,7 +169,8 @@ export const INITIAL_ROUTES: Route[] = [
     tag: 'AVOID',
     color: '#ef4444', // red
     description: 'Direct route via North Shrine Corridor. Highly bottlenecked at sanctum entrance.',
-    pathZones: ['zone-a', 'zone-c']
+    pathZones: ['zone-a', 'zone-c'],
+    explainableReason: 'Heavy bottleneck at sanctum entrance gate (92% occupancy). Avoid to prevent crush delays.'
   },
   {
     id: 'route-b',
@@ -176,6 +178,7 @@ export const INITIAL_ROUTES: Route[] = [
     startZoneId: 'zone-a',
     destinationZoneId: 'zone-c',
     destinationName: 'Main Shrine / Sanctum',
+    distanceMeters: 420,
     occupancyPercentage: 68,
     estimatedWaitMinutes: 15,
     estimatedWalkMinutes: 10,
@@ -183,7 +186,8 @@ export const INITIAL_ROUTES: Route[] = [
     tag: 'MODERATE',
     color: '#eab308', // yellow
     description: 'Alternative route passing through the West Arcade. Moderate queue build-up.',
-    pathZones: ['zone-a', 'zone-b', 'zone-c']
+    pathZones: ['zone-a', 'zone-b', 'zone-c'],
+    explainableReason: 'Secondary arcade lane. Moderate crowd movement near prasadam distribution counters.'
   },
   {
     id: 'route-c',
@@ -191,6 +195,7 @@ export const INITIAL_ROUTES: Route[] = [
     startZoneId: 'zone-a',
     destinationZoneId: 'zone-c',
     destinationName: 'Main Shrine / Sanctum',
+    distanceMeters: 380,
     occupancyPercentage: 34,
     estimatedWaitMinutes: 6,
     estimatedWalkMinutes: 8,
@@ -198,7 +203,8 @@ export const INITIAL_ROUTES: Route[] = [
     tag: 'RECOMMENDED',
     color: '#22c55e', // green
     description: 'Widened express lane with fast-moving turnstiles and zero choke points.',
-    pathZones: ['zone-a', 'zone-d', 'zone-c']
+    pathZones: ['zone-a', 'zone-d', 'zone-c'],
+    explainableReason: 'Primary recommended lane. Lowest queue pressure (34% density) with sub-6 minute wait.'
   },
   {
     id: 'route-d',
@@ -206,6 +212,7 @@ export const INITIAL_ROUTES: Route[] = [
     startZoneId: 'zone-a',
     destinationZoneId: 'zone-f',
     destinationName: 'Exit & Parking Grounds',
+    distanceMeters: 450,
     occupancyPercentage: 42,
     estimatedWaitMinutes: 8,
     estimatedWalkMinutes: 6,
@@ -213,7 +220,8 @@ export const INITIAL_ROUTES: Route[] = [
     tag: 'RECOMMENDED',
     color: '#22c55e', // green
     description: 'Spacious south bypass corridor directly connecting to parking and transport.',
-    pathZones: ['zone-a', 'zone-d', 'zone-f']
+    pathZones: ['zone-a', 'zone-d', 'zone-f'],
+    explainableReason: 'Unobstructed outer corridor with dedicated egress lanes directly to parking and shuttles.'
   }
 ];
 
