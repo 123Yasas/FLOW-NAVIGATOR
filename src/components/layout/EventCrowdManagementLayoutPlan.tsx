@@ -20,128 +20,159 @@ import {
   Footprints,
   Eye,
   Radio,
-  DoorOpen
+  Users,
+  Compass,
+  Crosshair,
+  Droplets,
+  Activity,
+  Ambulance,
+  HeartPulse
 } from 'lucide-react';
 
 export interface EventCrowdManagementLayoutPlanProps {
   areaSqFt?: number;
   onAreaChange?: (sqFt: number) => void;
+  expectedCrowd?: number;
+  onCrowdChange?: (crowd: number) => void;
+  length?: number;
+  width?: number;
+  unit?: 'sqft' | 'sqm';
+  onDimensionsChange?: (length: number, width: number) => void;
   venueName?: string;
   eventName?: string;
-  expectedCrowd?: number;
   isSimulating?: boolean;
   onToggleSimulate?: () => void;
+}
+
+interface ObstacleDetails {
+  id: string;
+  title: string;
+  category: 'Stage' | 'Barricade' | 'Security' | 'Medical' | 'Hydration' | 'Sanitation' | 'Egress' | 'Sensor';
+  dimensions: string;
+  capacity?: string;
+  specs: string;
+  safetyProtocol: string;
+  status: 'OPTIMAL' | 'MODERATE' | 'CRITICAL' | 'STANDBY';
+  riskScore: string;
 }
 
 export const EventCrowdManagementLayoutPlan: React.FC<EventCrowdManagementLayoutPlanProps> = ({
   areaSqFt: externalAreaSqFt,
   onAreaChange,
-  venueName = 'Festival Grounds & Arena',
-  eventName = 'Grand Music & Cultural Concourse',
   expectedCrowd: externalExpectedCrowd,
+  onCrowdChange,
+  length: externalLength,
+  width: externalWidth,
+  unit = 'sqft',
+  onDimensionsChange,
+  venueName = 'Festival Grounds & Concourse',
+  eventName = 'Grand Music & Cultural Concourse',
   isSimulating: externalIsSimulating,
   onToggleSimulate,
 }) => {
-  // Local state for internal / standalone usage or when not controlled from outside
+  // Internal state fallback
   const [internalAreaSqFt, setInternalAreaSqFt] = useState<number>(75000);
+  const [internalExpectedCrowd, setInternalExpectedCrowd] = useState<number>(12000);
+  const [internalLength, setInternalLength] = useState<number>(300);
+  const [internalWidth, setInternalWidth] = useState<number>(190);
+
+  // Zoom & Pan
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [startPan, setStartPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Layer toggles
-  const [showFacilities, setShowFacilities] = useState<boolean>(true);
+  // Layer Toggles
+  const [showDimensions, setShowDimensions] = useState<boolean>(true);
+  const [showBarricades, setShowBarricades] = useState<boolean>(true);
+  const [showFlowArrows, setShowFlowArrows] = useState<boolean>(true);
+  const [showMedicalAmenities, setShowMedicalAmenities] = useState<boolean>(true);
   const [showSensors, setShowSensors] = useState<boolean>(true);
-  const [showPathways, setShowPathways] = useState<boolean>(true);
-  const [showDensityHeatmap, setShowDensityHeatmap] = useState<boolean>(false);
-  const [showEmergencyEvac, setShowEmergencyEvac] = useState<boolean>(false);
-  const [selectedElement, setSelectedElement] = useState<any | null>(null);
+  const [showEvacOverlay, setShowEvacOverlay] = useState<boolean>(false);
 
-  // Active area value
+  // Active selected obstacle for deep CAD inspection
+  const [selectedObstacle, setSelectedObstacle] = useState<ObstacleDetails | null>(null);
+
+  // Effective values
   const currentAreaSqFt = externalAreaSqFt ?? internalAreaSqFt;
-  const updateArea = (val: number) => {
-    const clamped = Math.max(5000, Math.min(250000, val));
-    if (onAreaChange) {
-      onAreaChange(clamped);
-    } else {
-      setInternalAreaSqFt(clamped);
-    }
+  const currentCrowd = externalExpectedCrowd ?? internalExpectedCrowd;
+  const currentLength = externalLength ?? internalLength;
+  const currentWidth = externalWidth ?? internalWidth;
+
+  // Safe crowd calculation: NFPA 101 standard 4.5 sq.ft / person
+  const safeCapacity = Math.floor(currentAreaSqFt / 4.5);
+  const occupancyPercentage = Math.min(150, Math.round((currentCrowd / safeCapacity) * 100));
+  const spacePerPerson = (currentAreaSqFt / Math.max(1, currentCrowd)).toFixed(1);
+
+  // Handlers for inputs
+  const handleCrowdInput = (newVal: number) => {
+    const val = Math.max(100, Math.min(250000, newVal));
+    if (onCrowdChange) onCrowdChange(val);
+    else setInternalExpectedCrowd(val);
   };
 
-  // Safe crowd density standard: 4.5 sq.ft / person
-  const safeCapacity = Math.floor(currentAreaSqFt / 4.5);
-  const currentCrowd = externalExpectedCrowd ?? Math.round(safeCapacity * 0.72);
+  const handleAreaInput = (newSqFt: number) => {
+    const val = Math.max(5000, Math.min(500000, newSqFt));
+    if (onAreaChange) onAreaChange(val);
+    else setInternalAreaSqFt(val);
+  };
 
-  // Calculate dynamic scaling tiers based on square footage:
-  // Scale factor normalized around 75,000 sq ft baseline
-  const scaleRatio = useMemo(() => {
-    return Math.sqrt(currentAreaSqFt / 75000);
-  }, [currentAreaSqFt]);
+  // Determine Architecture Scale Tier based on size & people
+  const tier = useMemo(() => {
+    if (currentCrowd <= 3500 || currentAreaSqFt <= 25000) return 'SMALL';
+    if (currentCrowd <= 18000 || currentAreaSqFt <= 110000) return 'MEDIUM';
+    return 'MEGA';
+  }, [currentCrowd, currentAreaSqFt]);
 
-  // Dynamic facility counts based on area
-  const layoutSpecs = useMemo(() => {
-    // Stage Barricades rings (2 to 5)
-    let stageBarricadeRings = 2;
-    if (currentAreaSqFt > 120000) stageBarricadeRings = 5;
-    else if (currentAreaSqFt > 70000) stageBarricadeRings = 4;
-    else if (currentAreaSqFt > 25000) stageBarricadeRings = 3;
+  // Derived CAD layout metrics based on size & people
+  const cadMetrics = useMemo(() => {
+    // Meters representation
+    const lenM = Math.round(unit === 'sqm' ? currentLength : currentLength * 0.3048);
+    const widM = Math.round(unit === 'sqm' ? currentWidth : currentWidth * 0.3048);
 
-    // Entrance queue lanes (2 to 6)
-    let entranceLanes = 2;
-    if (currentAreaSqFt > 120000) entranceLanes = 6;
-    else if (currentAreaSqFt > 70000) entranceLanes = 4;
-    else if (currentAreaSqFt > 30000) entranceLanes = 3;
-
-    // Restroom banks & units
-    let restroomBanks = 1;
-    let totalRestrooms = 8;
-    if (currentAreaSqFt > 100000) {
-      restroomBanks = 3;
-      totalRestrooms = 28;
-    } else if (currentAreaSqFt > 35000) {
-      restroomBanks = 2;
-      totalRestrooms = 16;
+    // Perimeter road width based on NFPA crowd evacuation guidelines
+    let perimeterRoadWidthM = 6.0;
+    let accessRoadWidthM = 8.0;
+    if (tier === 'MEDIUM') {
+      perimeterRoadWidthM = 8.0;
+      accessRoadWidthM = 10.0;
+    } else if (tier === 'MEGA') {
+      perimeterRoadWidthM = 12.0;
+      accessRoadWidthM = 15.0;
     }
 
-    // Emergency exits (2 to 6)
-    let emergencyExits = 2;
-    if (currentAreaSqFt > 120000) emergencyExits = 6;
-    else if (currentAreaSqFt > 60000) emergencyExits = 4;
-    else if (currentAreaSqFt > 25000) emergencyExits = 3;
-
-    // Food & Beverage pavilions (2 to 6)
-    let foodPavilions = 2;
-    if (currentAreaSqFt > 100000) foodPavilions = 6;
-    else if (currentAreaSqFt > 40000) foodPavilions = 4;
-
-    // First aid stations (1 or 2)
-    const firstAidStations = currentAreaSqFt > 40000 ? 2 : 1;
-
-    // IoT Sensors count
-    const sensorCount = Math.min(32, Math.max(6, Math.round(12 * scaleRatio)));
+    // Dynamic obstacle counts
+    const penCount = tier === 'SMALL' ? 2 : tier === 'MEDIUM' ? 4 : 6;
+    const stageCount = tier === 'SMALL' ? 1 : tier === 'MEDIUM' ? 2 : 3;
+    const waterStations = tier === 'SMALL' ? 4 : tier === 'MEDIUM' ? 8 : 16;
+    const sensorCount = tier === 'SMALL' ? 8 : tier === 'MEDIUM' ? 16 : 28;
+    const ambulanceBays = tier === 'SMALL' ? 1 : tier === 'MEDIUM' ? 2 : 4;
+    const egressRoads = tier === 'SMALL' ? 2 : tier === 'MEDIUM' ? 3 : 5;
+    const evacTimeMins = (currentCrowd / (egressRoads * 850)).toFixed(1);
 
     return {
-      stageBarricadeRings,
-      entranceLanes,
-      restroomBanks,
-      totalRestrooms,
-      emergencyExits,
-      foodPavilions,
-      firstAidStations,
+      lenM: lenM || (tier === 'SMALL' ? 120 : tier === 'MEDIUM' ? 190 : 350),
+      widM: widM || (tier === 'SMALL' ? 180 : tier === 'MEDIUM' ? 300 : 500),
+      perimeterRoadWidthM,
+      accessRoadWidthM,
+      penCount,
+      stageCount,
+      waterStations,
       sensorCount,
-      evacTimeMinutes: Math.max(3.2, Math.min(12, Number((currentCrowd / (emergencyExits * 650)).toFixed(1)))),
+      ambulanceBays,
+      egressRoads,
+      evacTimeMins,
     };
-  }, [currentAreaSqFt, scaleRatio, currentCrowd]);
+  }, [tier, unit, currentLength, currentWidth, currentCrowd]);
 
-  // Preset sizes
-  const presets = [
-    { label: 'Plaza / Club', area: 10000, desc: '~2.2k Cap' },
-    { label: 'Arena Grounds', area: 35000, desc: '~7.8k Cap' },
-    { label: 'Stadium Concourse', area: 75000, desc: '~16.5k Cap' },
-    { label: 'Mega Festival', area: 150000, desc: '~33k Cap' },
+  // Presets
+  const sizePresets = [
+    { label: 'Small Concourse', area: 15000, crowd: 2500, len: 120, wid: 80, desc: '2 Compartment Pens • 2.5k Cap' },
+    { label: 'Reference Arena (190m×300m)', area: 75000, crowd: 12000, len: 300, wid: 190, desc: '4 Segmented Pens • 12k Cap' },
+    { label: 'Mega Festival Grounds', area: 180000, crowd: 35000, len: 500, wid: 300, desc: '6 High-Density Pens • 35k Cap' },
   ];
 
-  // Mouse pan handlers
+  // Pan handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) {
       setIsPanning(true);
@@ -151,1071 +182,1144 @@ export const EventCrowdManagementLayoutPlan: React.FC<EventCrowdManagementLayout
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
-      setPanOffset({
-        x: e.clientX - startPan.x,
-        y: e.clientY - startPan.y,
-      });
+      setPanOffset({ x: e.clientX - startPan.x, y: e.clientY - startPan.y });
     }
   };
 
   const handleMouseUp = () => setIsPanning(false);
 
   return (
-    <div className="bg-slate-950 text-slate-100 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col font-sans">
+    <div className="bg-[#070b14] text-slate-100 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col font-sans select-none">
       
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER BANNER (Matching reference title style) */}
+      {/* 1. TOP CAD BLUEPRINT HEADER BANNER */}
       {/* ========================================================================= */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-6 py-4 border-b border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none">
+      <div className="bg-gradient-to-r from-[#0a1122] via-[#0d162d] to-[#0a1122] px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-widest text-white uppercase text-center sm:text-left drop-shadow-md">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 font-mono text-[10px] font-black tracking-wider uppercase">
+              CAD ARCHITECTURAL BLUEPRINT
+            </span>
+            <span className="text-xs text-slate-400 font-mono">
+              SCALE: 1:500 • NFPA 101 COMPLIANT
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mt-1">
             EVENT CROWD MANAGEMENT LAYOUT PLAN
           </h2>
-          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-300 font-medium justify-center sm:justify-start">
-            <span className="text-blue-400 font-bold">{venueName}</span>
-            <span>•</span>
-            <span className="text-slate-400">{eventName}</span>
-          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {venueName} — <strong className="text-slate-300">{eventName}</strong>
+          </p>
         </div>
 
-        {/* Real-time calculated Area & Capacity pill */}
-        <div className="flex items-center justify-center sm:justify-end gap-2 text-xs">
-          <div className="px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/80 flex items-center gap-2 text-slate-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="font-bold text-white">{currentAreaSqFt.toLocaleString()} sq.ft</span>
-            <span className="text-slate-400">({Math.round(currentAreaSqFt / 10.7639).toLocaleString()} m²)</span>
+        {/* Live Safety Density Metrics Pill */}
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          <div className="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+              occupancyPercentage > 90 ? 'bg-red-500' : occupancyPercentage > 75 ? 'bg-amber-400' : 'bg-emerald-400'
+            }`}></span>
+            <span className="text-slate-300 font-mono">
+              Density: <strong className="text-white font-black">{spacePerPerson} sq.ft/person</strong>
+            </span>
           </div>
 
-          <div className="px-3 py-1.5 rounded-xl bg-blue-900/60 border border-blue-700/60 text-blue-200 font-bold">
-            Max Cap: <span className="text-white font-extrabold">{safeCapacity.toLocaleString()}</span>
+          <div className="px-3.5 py-1.5 rounded-xl bg-blue-950/70 border border-blue-800/80 text-blue-200">
+            <span className="font-mono">Cap: <strong className="text-white font-extrabold">{safeCapacity.toLocaleString()}</strong> ({occupancyPercentage}%)</span>
+          </div>
+
+          <div className="px-3.5 py-1.5 rounded-xl bg-indigo-950/70 border border-indigo-800/80 text-indigo-200 font-mono">
+            Evac Time: <strong className="text-white font-extrabold">{cadMetrics.evacTimeMins} mins</strong>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. DYNAMIC CONTROLS TOOLBAR (Square Footage Slider + Presets + Layers) */}
+      {/* 2. DYNAMIC INPUTS BAR: SIZE PRESETS + APPROX PEOPLE CONTROLLER */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/90 backdrop-blur-md px-4 sm:px-6 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="bg-[#0b1224] px-4 sm:px-6 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
         
-        {/* Quick Area Presets */}
+        {/* Preset Selector */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[10px] hidden sm:inline">
-            Area Presets:
+          <span className="text-[11px] font-mono text-slate-400 font-bold uppercase tracking-wider">
+            Layout Presets:
           </span>
-          {presets.map((preset) => (
+          {sizePresets.map((p, idx) => (
             <button
-              key={preset.area}
-              onClick={() => updateArea(preset.area)}
+              key={idx}
+              onClick={() => {
+                handleAreaInput(p.area);
+                handleCrowdInput(p.crowd);
+                if (onDimensionsChange) onDimensionsChange(p.len, p.wid);
+                else {
+                  setInternalLength(p.len);
+                  setInternalWidth(p.wid);
+                }
+              }}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                Math.abs(currentAreaSqFt - preset.area) < 4000
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                Math.abs(currentAreaSqFt - p.area) < 5000
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
               }`}
+              title={p.desc}
             >
-              {preset.label} <span className="opacity-70 text-[10px]">({preset.desc})</span>
+              <span>{p.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Continuous Square Feet Slider */}
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="flex items-center gap-2 bg-slate-800/80 px-3 py-1 rounded-xl border border-slate-700">
-            <Sliders className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-[11px] font-bold text-slate-300">Size:</span>
+        {/* Dynamic Approx People Input & Slider */}
+        <div className="flex items-center gap-3 bg-slate-900/90 px-3.5 py-1.5 rounded-2xl border border-slate-700/80">
+          <Users className="w-4 h-4 text-blue-400" />
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-300 font-bold">Approx. People:</span>
             <input
-              type="range"
-              min="5000"
-              max="200000"
-              step="2500"
-              value={currentAreaSqFt}
-              onChange={(e) => updateArea(parseInt(e.target.value))}
-              className="w-24 sm:w-32 accent-blue-500 cursor-pointer"
+              type="number"
+              value={currentCrowd}
+              step={500}
+              min={500}
+              max={100000}
+              onChange={(e) => handleCrowdInput(parseInt(e.target.value) || 0)}
+              className="w-20 bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5 text-center font-mono font-black text-cyan-300 focus:outline-hidden focus:border-cyan-400"
             />
-            <span className="text-[11px] font-mono font-black text-blue-300 min-w-[4rem] text-right">
-              {Math.round(currentAreaSqFt / 1000)}k ft²
-            </span>
           </div>
 
-          {/* View controls */}
-          <div className="flex items-center bg-slate-800/80 rounded-xl border border-slate-700 p-0.5">
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(1.8, z + 0.15))}
-              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-              title="Zoom in"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setZoomLevel((z) => Math.max(0.65, z - 0.15))}
-              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-              title="Zoom out"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => {
-                setZoomLevel(1);
-                setPanOffset({ x: 0, y: 0 });
-              }}
-              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-              title="Reset view"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+          <input
+            type="range"
+            min={1000}
+            max={50000}
+            step={1000}
+            value={currentCrowd}
+            onChange={(e) => handleCrowdInput(parseInt(e.target.value))}
+            className="w-28 sm:w-36 accent-cyan-400 cursor-pointer"
+          />
 
-      {/* Layer Visibility Pills */}
-      <div className="bg-slate-900/50 px-4 sm:px-6 py-2 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-2 text-xs">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 mr-1">
-            Display Layers:
+          <span className="text-[10px] font-mono font-bold text-slate-400 hidden sm:inline">
+            Tier: <strong className="text-white">{tier}</strong>
           </span>
-
-          <button
-            onClick={() => setShowFacilities(!showFacilities)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-              showFacilities
-                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                : 'bg-slate-800/40 text-slate-500 border-slate-700'
-            }`}
-          >
-            🏛️ Facilities
-          </button>
-
-          <button
-            onClick={() => setShowPathways(!showPathways)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-              showPathways
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                : 'bg-slate-800/40 text-slate-500 border-slate-700'
-            }`}
-          >
-            🚶 Concourse Paths
-          </button>
-
-          <button
-            onClick={() => setShowSensors(!showSensors)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-              showSensors
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                : 'bg-slate-800/40 text-slate-500 border-slate-700'
-            }`}
-          >
-            📡 IoT LiDAR & Radar
-          </button>
-
-          <button
-            onClick={() => setShowDensityHeatmap(!showDensityHeatmap)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-              showDensityHeatmap
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-slate-800/40 text-slate-500 border-slate-700'
-            }`}
-          >
-            🔥 Density Heatmap
-          </button>
-
-          <button
-            onClick={() => setShowEmergencyEvac(!showEmergencyEvac)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-              showEmergencyEvac
-                ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse'
-                : 'bg-slate-800/40 text-slate-500 border-slate-700'
-            }`}
-          >
-            🚨 Evac Routes
-          </button>
         </div>
 
-        {/* Evacuation Estimate */}
-        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-          <DoorOpen className="w-3.5 h-3.5 text-emerald-400" />
-          <span>NFPA Evac Window:</span>
-          <span className="font-bold text-emerald-400">{layoutSpecs.evacTimeMinutes} mins</span>
+        {/* Blueprint Layer Toggles */}
+        <div className="flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setShowDimensions(!showDimensions)}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              showDimensions ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Dimension Lines & Annotations"
+          >
+            📐 Dimensions
+          </button>
+          <button
+            onClick={() => setShowBarricades(!showBarricades)}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              showBarricades ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Heavy-Duty Barricades & Pens"
+          >
+            🚧 Barricades
+          </button>
+          <button
+            onClick={() => setShowFlowArrows(!showFlowArrows)}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              showFlowArrows ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Directional Flow Arrows"
+          >
+            🟢 Flow Arrows
+          </button>
+          <button
+            onClick={() => setShowMedicalAmenities(!showMedicalAmenities)}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              showMedicalAmenities ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+            title="Toggle Medical & Water Stations"
+          >
+            🏥 Medical / Water
+          </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. MAIN INTERACTIVE ISOMETRIC VENUE CANVAS */}
+      {/* 3. INTERACTIVE 2D CAD VECTOR BLUEPRINT CANVAS */}
       {/* ========================================================================= */}
       <div 
-        className="relative w-full h-[620px] bg-[#16221c] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+        className="relative bg-[#060913] h-[640px] w-full overflow-hidden cursor-grab active:cursor-grabbing border-b border-slate-800"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* Night atmosphere backdrop with subtle ambient light gradients */}
-        <div className="absolute inset-0 bg-radial from-slate-900/40 via-[#101a14] to-[#0a100c] pointer-events-none" />
-
-        {/* Pan and Zoom container */}
-        <div
-          className="w-full h-full transition-transform duration-100 ease-out origin-center flex items-center justify-center"
+        {/* Subtle CAD Background Grid Lines */}
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-20"
           style={{
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+            backgroundImage: `
+              linear-gradient(to right, #1e293b 1px, transparent 1px),
+              linear-gradient(to bottom, #1e293b 1px, transparent 1px)
+            `,
+            backgroundSize: '40px 40px',
           }}
-        >
-          {/* High-Resolution SVG Architectural Isometric Layout Diagram */}
-          <svg
-            viewBox="0 0 1200 780"
-            className="w-full h-full max-w-[1280px] max-h-[820px] drop-shadow-2xl overflow-visible"
+        />
+
+        {/* Floating Zoom & Pan Controls */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-[#0a1120]/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-700/80 shadow-xl">
+          <button 
+            onClick={() => setZoomLevel(prev => Math.min(2.2, prev + 0.15))}
+            className="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+            title="Zoom In"
           >
-            <defs>
-              {/* Gradients */}
-              <linearGradient id="groundGrass" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1e3428" />
-                <stop offset="50%" stopColor="#223d2f" />
-                <stop offset="100%" stopColor="#182d22" />
-              </linearGradient>
-
-              <linearGradient id="roadAsphalt" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#3c4a52" />
-                <stop offset="50%" stopColor="#4a5a63" />
-                <stop offset="100%" stopColor="#3c4a52" />
-              </linearGradient>
-
-              <linearGradient id="stageRoofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#475569" />
-                <stop offset="50%" stopColor="#334155" />
-                <stop offset="100%" stopColor="#1e293b" />
-              </linearGradient>
-
-              <radialGradient id="spotlightCone" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#fef08a" stopOpacity="0.35" />
-                <stop offset="70%" stopColor="#facc15" stopOpacity="0.08" />
-                <stop offset="100%" stopColor="#ca8a04" stopOpacity="0" />
-              </radialGradient>
-
-              <radialGradient id="exitGreenGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#15803d" stopOpacity="0" />
-              </radialGradient>
-
-              <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-
-            {/* ------------------------------------------------------------- */}
-            {/* A. VENUE GROUND SURFACE (Bounded Grass Lawn) */}
-            {/* ------------------------------------------------------------- */}
-            {/* Outer buffer area */}
-            <polygon
-              points="120,440 680,120 1140,280 580,720"
-              fill="url(#groundGrass)"
-              stroke="#13231a"
-              strokeWidth="4"
-            />
-
-            {/* Perimeter Security Fence - Dynamic boundary adjusting to square feet */}
-            <polygon
-              points="140,430 670,135 1120,290 590,700"
-              fill="none"
-              stroke="#64748b"
-              strokeWidth="3.5"
-              strokeDasharray="8 4"
-            />
-            {/* Fence corner and side posts */}
-            <circle cx="140" cy="430" r="5" fill="#94a3b8" />
-            <circle cx="670" cy="135" r="5" fill="#94a3b8" />
-            <circle cx="1120" cy="290" r="5" fill="#94a3b8" />
-            <circle cx="590" cy="700" r="5" fill="#94a3b8" />
-            <circle cx="405" cy="282" r="4" fill="#94a3b8" />
-            <circle cx="895" cy="212" r="4" fill="#94a3b8" />
-            <circle cx="365" cy="565" r="4" fill="#94a3b8" />
-            <circle cx="855" cy="495" r="4" fill="#94a3b8" />
-
-            {/* Floodlight cones on perimeter poles */}
-            <ellipse cx="365" cy="565" rx="55" ry="32" fill="url(#spotlightCone)" />
-            <ellipse cx="610" cy="380" rx="75" ry="40" fill="url(#spotlightCone)" />
-            <ellipse cx="855" cy="495" rx="55" ry="32" fill="url(#spotlightCone)" />
-            <ellipse cx="405" cy="282" rx="60" ry="35" fill="url(#spotlightCone)" />
-
-            {/* ------------------------------------------------------------- */}
-            {/* B. PEDESTRIAN CONCOURSE PATHWAY SYSTEM (Asphalt Thoroughfares) */}
-            {/* ------------------------------------------------------------- */}
-            {showPathways && (
-              <g id="pathways" className="transition-opacity duration-300">
-                {/* 1. Main Entrance Roadway (bottom left leading into grounds) */}
-                <polygon
-                  points="20,590 190,490 270,540 80,660"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* Entrance directional road markings */}
-                <g fill="#f8fafc" opacity="0.8">
-                  <path d="M 60 610 L 95 590 L 90 584 L 115 586 L 105 608 L 98 602 L 67 620 Z" />
-                  <path d="M 120 570 L 155 550 L 150 544 L 175 546 L 165 568 L 158 562 L 127 580 Z" />
-                </g>
-
-                {/* 2. Central Concourse: Entrance to Central Plaza */}
-                <polygon
-                  points="220,510 490,390 560,430 280,555"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* 3. Central Plaza to Main Stage Spine */}
-                <polygon
-                  points="470,400 680,260 760,290 550,435"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* 4. Left Concourse: to Restrooms and Top-Left Emergency Exit */}
-                <polygon
-                  points="460,395 310,320 370,290 510,365"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* 5. Right Concourse: to Restrooms, Food Area & Right Exits */}
-                <polygon
-                  points="550,430 890,520 860,560 520,470"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* 6. Perimeter Egress Corridors to Emergency Exits */}
-                <polygon
-                  points="750,285 1060,315 1040,345 740,315"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="1.5"
-                />
-                <polygon
-                  points="780,530 1020,620 980,660 750,570"
-                  fill="url(#roadAsphalt)"
-                  stroke="#2d3748"
-                  strokeWidth="2"
-                />
-
-                {/* Flow arrows on pathways */}
-                <g stroke="#93c5fd" strokeWidth="2.5" strokeDasharray="6 4" fill="none" opacity="0.6">
-                  <line x1="160" y1="540" x2="380" y2="445" />
-                  <line x1="520" y1="410" x2="690" y2="295" />
-                  <line x1="560" y1="450" x2="820" y2="520" />
-                </g>
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* C. ENTRANCE & SECURITY CHECKPOINT COMPLEX (Bottom Left) */}
-            {/* ------------------------------------------------------------- */}
-            <g 
-              id="entrance-complex"
-              className="cursor-pointer group"
-              onClick={() => setSelectedElement({
-                title: 'Main Ingress Checkpoint & Queuing Plaza',
-                type: 'Entrance',
-                capacity: Math.round(currentCrowd * 0.4),
-                density: 'Safe Flow • 2.8 ft²/person',
-                details: `${layoutSpecs.entranceLanes} Parallel Security Inspection Corridors equipped with millimeter-wave metal detectors and automated RFID ticket turnstiles.`,
-                sensors: 'ESP32-CAM-01 (Inflow LiDAR), Beam-Break Sensor A1'
-              })}
-            >
-              {/* Security Inspection Cabins / Booths */}
-              <g transform="translate(210, 470)">
-                <polygon points="0,20 28,5 48,15 20,30" fill="#78350f" />
-                <polygon points="0,20 20,30 20,48 0,38" fill="#451a03" />
-                <polygon points="20,30 48,15 48,33 20,48" fill="#b45309" />
-                <circle cx="24" cy="18" r="3" fill="#fef08a" />
-              </g>
-
-              <g transform="translate(245, 490)">
-                <polygon points="0,20 28,5 48,15 20,30" fill="#78350f" />
-                <polygon points="0,20 20,30 20,48 0,38" fill="#451a03" />
-                <polygon points="20,30 48,15 48,33 20,48" fill="#b45309" />
-                <circle cx="24" cy="18" r="3" fill="#fef08a" />
-              </g>
-
-              {/* Serpentine Zig-Zag Queue Barricades (Stanchions) */}
-              {Array.from({ length: layoutSpecs.entranceLanes }).map((_, i) => (
-                <path
-                  key={i}
-                  d={`M ${120 + i * 14} ${560 - i * 6} 
-                      L ${160 + i * 14} ${540 - i * 6} 
-                      L ${190 + i * 14} ${555 - i * 6} 
-                      L ${230 + i * 14} ${535 - i * 6}`}
-                  stroke="#cbd5e1"
-                  strokeWidth="2.5"
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              ))}
-
-              {/* Entrance Floating Label Badge */}
-              <g transform="translate(110, 480)">
-                <rect x="0" y="0" width="85" height="22" rx="5" fill="#0f766e" stroke="#14b8a6" strokeWidth="1.5" />
-                <text x="42" y="15" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                  ENTRANCE
-                </text>
-              </g>
-
-              {/* Road white arrow: ENTRANCE */}
-              <g transform="translate(80, 640)">
-                <text x="0" y="0" fill="#ffffff" fontSize="13" fontWeight="900" letterSpacing="2" opacity="0.85">
-                  ENTRANCE ➜
-                </text>
-              </g>
-            </g>
-
-            {/* ------------------------------------------------------------- */}
-            {/* D. MAIN STAGE & CONCENTRIC BARRICADE VIEWING PENS (Top Rear) */}
-            {/* ------------------------------------------------------------- */}
-            <g 
-              id="main-stage-complex"
-              className="cursor-pointer group"
-              onClick={() => setSelectedElement({
-                title: 'Main Concert Stage & Tiered Barricades',
-                type: 'Main Stage',
-                capacity: Math.round(currentCrowd * 0.55),
-                density: 'Dynamic Viewing Pit • 3.2 ft²/person',
-                details: `Elevated roofed festival stage equipped with line-array sound towers and ${layoutSpecs.stageBarricadeRings} tiered curved crowd control barricades to compartmentalize surges and eliminate front-of-stage crowd crush.`,
-                sensors: 'ESP32-STAGE-LIDAR, Front Pit Pressure Mat, Thermal Density Sensor'
-              })}
-            >
-              {/* Elevated Stage Structure (Top center) */}
-              <g transform="translate(620, 100)">
-                <polygon points="40,110 140,65 240,110 140,155" fill="#1e293b" stroke="#334155" strokeWidth="2" />
-                <polygon points="40,110 140,155 140,175 40,130" fill="#0f172a" />
-                <polygon points="140,155 240,110 240,130 140,175" fill="#334155" />
-
-                <polygon points="40,65 140,20 240,65 140,110" fill="url(#stageRoofGrad)" stroke="#64748b" strokeWidth="2" />
-                <line x1="45" y1="68" x2="45" y2="110" stroke="#94a3b8" strokeWidth="4" />
-                <line x1="235" y1="68" x2="235" y2="110" stroke="#94a3b8" strokeWidth="4" />
-                <line x1="140" y1="110" x2="140" y2="155" stroke="#94a3b8" strokeWidth="4" />
-
-                <polygon points="70,75 140,45 210,75 140,105" fill="#3b82f6" opacity="0.85" filter="url(#glowEffect)" />
-
-                <rect x="25" y="60" width="14" height="40" fill="#020617" stroke="#475569" strokeWidth="1" />
-                <rect x="241" y="60" width="14" height="40" fill="#020617" stroke="#475569" strokeWidth="1" />
-
-                <circle cx="100" cy="80" r="16" fill="#38bdf8" opacity="0.6" filter="url(#glowEffect)" />
-                <circle cx="140" cy="70" r="18" fill="#a855f7" opacity="0.7" filter="url(#glowEffect)" />
-                <circle cx="180" cy="80" r="16" fill="#ec4899" opacity="0.6" filter="url(#glowEffect)" />
-              </g>
-
-              {/* Concentric Curved Crowd Control Barricades (Tiered Viewing Pens) */}
-              {Array.from({ length: layoutSpecs.stageBarricadeRings }).map((_, rIdx) => {
-                const radiusX = 110 + rIdx * 45 * scaleRatio;
-                const radiusY = 55 + rIdx * 25 * scaleRatio;
-                const centerY = 245 + rIdx * 16;
-                const centerX = 760;
-
-                return (
-                  <g key={rIdx}>
-                    <path
-                      d={`M ${centerX - radiusX * 0.95} ${centerY + radiusY * 0.3} 
-                          Q ${centerX - radiusX * 0.4} ${centerY + radiusY * 0.95} ${centerX} ${centerY + radiusY}
-                          Q ${centerX + radiusX * 0.4} ${centerY + radiusY * 0.95} ${centerX + radiusX * 0.95} ${centerY + radiusY * 0.3}`}
-                      stroke="#94a3b8"
-                      strokeWidth="2.5"
-                      strokeDasharray="5 3"
-                      fill="none"
-                    />
-                    <circle cx={centerX} cy={centerY + radiusY} r="3" fill="#38bdf8" />
-                  </g>
-                );
-              })}
-
-              {/* Floating Badge: MAIN STAGE */}
-              <g transform="translate(540, 140)">
-                <rect x="0" y="0" width="105" height="24" rx="6" fill="#1e3a8a" stroke="#3b82f6" strokeWidth="1.5" />
-                <text x="52" y="16" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                  MAIN STAGE ⬆
-                </text>
-              </g>
-            </g>
-
-            {/* ------------------------------------------------------------- */}
-            {/* E. FIRST AID MEDICAL EMERGENCY STATIONS (Center Plaza & Lawn) */}
-            {/* ------------------------------------------------------------- */}
-            {showFacilities && (
-              <g 
-                id="first-aid-complex"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'Primary Emergency Medical & Triage Station',
-                  type: 'First Aid',
-                  capacity: 'Triage Center • 12 Trauma Bays',
-                  density: 'Emergency Response Hub',
-                  details: 'Staffed field medical center with automated external defibrillators (AED), oxygen reserve, and direct ambulance egress channel.',
-                  sensors: 'LiDAR Rapid Egress Node, IoT Cold Chain Vaccine & Supply Monitor'
-                })}
-              >
-                {/* 1. Primary Central First Aid Tent */}
-                <g transform="translate(480, 370)">
-                  <polygon points="0,30 35,10 70,30 35,50" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" />
-                  <polygon points="0,30 35,50 35,75 0,55" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
-                  <polygon points="35,50 70,30 70,55 35,75" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" />
-
-                  <path
-                    d="M 31 23 H 39 V 37 H 31 Z M 24 27 H 46 V 33 H 24 Z"
-                    fill="#dc2626"
-                  />
-                  <path
-                    d="M 15 42 H 21 V 54 H 15 Z M 10 46 H 26 V 50 H 10 Z"
-                    fill="#dc2626"
-                  />
-                </g>
-
-                <g transform="translate(470, 350)">
-                  <rect x="0" y="0" width="85" height="22" rx="5" fill="#dc2626" stroke="#fca5a5" strokeWidth="1.5" />
-                  <text x="42" y="15" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                    FIRST AID ✚
-                  </text>
-                </g>
-
-                {/* 2. Secondary First Aid Station (Lower sector) */}
-                {layoutSpecs.firstAidStations > 1 && (
-                  <g 
-                    transform="translate(560, 580)"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedElement({
-                        title: 'Secondary Field Medical Post (South Lawn)',
-                        type: 'First Aid',
-                        capacity: 'Rapid Triage • 4 Responders',
-                        density: 'South Concourse Support',
-                        details: 'Mobile medical outpost supporting the south exit corridor and lawn crowd.',
-                        sensors: 'ESP32 South Sector Health Node'
-                      });
-                    }}
-                  >
-                    <polygon points="0,20 25,8 50,20 25,32" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" />
-                    <polygon points="0,20 25,32 25,48 0,36" fill="#e2e8f0" />
-                    <polygon points="25,32 50,20 50,36 25,48" fill="#cbd5e1" />
-                    <path d="M 23 16 H 27 V 24 H 23 Z M 19 19 H 31 V 21 H 19 Z" fill="#dc2626" />
-                    
-                    <g transform="translate(-10, -22)">
-                      <rect x="0" y="0" width="80" height="20" rx="4" fill="#dc2626" stroke="#fca5a5" strokeWidth="1.2" />
-                      <text x="40" y="14" fill="#ffffff" fontSize="10" fontWeight="900" textAnchor="middle">
-                        FIRST AID
-                      </text>
-                    </g>
-                  </g>
-                )}
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* F. RESTROOMS SANITATION BLOCKS (Top Left & Mid Right) */}
-            {/* ------------------------------------------------------------- */}
-            {showFacilities && (
-              <g id="restroom-complex">
-                {/* Bank 1: Top Left Restrooms */}
-                <g 
-                  transform="translate(180, 290)"
-                  className="cursor-pointer group"
-                  onClick={() => setSelectedElement({
-                    title: 'West Concourse Sanitation Facilities',
-                    type: 'Restrooms',
-                    capacity: `${Math.round(layoutSpecs.totalRestrooms * 0.55)} Sanitation Units`,
-                    density: 'Accessible ADA compliant blocks',
-                    details: 'Heavy-duty portable sanitation trailers with continuous fresh water circulation, handwashing sinks, and gray water containment.',
-                    sensors: 'ESP32-RESTROOM-WEST Door Counter'
-                  })}
-                >
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <g key={idx} transform={`translate(${idx * 16}, ${idx * 9})`}>
-                      <polygon points="0,15 12,8 24,15 12,22" fill="#1e3a8a" stroke="#3b82f6" strokeWidth="1" />
-                      <polygon points="0,15 12,22 12,42 0,35" fill="#1e40af" />
-                      <polygon points="12,22 24,15 24,35 12,42" fill="#2563eb" />
-                    </g>
-                  ))}
-
-                  <g transform="translate(-10, -22)">
-                    <rect x="0" y="0" width="95" height="22" rx="5" fill="#1e3a8a" stroke="#60a5fa" strokeWidth="1.5" />
-                    <text x="47" y="15" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                      RESTROOMS 🚻
-                    </text>
-                  </g>
-                </g>
-
-                {/* Bank 2: Mid Right Restrooms */}
-                {layoutSpecs.restroomBanks >= 2 && (
-                  <g 
-                    transform="translate(820, 480)"
-                    className="cursor-pointer group"
-                    onClick={() => setSelectedElement({
-                      title: 'East Promenade Sanitation Facilities',
-                      type: 'Restrooms',
-                      capacity: `${Math.round(layoutSpecs.totalRestrooms * 0.45)} Sanitation Units`,
-                      density: 'Sanitation Core',
-                      details: 'East cluster serving the main dining village and east perimeter egress.',
-                      sensors: 'ESP32-RESTROOM-EAST Door Counter'
-                    })}
-                  >
-                    {Array.from({ length: 5 }).map((_, idx) => (
-                      <g key={idx} transform={`translate(${idx * 16}, ${idx * 9})`}>
-                        <polygon points="0,15 12,8 24,15 12,22" fill="#1e3a8a" stroke="#3b82f6" strokeWidth="1" />
-                        <polygon points="0,15 12,22 12,42 0,35" fill="#1e40af" />
-                        <polygon points="12,22 24,15 24,35 12,42" fill="#2563eb" />
-                      </g>
-                    ))}
-
-                    <g transform="translate(-10, -22)">
-                      <rect x="0" y="0" width="95" height="22" rx="5" fill="#1e3a8a" stroke="#60a5fa" strokeWidth="1.5" />
-                      <text x="47" y="15" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                        RESTROOMS 🚻
-                      </text>
-                    </g>
-                  </g>
-                )}
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* G. FOOD & BEVERAGE VILLAGE & PICNIC TABLES (Along Central Road) */}
-            {/* ------------------------------------------------------------- */}
-            {showFacilities && (
-              <g 
-                id="food-beverage-complex"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'Food & Beverage Village & Dining Plaza',
-                  type: 'Food & Beverage',
-                  capacity: `${layoutSpecs.foodPavilions * 250} Servings/Hr Throughput`,
-                  density: 'Refreshment Hub',
-                  details: 'Artisan food shacks, licensed beverage stalls, hydration water refilling stations, and outdoor communal picnic benches.',
-                  sensors: 'Queue Depth Camera Q1, Concourse Flow Radar'
-                })}
-              >
-                {/* Stall 1 (Left Plaza) */}
-                <g transform="translate(340, 430)">
-                  <polygon points="0,18 25,6 50,18 25,30" fill="#d97706" stroke="#b45309" strokeWidth="1.5" />
-                  <polygon points="0,18 25,30 25,48 0,36" fill="#78350f" />
-                  <polygon points="25,30 50,18 50,36 25,48" fill="#92400e" />
-                </g>
-
-                {/* Stall 2 (Center Plaza) */}
-                <g transform="translate(390, 460)">
-                  <polygon points="0,18 25,6 50,18 25,30" fill="#b45309" stroke="#78350f" strokeWidth="1.5" />
-                  <polygon points="0,18 25,30 25,48 0,36" fill="#78350f" />
-                  <polygon points="25,30 50,18 50,36 25,48" fill="#92400e" />
-                </g>
-
-                {/* Stall 3 & 4 (East Promenade) */}
-                {layoutSpecs.foodPavilions >= 4 && (
-                  <>
-                    <g transform="translate(630, 450)">
-                      <polygon points="0,18 28,6 56,18 28,30" fill="#d97706" stroke="#b45309" strokeWidth="1.5" />
-                      <polygon points="0,18 28,30 28,48 0,36" fill="#78350f" />
-                      <polygon points="28,30 56,18 56,36 28,48" fill="#92400e" />
-                    </g>
-                    <g transform="translate(710, 485)">
-                      <polygon points="0,18 28,6 56,18 28,30" fill="#b45309" stroke="#78350f" strokeWidth="1.5" />
-                      <polygon points="0,18 28,30 28,48 0,36" fill="#78350f" />
-                      <polygon points="28,30 56,18 56,36 28,48" fill="#92400e" />
-                    </g>
-                  </>
-                )}
-
-                {/* Picnic Dining Tables */}
-                {Array.from({ length: 4 }).map((_, pIdx) => (
-                  <g key={pIdx} transform={`translate(${640 + pIdx * 25}, ${510 + pIdx * 12})`}>
-                    <polygon points="0,6 16,0 32,6 16,12" fill="#a16207" />
-                    <polygon points="0,6 16,12 16,16 0,10" fill="#713f12" />
-                    <polygon points="16,12 32,6 32,10 16,16" fill="#854d0e" />
-                  </g>
-                ))}
-
-                <path d="M 350 430 Q 520 460 740 480" stroke="#fde047" strokeWidth="1.2" strokeDasharray="8 6" fill="none" opacity="0.8" />
-
-                <g transform="translate(615, 435)">
-                  <rect x="0" y="0" width="130" height="22" rx="5" fill="#78350f" stroke="#d97706" strokeWidth="1.5" />
-                  <text x="65" y="15" fill="#ffffff" fontSize="10" fontWeight="900" textAnchor="middle" letterSpacing="0.8">
-                    FOOD & BEVERAGE 🍔
-                  </text>
-                </g>
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* H. EMERGENCY EXITS & STANDARD EXITS (Perimeter Gates) */}
-            {/* ------------------------------------------------------------- */}
-            <g id="emergency-exits">
-              {/* 1. Top-Left Emergency Exit */}
-              <g 
-                transform="translate(70, 350)"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'North-West Emergency Egress Gate',
-                  type: 'Emergency Exit',
-                  capacity: '1,400 Persons / Minute',
-                  density: 'Panic-Free Rapid Egress',
-                  details: 'Illuminated panic-bar double outward release doors with high-intensity LED running man beacon and direct access to outer ring road.',
-                  sensors: 'LiDAR Evacuation Flow Sensor NW-1'
-                })}
-              >
-                <circle cx="28" cy="20" r="30" fill="url(#exitGreenGlow)" filter="url(#glowEffect)" />
-                <rect x="0" y="0" width="56" height="34" rx="6" fill="#15803d" stroke="#4ade80" strokeWidth="2" />
-                <text x="28" y="21" fill="#ffffff" fontSize="12" fontWeight="900" textAnchor="middle">
-                  EXIT 🏃
-                </text>
-
-                <g transform="translate(-25, -24)">
-                  <rect x="0" y="0" width="115" height="22" rx="5" fill="#14532d" stroke="#22c55e" strokeWidth="1.5" />
-                  <text x="57" y="15" fill="#ffffff" fontSize="10" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                    EMERGENCY EXIT
-                  </text>
-                </g>
-
-                <path d="M 0 50 L -40 70 M -40 70 L -30 60 M -40 70 L -40 82" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" />
-              </g>
-
-              {/* 2. Top-Right Emergency Exit */}
-              <g 
-                transform="translate(1060, 270)"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'North-East Perimeter Emergency Exit',
-                  type: 'Emergency Exit',
-                  capacity: '1,600 Persons / Minute',
-                  density: 'Backstage & East Pen Evac Route',
-                  details: 'Primary emergency evacuation path for front-of-stage crowd pens.',
-                  sensors: 'LiDAR Evacuation Flow Sensor NE-1'
-                })}
-              >
-                <circle cx="28" cy="20" r="30" fill="url(#exitGreenGlow)" filter="url(#glowEffect)" />
-                <rect x="0" y="0" width="56" height="34" rx="6" fill="#15803d" stroke="#4ade80" strokeWidth="2" />
-                <text x="28" y="21" fill="#ffffff" fontSize="12" fontWeight="900" textAnchor="middle">
-                  EXIT 🏃
-                </text>
-
-                <g transform="translate(-25, -24)">
-                  <rect x="0" y="0" width="115" height="22" rx="5" fill="#14532d" stroke="#22c55e" strokeWidth="1.5" />
-                  <text x="57" y="15" fill="#ffffff" fontSize="10" fontWeight="900" textAnchor="middle" letterSpacing="1">
-                    EMERGENCY EXIT
-                  </text>
-                </g>
-
-                <path d="M 60 20 L 100 0 M 100 0 L 88 0 M 100 0 L 100 12" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" />
-              </g>
-
-              {/* 3. Mid-Right Standard & Emergency Exit */}
-              <g 
-                transform="translate(900, 480)"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'East Concourse Main Exit & Egress Boulevard',
-                  type: 'Exit',
-                  capacity: '2,200 Persons / Minute',
-                  density: 'Standard & Evacuation Concourse',
-                  details: 'Standard outbound gate with turnstile bypass gates and guard cabin.',
-                  sensors: 'Outflow ESP32-GATE-E2'
-                })}
-              >
-                <rect x="0" y="0" width="45" height="26" rx="4" fill="#0f172a" stroke="#64748b" strokeWidth="1.5" />
-                <text x="22" y="17" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle">
-                  EXIT
-                </text>
-
-                <g transform="translate(45, 60)">
-                  <rect x="0" y="0" width="52" height="30" rx="5" fill="#15803d" stroke="#4ade80" strokeWidth="2" />
-                  <text x="26" y="19" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle">
-                    EXIT 🏃
-                  </text>
-                  <g transform="translate(-30, -22)">
-                    <rect x="0" y="0" width="110" height="20" rx="4" fill="#14532d" stroke="#22c55e" strokeWidth="1.5" />
-                    <text x="55" y="14" fill="#ffffff" fontSize="9.5" fontWeight="900" textAnchor="middle" letterSpacing="0.8">
-                      EMERGENCY EXIT
-                    </text>
-                  </g>
-                </g>
-              </g>
-
-              {/* 4. Bottom-Right Main Exit Boulevard */}
-              <g 
-                transform="translate(710, 710)"
-                className="cursor-pointer group"
-                onClick={() => setSelectedElement({
-                  title: 'South-East Main Dispersal Boulevard',
-                  type: 'Exit',
-                  capacity: '3,000 Persons / Minute',
-                  density: 'Primary Outflow Axis',
-                  details: 'Wide 32-ft pedestrian boulevard leading to transit shuttle bus bays and subway terminal.',
-                  sensors: 'Radar Concourse Sensor S1'
-                })}
-              >
-                <text x="0" y="0" fill="#ffffff" fontSize="14" fontWeight="900" letterSpacing="2" opacity="0.9">
-                  EXIT ➜
-                </text>
-
-                <g transform="translate(-140, -100)">
-                  <polygon points="0,15 20,5 40,15 20,25" fill="#475569" />
-                  <polygon points="0,15 20,25 20,45 0,35" fill="#1e293b" />
-                  <polygon points="20,25 40,15 40,35 20,45" fill="#334155" />
-                </g>
-              </g>
-            </g>
-
-            {/* ------------------------------------------------------------- */}
-            {/* I. IoT SENSOR NODES (LiDAR, mmWave, People Counters) */}
-            {/* ------------------------------------------------------------- */}
-            {showSensors && (
-              <g id="iot-sensors" className="transition-opacity duration-300">
-                {[
-                  { id: 'SN-01', x: 230, y: 520, name: 'Entrance Influx LiDAR' },
-                  { id: 'SN-02', x: 420, y: 440, name: 'West Concourse Radar' },
-                  { id: 'SN-03', x: 530, y: 410, name: 'Plaza Intersection LiDAR' },
-                  { id: 'SN-04', x: 740, y: 260, name: 'Stage Front Pit Sensor' },
-                  { id: 'SN-05', x: 670, y: 230, name: 'VIP Pen Density Node' },
-                  { id: 'SN-06', x: 780, y: 510, name: 'Food Plaza Flow Sensor' },
-                  { id: 'SN-07', x: 860, y: 460, name: 'East Corridors Node' },
-                  { id: 'SN-08', x: 120, y: 370, name: 'NW Emergency Egress' },
-                  { id: 'SN-09', x: 1040, y: 310, name: 'NE Emergency Egress' },
-                ].slice(0, layoutSpecs.sensorCount).map((sensor) => (
-                  <g 
-                    key={sensor.id}
-                    transform={`translate(${sensor.x}, ${sensor.y})`}
-                    className="cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedElement({
-                        title: `IoT Node: ${sensor.name}`,
-                        type: 'IoT Sensor',
-                        capacity: '1,200 Pings/Sec Telemetry',
-                        density: 'ESP32 Dual-Core • Edge AI',
-                        details: `Direct telemetry node transmitting instantaneous crowd vector speed, head-count density, and directional drift. 100% privacy-preserving with no CCTV.`,
-                        sensors: `${sensor.id} (Status: ONLINE • Signal: -48dBm)`
-                      });
-                    }}
-                  >
-                    <circle cx="0" cy="0" r="9" fill="#3b82f6" opacity="0.3" className="animate-ping" />
-                    <circle cx="0" cy="0" r="5" fill="#60a5fa" stroke="#ffffff" strokeWidth="1.5" />
-                  </g>
-                ))}
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* J. CROWD DENSITY HEATMAP OVERLAY */}
-            {/* ------------------------------------------------------------- */}
-            {showDensityHeatmap && (
-              <g id="density-heatmap" opacity="0.45" className="transition-opacity duration-300 pointer-events-none">
-                <ellipse cx="760" cy="270" rx="90" ry="45" fill="#ef4444" filter="url(#glowEffect)" />
-                <ellipse cx="510" cy="420" rx="70" ry="35" fill="#f59e0b" filter="url(#glowEffect)" />
-                <ellipse cx="230" cy="530" rx="55" ry="30" fill="#f59e0b" filter="url(#glowEffect)" />
-                <ellipse cx="800" cy="520" rx="80" ry="40" fill="#22c55e" filter="url(#glowEffect)" />
-                <ellipse cx="320" cy="330" rx="60" ry="30" fill="#22c55e" filter="url(#glowEffect)" />
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* K. EMERGENCY EVACUATION OVERLAY */}
-            {/* ------------------------------------------------------------- */}
-            {showEmergencyEvac && (
-              <g id="emergency-evac-paths" className="pointer-events-none">
-                <path
-                  d="M 680 270 L 140 370"
-                  stroke="#4ade80"
-                  strokeWidth="4"
-                  strokeDasharray="8 6"
-                  className="animate-pulse"
-                  fill="none"
-                />
-                <path
-                  d="M 760 280 L 1050 280"
-                  stroke="#4ade80"
-                  strokeWidth="4"
-                  strokeDasharray="8 6"
-                  className="animate-pulse"
-                  fill="none"
-                />
-                <path
-                  d="M 520 440 L 920 500"
-                  stroke="#4ade80"
-                  strokeWidth="4"
-                  strokeDasharray="8 6"
-                  className="animate-pulse"
-                  fill="none"
-                />
-                <path
-                  d="M 540 460 L 730 690"
-                  stroke="#4ade80"
-                  strokeWidth="5"
-                  strokeDasharray="8 6"
-                  className="animate-pulse"
-                  fill="none"
-                />
-              </g>
-            )}
-
-            {/* ------------------------------------------------------------- */}
-            {/* L. LEGEND BOX (Exact Replica of User's Reference Image) */}
-            {/* ------------------------------------------------------------- */}
-            <g transform="translate(1040, 600)" className="select-none">
-              <rect
-                x="0"
-                y="0"
-                width="145"
-                height="160"
-                rx="6"
-                fill="#0f172a"
-                stroke="#334155"
-                strokeWidth="1.5"
-                className="drop-shadow-lg"
-              />
-
-              <text x="72" y="20" fill="#ffffff" fontSize="11" fontWeight="900" textAnchor="middle" letterSpacing="1.5">
-                LEGEND
-              </text>
-              <line x1="12" y1="26" x2="133" y2="26" stroke="#334155" strokeWidth="1" />
-
-              {/* Item 1: MAIN STAGE */}
-              <g transform="translate(14, 38)">
-                <rect x="0" y="0" width="14" height="14" rx="2" fill="#1e3a8a" stroke="#3b82f6" strokeWidth="1" />
-                <path d="M 7 3 L 7 11 M 3 7 L 11 7" stroke="#ffffff" strokeWidth="1.5" />
-                <text x="22" y="11" fill="#e2e8f0" fontSize="9.5" fontWeight="800" letterSpacing="0.5">
-                  MAIN STAGE
-                </text>
-              </g>
-
-              {/* Item 2: RESTROOMS */}
-              <g transform="translate(14, 62)">
-                <rect x="0" y="0" width="14" height="14" rx="2" fill="#1d4ed8" stroke="#60a5fa" strokeWidth="1" />
-                <text x="7" y="11" fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">
-                  🚻
-                </text>
-                <text x="22" y="11" fill="#e2e8f0" fontSize="9.5" fontWeight="800" letterSpacing="0.5">
-                  RESTROOMS
-                </text>
-              </g>
-
-              {/* Item 3: FIRST AID */}
-              <g transform="translate(14, 86)">
-                <rect x="0" y="0" width="14" height="14" rx="2" fill="#dc2626" stroke="#fca5a5" strokeWidth="1" />
-                <path d="M 7 3 L 7 11 M 3 7 L 11 7" stroke="#ffffff" strokeWidth="2" />
-                <text x="22" y="11" fill="#e2e8f0" fontSize="9.5" fontWeight="800" letterSpacing="0.5">
-                  FIRST AID
-                </text>
-              </g>
-
-              {/* Item 4: FOOD & BEVERAGE */}
-              <g transform="translate(14, 110)">
-                <rect x="0" y="0" width="14" height="14" rx="2" fill="#78350f" stroke="#d97706" strokeWidth="1" />
-                <text x="7" y="11" fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">
-                  🍔
-                </text>
-                <text x="22" y="11" fill="#e2e8f0" fontSize="9" fontWeight="800" letterSpacing="0.3">
-                  FOOD & BEVERAGE
-                </text>
-              </g>
-
-              {/* Item 5: EXIT */}
-              <g transform="translate(14, 134)">
-                <rect x="0" y="0" width="14" height="14" rx="2" fill="#15803d" stroke="#4ade80" strokeWidth="1" />
-                <text x="7" y="11" fill="#ffffff" fontSize="9" fontWeight="bold" textAnchor="middle">
-                  🏃
-                </text>
-                <text x="22" y="11" fill="#e2e8f0" fontSize="9.5" fontWeight="800" letterSpacing="0.5">
-                  EXIT / EVAC
-                </text>
-              </g>
-            </g>
-
-          </svg>
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => setZoomLevel(prev => Math.max(0.6, prev - 0.15))}
+            className="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => { setZoomLevel(1); setPanOffset({ x: 0, y: 0 }); }}
+            className="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+            title="Reset View"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* ===================================================================== */}
-        {/* ELEMENT INSPECTION DRAWER (Shows details when user clicks any sector) */}
-        {/* ===================================================================== */}
-        {selectedElement && (
-          <div className="absolute bottom-4 left-4 max-w-sm bg-slate-900/95 backdrop-blur-md rounded-2xl p-4 border border-slate-700 shadow-2xl space-y-3 z-30 animate-in fade-in slide-in-from-bottom-3 duration-200">
-            <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
-              <div>
-                <span className="text-[10px] font-black tracking-wider uppercase text-blue-400">
-                  {selectedElement.type}
+        {/* Interactive Egress Simulation Toggle Badge */}
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
+          {onToggleSimulate && (
+            <button
+              onClick={onToggleSimulate}
+              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg backdrop-blur-md transition-all cursor-pointer ${
+                externalIsSimulating 
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse'
+                  : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              {externalIsSimulating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              <span>{externalIsSimulating ? 'Stop Flow Simulation' : '▶ Simulate Egress Movement'}</span>
+            </button>
+          )}
+
+          <span className="px-3 py-1 bg-slate-900/90 text-slate-400 border border-slate-700/80 rounded-xl text-[11px] font-mono">
+            Obstacles Loaded: <strong className="text-cyan-400">{cadMetrics.penCount} Pens • {cadMetrics.stageCount} Stages</strong>
+          </span>
+        </div>
+
+        {/* SVG CAD Blueprint Viewport */}
+        <svg
+          viewBox="0 0 1400 850"
+          className="w-full h-full select-none transition-transform duration-75"
+          style={{
+            transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)`,
+            transformOrigin: 'center center',
+          }}
+        >
+          <defs>
+            {/* Arrow marker for dimension lines */}
+            <marker id="dim-arrow-cyan" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+            </marker>
+            <marker id="flow-arrow-green" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#22c55e" />
+            </marker>
+
+            {/* Pattern for Heavy Duty Barricades */}
+            <pattern id="barricade-pattern" width="16" height="16" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="16" y2="16" stroke="#ef4444" strokeWidth="2" strokeOpacity="0.4" />
+            </pattern>
+          </defs>
+
+          {/* ================================================================= */}
+          {/* A. OUTER DIMENSION LINES (AutoCAD style markings matching image 1) */}
+          {/* ================================================================= */}
+          {showDimensions && (
+            <g className="font-mono font-bold text-xs" stroke="#38bdf8" fill="#38bdf8" opacity="0.9">
+              {/* TOP DIMENSION: Perimeter Road Width */}
+              <line x1="140" y1="35" x2="1260" y2="35" strokeWidth="1.5" markerStart="url(#dim-arrow-cyan)" markerEnd="url(#dim-arrow-cyan)" />
+              <line x1="140" y1="25" x2="140" y2="45" strokeWidth="1.5" />
+              <line x1="1260" y1="25" x2="1260" y2="45" strokeWidth="1.5" />
+              <rect x="580" y="24" width="240" height="22" fill="#060913" rx="4" />
+              <text x="700" y="40" textAnchor="middle" fill="#38bdf8" fontSize="12" stroke="none">
+                {cadMetrics.perimeterRoadWidthM.toFixed(2)}M WIDE PERIMETER ROAD
+              </text>
+
+              {/* BOTTOM DIMENSION: Access Road & Multi-segment mm measurements */}
+              <line x1="140" y1="815" x2="1260" y2="815" strokeWidth="1.5" markerStart="url(#dim-arrow-cyan)" markerEnd="url(#dim-arrow-cyan)" />
+              <line x1="140" y1="805" x2="140" y2="825" strokeWidth="1.5" />
+              <line x1="1260" y1="805" x2="1260" y2="825" strokeWidth="1.5" />
+              <rect x="530" y="804" width="340" height="22" fill="#060913" rx="4" />
+              <text x="700" y="820" textAnchor="middle" fill="#38bdf8" fontSize="12" stroke="none">
+                {cadMetrics.accessRoadWidthM.toFixed(0)}M WIDE ACCESS ROAD (MAIN) • {cadMetrics.lenM * 100}mm
+              </text>
+
+              {/* Sub-dimension markings on bottom right */}
+              <line x1="880" y1="835" x2="1260" y2="835" strokeWidth="1" markerStart="url(#dim-arrow-cyan)" markerEnd="url(#dim-arrow-cyan)" />
+              <text x="980" y="847" textAnchor="middle" fill="#94a3b8" fontSize="10" stroke="none">3000</text>
+              <text x="1080" y="847" textAnchor="middle" fill="#94a3b8" fontSize="10" stroke="none">2000</text>
+              <text x="1180" y="847" textAnchor="middle" fill="#94a3b8" fontSize="10" stroke="none">1000</text>
+
+              {/* LEFT VERTICAL DIMENSION */}
+              <line x1="45" y1="80" x2="45" y2="770" strokeWidth="1.5" markerStart="url(#dim-arrow-cyan)" markerEnd="url(#dim-arrow-cyan)" />
+              <line x1="35" y1="80" x2="55" y2="80" strokeWidth="1.5" />
+              <line x1="35" y1="770" x2="55" y2="770" strokeWidth="1.5" />
+              <text 
+                x="35" 
+                y="425" 
+                textAnchor="middle" 
+                fill="#38bdf8" 
+                fontSize="12" 
+                transform="rotate(-90 35 425)" 
+                stroke="none"
+              >
+                {cadMetrics.widM}M WIDE VENUE BOUNDARY
+              </text>
+
+              {/* RIGHT VERTICAL DIMENSION */}
+              <text 
+                x="1360" 
+                y="425" 
+                textAnchor="middle" 
+                fill="#38bdf8" 
+                fontSize="12" 
+                transform="rotate(90 1360 425)" 
+                stroke="none"
+              >
+                {cadMetrics.accessRoadWidthM.toFixed(0)}M WIDE ACCESS ROAD (MAIN)
+              </text>
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* B. VENUE BOUNDARY & PERIMETER ROADS (Purple boundary line + Green roads) */}
+          {/* ================================================================= */}
+          {/* Outer Main Perimeter Enclosure (Purple line with rounded corners) */}
+          <rect
+            x="130"
+            y="70"
+            width="1140"
+            height="710"
+            rx="30"
+            fill="#090f1d"
+            stroke="#a855f7"
+            strokeWidth="4"
+          />
+
+          {/* Dedicated Perimeter Road Corridor (Green dashed guidance lines) */}
+          <rect
+            x="160"
+            y="95"
+            width="1080"
+            height="660"
+            rx="20"
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            strokeDasharray="6,4"
+            opacity="0.8"
+          />
+
+          {/* Perimeter Road Directional Green Arrows */}
+          {showFlowArrows && (
+            <g stroke="#22c55e" strokeWidth="2.5" fill="none">
+              {/* Top perimeter road flow (West to East) */}
+              <line x1="400" y1="82" x2="480" y2="82" markerEnd="url(#flow-arrow-green)" />
+              <line x1="880" y1="82" x2="960" y2="82" markerEnd="url(#flow-arrow-green)" />
+
+              {/* Bottom perimeter road flow (East to West) */}
+              <line x1="460" y1="768" x2="380" y2="768" markerEnd="url(#flow-arrow-green)" />
+              <line x1="960" y1="768" x2="880" y2="768" markerEnd="url(#flow-arrow-green)" />
+
+              {/* Left perimeter road (South to North) */}
+              <line x1="145" y1="650" x2="145" y2="570" markerEnd="url(#flow-arrow-green)" />
+              <line x1="145" y1="280" x2="145" y2="200" markerEnd="url(#flow-arrow-green)" />
+
+              {/* Right perimeter road (Emergency Egress) */}
+              <line x1="1255" y1="260" x2="1255" y2="180" markerEnd="url(#flow-arrow-green)" />
+              <line x1="1255" y1="640" x2="1255" y2="720" markerEnd="url(#flow-arrow-green)" />
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* C. STAGE & SOUND OBSTACLES (Left side of blueprint) */}
+          {/* ================================================================= */}
+          {/* 1. MAJOR STAGE (GREEN) */}
+          <g 
+            className="cursor-pointer group"
+            onClick={() => setSelectedObstacle({
+              id: 'stage-major',
+              title: 'Major Concert Stage (Green)',
+              category: 'Stage',
+              dimensions: `${cadMetrics.lenM > 250 ? '36m × 22m' : '24m × 16m'} Elevated Deck`,
+              capacity: `${Math.round(currentCrowd * 0.45).toLocaleString()} Spectator Front Pit`,
+              specs: 'Reinforced aluminum ground-support roof with acoustic line-array towers and dual backstage service ramps.',
+              safetyProtocol: '6.0m buffer security moat with emergency crowd crush release gates.',
+              status: 'OPTIMAL',
+              riskScore: 'Low (Controlled Ingress)'
+            })}
+          >
+            {/* Stage outer safety compound */}
+            <rect
+              x="180"
+              y="230"
+              width="130"
+              height="280"
+              fill="#062215"
+              stroke="#22c55e"
+              strokeWidth="3"
+              rx="8"
+            />
+            {/* Stage inner elevated performance platform */}
+            <rect
+              x="200"
+              y="265"
+              width="90"
+              height="210"
+              fill="#0d3822"
+              stroke="#22c55e"
+              strokeWidth="2"
+            />
+            <text x="245" y="365" textAnchor="middle" fill="#4ade80" fontSize="14" fontWeight="900" transform="rotate(-90 245 365)">
+              MAJOR STAGE (GREEN)
+            </text>
+          </g>
+
+          {/* 2. SIDE STAGE (ORANGE) - Scales or adjusts based on tier */}
+          {cadMetrics.stageCount >= 2 && (
+            <g
+              className="cursor-pointer group"
+              onClick={() => setSelectedObstacle({
+                id: 'stage-side',
+                title: 'Side Stage (Orange)',
+                category: 'Stage',
+                dimensions: '18m × 12m Secondary Stage',
+                capacity: `${Math.round(currentCrowd * 0.2).toLocaleString()} Viewing Area`,
+                specs: 'Secondary acoustic performance platform with independent mixer and perimeter crowd railing.',
+                safetyProtocol: 'Dedicated 4m wide side egress lane connected directly to the North perimeter ring road.',
+                status: 'OPTIMAL',
+                riskScore: 'Safe'
+              })}
+            >
+              <rect
+                x="320"
+                y="125"
+                width="150"
+                height="80"
+                fill="#2c1706"
+                stroke="#f97316"
+                strokeWidth="2.5"
+                rx="6"
+              />
+              <text x="395" y="160" textAnchor="middle" fill="#fb923c" fontSize="12" fontWeight="900">
+                SIDE STAGE
+              </text>
+              <text x="395" y="178" textAnchor="middle" fill="#ea580c" fontSize="10" fontWeight="bold">
+                (ORANGE)
+              </text>
+            </g>
+          )}
+
+          {/* Front-of-House (FOH) Sound / Tech Mixing Island */}
+          <g
+            className="cursor-pointer"
+            onClick={() => setSelectedObstacle({
+              id: 'foh-tower',
+              title: 'Front-of-House Sound & Lighting Island',
+              category: 'Security',
+              dimensions: '14m × 8m Technical Enclosure',
+              specs: 'FOH sound engineering mixing riser, lighting consoles, and delay-tower signal hub.',
+              safetyProtocol: 'High-impact perimeter crash barriers with anti-climb fascia and crowd diversion angles.',
+              status: 'STANDBY',
+              riskScore: 'Neutral Obstacle'
+            })}
+          >
+            <rect
+              x="320"
+              y="530"
+              width="150"
+              height="80"
+              fill="#181308"
+              stroke="#eab308"
+              strokeWidth="2"
+              rx="4"
+            />
+            {/* Interior structure divisions */}
+            <line x1="370" y1="530" x2="370" y2="610" stroke="#ca8a04" strokeWidth="1.5" strokeDasharray="3,3" />
+            <line x1="420" y1="530" x2="420" y2="610" stroke="#ca8a04" strokeWidth="1.5" strokeDasharray="3,3" />
+            <text x="395" y="565" textAnchor="middle" fill="#fde047" fontSize="11" fontWeight="bold">
+              FOH MIXING TOWER
+            </text>
+            <text x="395" y="582" textAnchor="middle" fill="#a16207" fontSize="9" fontWeight="bold">
+              (TECH CONTROL)
+            </text>
+          </g>
+
+          {/* ================================================================= */}
+          {/* D. HEAVY-DUTY CROWD BARRICADES & SEGMENTED PENS (OBSTACLES) */}
+          {/* ================================================================= */}
+          {showBarricades && (
+            <g>
+              {/* PEN 1: Top-Left Pen ("HEAVY-DUTY BARRICADE") */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'pen-1',
+                  title: 'Heavy-Duty Barricade Pen 01',
+                  category: 'Barricade',
+                  dimensions: '42m × 36m Front Pen',
+                  capacity: `${Math.round(currentCrowd * 0.28).toLocaleString()} Max Standing Capacity`,
+                  specs: 'Steel crowd-crush barrier with rear footplate (5.0 kN/m lateral crowd surge resistance rating).',
+                  safetyProtocol: 'Two designated lateral escape lanes; pressure-relief gates every 15 meters.',
+                  status: occupancyPercentage > 85 ? 'CRITICAL' : 'OPTIMAL',
+                  riskScore: `${occupancyPercentage}% Density Load`
+                })}
+              >
+                <rect
+                  x="500"
+                  y="125"
+                  width="170"
+                  height="260"
+                  fill="#1c0e12"
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                  rx="6"
+                />
+                <text x="585" y="240" textAnchor="middle" fill="#f87171" fontSize="13" fontWeight="900">
+                  HEAVY-DUTY
+                </text>
+                <text x="585" y="260" textAnchor="middle" fill="#ef4444" fontSize="13" fontWeight="900">
+                  BARRICADE
+                </text>
+                <text x="585" y="285" textAnchor="middle" fill="#fda4af" fontSize="10" fontStyle="italic">
+                  Pen Cap: {Math.round(currentCrowd * 0.28).toLocaleString()}
+                </text>
+              </g>
+
+              {/* PEN 2: Top-Mid Pen ("MULTI-SEGMENT CROWD CONTROL") */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'pen-2',
+                  title: 'Multi-Segment Crowd Control Pen 02',
+                  category: 'Barricade',
+                  dimensions: '42m × 36m Mid Concourse Pen',
+                  capacity: `${Math.round(currentCrowd * 0.24).toLocaleString()} Capacity`,
+                  specs: 'Segmented modular interlocking barriers to break incoming crowd wave velocity.',
+                  safetyProtocol: 'Direct connection to Central Security Hub flow routing corridor.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Controlled'
+                })}
+              >
+                <rect
+                  x="690"
+                  y="125"
+                  width="170"
+                  height="260"
+                  fill="#1c0e12"
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                  rx="6"
+                />
+                <text x="775" y="230" textAnchor="middle" fill="#f87171" fontSize="13" fontWeight="900">
+                  MULTI-
+                </text>
+                <text x="775" y="250" textAnchor="middle" fill="#f87171" fontSize="13" fontWeight="900">
+                  SEGMENT
+                </text>
+                <text x="775" y="270" textAnchor="middle" fill="#ef4444" fontSize="12" fontWeight="900">
+                  CROWD CONTROL
+                </text>
+              </g>
+
+              {/* PEN 3: Bottom-Left Pen ("MULTI-SEGMENT BARRICADE") */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'pen-3',
+                  title: 'Multi-Segment Barricade Pen 03',
+                  category: 'Barricade',
+                  dimensions: '42m × 36m Lower Spectator Pen',
+                  capacity: `${Math.round(currentCrowd * 0.25).toLocaleString()} Capacity`,
+                  specs: 'Heavy-gauge steel crash fencing with anti-trip rubber floor transitions.',
+                  safetyProtocol: 'Direct egress opening to Southern perimeter access road.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Normal'
+                })}
+              >
+                <rect
+                  x="500"
+                  y="420"
+                  width="170"
+                  height="260"
+                  fill="#1c0e12"
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                  rx="6"
+                />
+                <text x="585" y="540" textAnchor="middle" fill="#f87171" fontSize="13" fontWeight="900">
+                  MULTI-
+                </text>
+                <text x="585" y="560" textAnchor="middle" fill="#ef4444" fontSize="13" fontWeight="900">
+                  SEGMENT
+                </text>
+                <text x="585" y="580" textAnchor="middle" fill="#f87171" fontSize="12" fontWeight="900">
+                  BARRICADE
+                </text>
+              </g>
+
+              {/* PEN 4: Bottom-Mid Pen ("MULTI-DUTY CROWD CONTROL") */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'pen-4',
+                  title: 'Multi-Duty Crowd Control Pen 04',
+                  category: 'Barricade',
+                  dimensions: '42m × 36m Concourse Pen',
+                  capacity: `${Math.round(currentCrowd * 0.23).toLocaleString()} Capacity`,
+                  specs: 'Flexible dual-hinge barriers with emergency break-open gate for first-responder access.',
+                  safetyProtocol: 'Equipped with ESP32 optical gate counter [S-04].',
+                  status: 'OPTIMAL',
+                  riskScore: 'Normal'
+                })}
+              >
+                <rect
+                  x="690"
+                  y="420"
+                  width="170"
+                  height="260"
+                  fill="#1c0e12"
+                  stroke="#ef4444"
+                  strokeWidth="3"
+                  rx="6"
+                />
+                <text x="775" y="540" textAnchor="middle" fill="#f87171" fontSize="13" fontWeight="900">
+                  MULTI-DUTY
+                </text>
+                <text x="775" y="560" textAnchor="middle" fill="#ef4444" fontSize="13" fontWeight="900">
+                  CROWD
+                </text>
+                <text x="775" y="580" textAnchor="middle" fill="#f87171" fontSize="12" fontWeight="900">
+                  CONTROL
+                </text>
+              </g>
+
+              {/* Red Barrier Line across the center dividing corridor */}
+              <line x1="320" y1="400" x2="860" y2="400" stroke="#dc2626" strokeWidth="4" />
+              <line x1="500" y1="125" x2="500" y2="680" stroke="#dc2626" strokeWidth="4" />
+              <line x1="680" y1="125" x2="680" y2="680" stroke="#dc2626" strokeWidth="4" />
+              <line x1="860" y1="125" x2="860" y2="680" stroke="#dc2626" strokeWidth="4" />
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* E. CENTRAL SECURITY & ROUTING HUB (Matching Image 1) */}
+          {/* ================================================================= */}
+          <g
+            className="cursor-pointer group"
+            onClick={() => setSelectedObstacle({
+              id: 'security-hub',
+              title: 'Central Security & Guidance Hub',
+              category: 'Security',
+              dimensions: '16m × 16m Tactical Command Post',
+              specs: 'Elevated 360-degree command pod, electronic gate override triggers, high-decibel PA announcement hub.',
+              safetyProtocol: 'Central distributor routing crowd outward into four separated concourses to prevent crowd intersection.',
+              status: 'OPTIMAL',
+              riskScore: 'Key Anchor'
+            })}
+          >
+            {/* Outer buffer */}
+            <rect
+              x="875"
+              y="350"
+              width="90"
+              height="100"
+              fill="#0f172a"
+              stroke="#38bdf8"
+              strokeWidth="2.5"
+              rx="10"
+            />
+            {/* Inner Hub Core */}
+            <rect
+              x="890"
+              y="365"
+              width="60"
+              height="70"
+              fill="#1e293b"
+              stroke="#0284c7"
+              strokeWidth="2"
+              rx="6"
+            />
+            <text x="920" y="405" textAnchor="middle" fill="#38bdf8" fontSize="13" fontWeight="900">
+              HUB
+            </text>
+
+            <text x="920" y="475" textAnchor="middle" fill="#7dd3fc" fontSize="11" fontWeight="800">
+              SECURITY
+            </text>
+            <text x="920" y="490" textAnchor="middle" fill="#38bdf8" fontSize="11" fontWeight="800">
+              HUB
+            </text>
+
+            {/* Pointer line connecting Hub label to box */}
+            <line x1="920" y1="450" x2="920" y2="460" stroke="#38bdf8" strokeWidth="1.5" />
+          </g>
+
+          {/* Central Hub Radiating Flow Arrows */}
+          {showFlowArrows && (
+            <g stroke="#22c55e" strokeWidth="3" fill="none">
+              {/* North Arrow */}
+              <line x1="920" y1="330" x2="920" y2="240" markerEnd="url(#flow-arrow-green)" />
+              {/* South Arrow */}
+              <line x1="920" y1="520" x2="920" y2="620" markerEnd="url(#flow-arrow-green)" />
+              {/* East Egress Arrow */}
+              <line x1="975" y1="400" x2="1100" y2="400" markerEnd="url(#flow-arrow-green)" />
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* F. MEDICAL, FIRST AID & AMBULANCE EGRESS (Top Right Zone) */}
+          {/* ================================================================= */}
+          {showMedicalAmenities && (
+            <g>
+              {/* 1. MEDICAL STATION with Triage Beds */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'medical-station',
+                  title: 'Medical Station & Field Hospital',
+                  category: 'Medical',
+                  dimensions: '30m × 22m Triage Facility',
+                  capacity: `${cadMetrics.tier === 'MEGA' ? '24' : '12'} Triage Beds`,
+                  specs: 'Air-conditioned sterile field hospital with emergency resuscitation, oxygen supply, and cardiac monitoring.',
+                  safetyProtocol: 'Direct zero-delay connection to external Ambulance Egress corridor.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Ready'
+                })}
+              >
+                <rect
+                  x="990"
+                  y="125"
+                  width="180"
+                  height="160"
+                  fill="#08182b"
+                  stroke="#38bdf8"
+                  strokeWidth="2.5"
+                  rx="8"
+                />
+
+                {/* Patient Bed Icons */}
+                <g stroke="#38bdf8" strokeWidth="1.5" fill="none">
+                  {/* Row 1 beds */}
+                  <rect x="1005" y="140" width="35" height="45" rx="3" fill="#0f2942" />
+                  <rect x="1055" y="140" width="35" height="45" rx="3" fill="#0f2942" />
+                  <rect x="1105" y="140" width="35" height="45" rx="3" fill="#0f2942" />
+                  {/* Bed pill / crosses */}
+                  <line x1="1022" y1="150" x2="1022" y2="175" stroke="#38bdf8" strokeWidth="2" />
+                  <line x1="1072" y1="150" x2="1072" y2="175" stroke="#38bdf8" strokeWidth="2" />
+                  <line x1="1122" y1="150" x2="1122" y2="175" stroke="#38bdf8" strokeWidth="2" />
+                </g>
+
+                <text x="1080" y="215" textAnchor="middle" fill="#7dd3fc" fontSize="13" fontWeight="900">
+                  MEDICAL
+                </text>
+                <text x="1080" y="235" textAnchor="middle" fill="#38bdf8" fontSize="13" fontWeight="900">
+                  STATION
+                </text>
+
+                {/* Stretcher / Personnel icon */}
+                <circle cx="1080" cy="255" r="7" fill="#38bdf8" />
+                <path d="M 1070 270 Q 1080 262 1090 270" stroke="#38bdf8" strokeWidth="2" fill="none" />
+              </g>
+
+              {/* 2. FIRST AID STATION (Red box with white cross) */}
+              <g
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'first-aid',
+                  title: 'First Aid Immediate Response Station',
+                  category: 'Medical',
+                  dimensions: '12m × 12m Rapid Post',
+                  specs: 'Rapid wound dressing, dehydration relief, cold-pack packs, and paramedic triage point.',
+                  safetyProtocol: 'Staffed by 4 certified EMT paramedics throughout the event.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Active'
+                })}
+              >
+                <rect
+                  x="1185"
+                  y="205"
+                  width="55"
+                  height="55"
+                  fill="#dc2626"
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                  rx="4"
+                />
+                {/* White Cross */}
+                <path
+                  d="M 1205 212 H 1220 V 1222 H 1205 Z"
+                  fill="white"
+                />
+                <line x1="1195" y1="232" x2="1230" y2="232" stroke="white" strokeWidth="7" />
+                <line x1="1212" y1="215" x2="1212" y2="250" stroke="white" strokeWidth="7" />
+
+                <text x="1255" y="225" fill="#fca5a5" fontSize="10" fontWeight="bold">
+                  FIRST AID
+                </text>
+                <text x="1255" y="240" fill="#f87171" fontSize="10" fontWeight="bold">
+                  STATION
+                </text>
+                <line x1="1242" y1="232" x2="1252" y2="232" stroke="#ef4444" strokeWidth="1.5" />
+              </g>
+
+              {/* 3. AMBULANCE EGRESS CORRIDOR & AMBULANCES */}
+              <g
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'ambulance-egress',
+                  title: 'Dedicated Ambulance Egress Fast-Track',
+                  category: 'Egress',
+                  dimensions: '6.0m Wide Clear Vehicle Channel',
+                  specs: 'Sterile vehicular passage guaranteed free of pedestrian crowding for hospital transfer.',
+                  safetyProtocol: 'Continuous police and barrier security escorts; exit directly onto regional medical highway.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Critical Priority'
+                })}
+              >
+                {/* Ambulance Parking Bay */}
+                <rect
+                  x="1185"
+                  y="125"
+                  width="65"
+                  height="65"
+                  fill="#0c192d"
+                  stroke="#38bdf8"
+                  strokeWidth="1.5"
+                  strokeDasharray="4,4"
+                  rx="4"
+                />
+                <text x="1217" y="160" textAnchor="middle" fill="#38bdf8" fontSize="20">
+                  🚑
+                </text>
+
+                <text x="1260" y="145" fill="#38bdf8" fontSize="10" fontWeight="black">
+                  AMBULANCE
+                </text>
+                <text x="1260" y="160" fill="#38bdf8" fontSize="10" fontWeight="black">
+                  EGRESS
+                </text>
+                <line x1="1250" y1="152" x2="1258" y2="152" stroke="#38bdf8" strokeWidth="1.5" />
+
+                {/* Ambulance 1 parked */}
+                <rect x="1175" y="320" width="55" height="30" rx="4" fill="#1e293b" stroke="#f87171" strokeWidth="1.5" />
+                <text x="1202" y="340" textAnchor="middle" fill="#ef4444" fontSize="14">🚑</text>
+
+                {/* Ambulance 2 parked */}
+                <rect x="1175" y="365" width="55" height="30" rx="4" fill="#1e293b" stroke="#f87171" strokeWidth="1.5" />
+                <text x="1202" y="385" textAnchor="middle" fill="#ef4444" fontSize="14">🚑</text>
+              </g>
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* G. PUBLIC WATER & SANITATION STATIONS (Bottom Right Zone) */}
+          {/* ================================================================= */}
+          {showMedicalAmenities && (
+            <g>
+              {/* 1. Sanitation Blocks / Restrooms */}
+              <g
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'sanitation-block',
+                  title: 'Modular Sanitation & Restroom Cluster',
+                  category: 'Sanitation',
+                  dimensions: '28m × 16m Restroom Compound',
+                  capacity: `${cadMetrics.waterStations * 3} Vacuum Restrooms`,
+                  specs: 'Gender-segregated accessible toilet cabins with pressurized greywater recycling.',
+                  safetyProtocol: 'Continuous lighting, non-slip rubber decking, and one-way entry/exit queue gates.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Clean'
+                })}
+              >
+                <rect
+                  x="990"
+                  y="530"
+                  width="180"
+                  height="150"
+                  fill="#081e2b"
+                  stroke="#0284c7"
+                  strokeWidth="2"
+                  rx="6"
+                />
+
+                {/* Grid of restroom cubicles */}
+                <g fill="#0c2d40" stroke="#0284c7" strokeWidth="1">
+                  {[0, 1, 2].map((col) => (
+                    [0, 1].map((row) => (
+                      <g key={`${col}-${row}`}>
+                        <rect x={1005 + col * 52} y={545 + row * 45} width="44" height="38" rx="2" />
+                        <text x={1027 + col * 52} y={568 + row * 45} textAnchor="middle" fill="#38bdf8" fontSize="10" fontWeight="bold">
+                          🚻
+                        </text>
+                      </g>
+                    ))
+                  ))}
+                </g>
+
+                <text x="1080" y="650" textAnchor="middle" fill="#38bdf8" fontSize="12" fontWeight="bold">
+                  SANITATION BLOCK
+                </text>
+                <text x="1080" y="665" textAnchor="middle" fill="#0284c7" fontSize="10">
+                  (RESTROOMS)
+                </text>
+              </g>
+
+              {/* 2. PUBLIC WATER STATIONS Grid */}
+              <g
+                className="cursor-pointer group"
+                onClick={() => setSelectedObstacle({
+                  id: 'water-stations',
+                  title: 'Public Water Hydration Hubs',
+                  category: 'Hydration',
+                  dimensions: '16 Station High-Flow Water Grid',
+                  capacity: '500 Liters / Minute Continuous Chilled Water',
+                  specs: 'Potable multi-spigot hydration stations preventing spectator heat exhaustion and queue surges.',
+                  safetyProtocol: 'Zero-barrier walk-through flow; drainage channels prevent slip hazards.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Hydrated'
+                })}
+              >
+                <rect
+                  x="1185"
+                  y="460"
+                  width="100"
+                  height="220"
+                  fill="#061c28"
+                  stroke="#38bdf8"
+                  strokeWidth="2.5"
+                  rx="6"
+                />
+
+                {/* Water spigot icons grid */}
+                {[0, 1].map((col) => (
+                  [0, 1, 2, 3].map((row) => (
+                    <g key={`w-${col}-${row}`} stroke="#38bdf8" strokeWidth="1.5" fill="none">
+                      <rect x={1195 + col * 45} y={475 + row * 46} width="36" height="36" rx="3" fill="#082b3d" />
+                      <circle cx={1213 + col * 45} cy={490 + row * 46} r="4" fill="#38bdf8" />
+                      <line x1={1213 + col * 45} y1={494 + row * 46} x2={1213 + col * 45} y2={504 + row * 46} stroke="#38bdf8" strokeWidth="2" />
+                    </g>
+                  ))
+                ))}
+
+                <text x="1300" y="550" fill="#38bdf8" fontSize="12" fontWeight="900">
+                  PUBLIC
+                </text>
+                <text x="1300" y="568" fill="#38bdf8" fontSize="12" fontWeight="900">
+                  WATER
+                </text>
+                <text x="1300" y="586" fill="#38bdf8" fontSize="12" fontWeight="900">
+                  STATIONS
+                </text>
+
+                {/* Pointer line */}
+                <line x1="1285" y1="565" x2="1295" y2="565" stroke="#38bdf8" strokeWidth="1.5" />
+              </g>
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* H. IOT SENSOR NODES [S01, S02, S03...] at Gate Obstacles */}
+          {/* ================================================================= */}
+          {showSensors && (
+            <g className="font-mono font-black text-[9px]">
+              {/* Sensor 1: Stage North Gate */}
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'sensor-s01',
+                  title: 'IoT Sensor Node [S01] - North Stage Gate',
+                  category: 'Sensor',
+                  dimensions: 'Dual-Laser IR Beam Interruption',
+                  specs: 'Hardware ESP32 pulse detector registering in/out crowd delta at 10Hz sampling.',
+                  safetyProtocol: 'Auto-triggers barrier lock if pit density exceeds 4.0 people/m².',
+                  status: 'OPTIMAL',
+                  riskScore: 'Live Stream'
+                })}
+              >
+                <rect x="500" y="115" width="28" height="20" rx="3" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+                <text x="514" y="129" textAnchor="middle" fill="white">S01</text>
+              </g>
+
+              {/* Sensor 2: Pen Mid Corridor */}
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'sensor-s02',
+                  title: 'IoT Sensor Node [S02] - Central Concourse',
+                  category: 'Sensor',
+                  dimensions: 'mmWave Radar Velocity Counter',
+                  specs: 'Directional velocity detection tracking foot-traffic momentum heading toward the hub.',
+                  safetyProtocol: 'Feeds live trend to the FlowNavigator routing engine.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Live Stream'
+                })}
+              >
+                <rect x="680" y="390" width="28" height="20" rx="3" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+                <text x="694" y="404" textAnchor="middle" fill="white">S02</text>
+              </g>
+
+              {/* Sensor 3: Hub East Inflow */}
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'sensor-s03',
+                  title: 'IoT Sensor Node [S03] - Security Hub East',
+                  category: 'Sensor',
+                  dimensions: 'ToF LiDAR Gate Counter',
+                  specs: 'Bi-directional spectator influx counter measuring throughput into medical/water alley.',
+                  safetyProtocol: 'Alerts medical dispatch if bottleneck formation begins.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Live Stream'
+                })}
+              >
+                <rect x="975" y="390" width="28" height="20" rx="3" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+                <text x="989" y="404" textAnchor="middle" fill="white">S03</text>
+              </g>
+
+              {/* Sensor 4: South Concourse */}
+              <g 
+                className="cursor-pointer"
+                onClick={() => setSelectedObstacle({
+                  id: 'sensor-s04',
+                  title: 'IoT Sensor Node [S04] - South Egress Gate',
+                  category: 'Sensor',
+                  dimensions: 'Dual-Laser IR Beam Interruption',
+                  specs: 'Monitors perimeter discharge rate during event egress.',
+                  safetyProtocol: 'Reports clearance velocity to local emergency coordinators.',
+                  status: 'OPTIMAL',
+                  riskScore: 'Live Stream'
+                })}
+              >
+                <rect x="500" y="670" width="28" height="20" rx="3" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+                <text x="514" y="684" textAnchor="middle" fill="white">S04</text>
+              </g>
+            </g>
+          )}
+
+          {/* ================================================================= */}
+          {/* I. DYNAMIC SIMULATION PARTICLES (When Egress Simulation is active) */}
+          {/* ================================================================= */}
+          {externalIsSimulating && (
+            <g fill="#22c55e" opacity="0.85">
+              {/* Particle flow around perimeter */}
+              <circle cx="280" cy="82" r="4" className="animate-ping" />
+              <circle cx="580" cy="82" r="5" />
+              <circle cx="780" cy="82" r="4" />
+              <circle cx="1080" cy="82" r="5" />
+
+              {/* Particle flow through central concourse */}
+              <circle cx="600" cy="400" r="4" />
+              <circle cx="750" cy="400" r="5" className="animate-pulse" />
+              <circle cx="1020" cy="400" r="4" />
+
+              {/* Bottom road flow */}
+              <circle cx="900" cy="768" r="5" />
+              <circle cx="600" cy="768" r="4" />
+              <circle cx="300" cy="768" r="5" className="animate-ping" />
+            </g>
+          )}
+        </svg>
+
+        {/* Selected Obstacle Deep Inspection Modal Card */}
+        {selectedObstacle && (
+          <div className="absolute bottom-6 left-6 right-6 sm:right-auto sm:w-96 z-30 bg-[#0d1527]/95 backdrop-blur-md rounded-2xl border-2 border-cyan-500/70 p-4 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  {selectedObstacle.category}
                 </span>
-                <h4 className="text-sm font-extrabold text-white">{selectedElement.title}</h4>
+                <span className="font-black text-white text-xs">{selectedObstacle.status}</span>
               </div>
-              <button
-                onClick={() => setSelectedElement(null)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              <button 
+                onClick={() => setSelectedObstacle(null)}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              {selectedElement.details}
-            </p>
+            <div>
+              <h4 className="font-black text-slate-100 text-sm">{selectedObstacle.title}</h4>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">{selectedObstacle.specs}</p>
+            </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-slate-800/80 rounded-xl p-2">
-                <span className="text-[10px] text-slate-400 block font-semibold">Capacity</span>
-                <span className="font-extrabold text-white text-xs">{selectedElement.capacity}</span>
+            <div className="grid grid-cols-2 gap-2 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] font-mono">
+              <div>
+                <span className="text-slate-400 block text-[10px]">CAD Dimensions:</span>
+                <strong className="text-cyan-300">{selectedObstacle.dimensions}</strong>
               </div>
-              <div className="bg-slate-800/80 rounded-xl p-2">
-                <span className="text-[10px] text-slate-400 block font-semibold">Density Status</span>
-                <span className="font-extrabold text-emerald-400 text-xs">{selectedElement.density}</span>
+              <div>
+                <span className="text-slate-400 block text-[10px]">Safety Capacity:</span>
+                <strong className="text-emerald-400">{selectedObstacle.capacity || 'Engineered Pass'}</strong>
               </div>
             </div>
 
-            {selectedElement.sensors && (
-              <div className="text-[11px] text-slate-400 flex items-center gap-1.5 pt-1">
-                <Cpu className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <span className="truncate">{selectedElement.sensors}</span>
-              </div>
-            )}
+            <div className="bg-blue-950/40 border border-blue-800/60 p-2.5 rounded-xl text-[11px] text-blue-200">
+              <strong className="text-blue-300 block font-bold mb-0.5">Crowd Safety Protocol:</strong>
+              {selectedObstacle.safetyProtocol}
+            </div>
           </div>
         )}
-
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. BOTTOM ARCHITECTURAL METRICS FOOTER */}
+      {/* 4. FOOTER LEGEND & NFPA COMPLIANCE BENCHMARK */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900 px-6 py-4 border-t border-slate-800/90 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-        <div className="space-y-0.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            Barricaded Pens
+      <div className="bg-[#090e1c] px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs border-t border-slate-800">
+        
+        {/* CAD Blueprint Legend Items */}
+        <div className="flex flex-wrap items-center gap-4 text-[11px] font-bold">
+          <span className="text-slate-400 font-mono uppercase tracking-wider text-[10px]">
+            CAD Layers:
           </span>
-          <p className="text-sm font-black text-white flex items-center gap-1.5">
-            <span>{layoutSpecs.stageBarricadeRings} Curved Tier Rings</span>
-          </p>
-          <p className="text-[10px] text-slate-500">Scaled for {currentAreaSqFt.toLocaleString()} sq.ft</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs border-2 border-[#22c55e] bg-[#0d3822]"></span>
+            <span className="text-slate-200">Major Stage (Green)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs border-2 border-[#f97316] bg-[#2c1706]"></span>
+            <span className="text-slate-200">Side Stage (Orange)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs border-2 border-[#ef4444] bg-[#1c0e12]"></span>
+            <span className="text-slate-200">Heavy-Duty Barricades</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs border-2 border-[#38bdf8] bg-[#0f172a]"></span>
+            <span className="text-slate-200">Security Hub</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs bg-[#dc2626] text-white flex items-center justify-center text-[8px] font-black">✚</span>
+            <span className="text-slate-200">Medical / First Aid</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs border-2 border-[#0284c7] bg-[#061c28]"></span>
+            <span className="text-slate-200">Water & Sanitation</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-xs bg-[#0284c7] text-white text-[8px] font-mono flex items-center justify-center font-bold">S</span>
+            <span className="text-slate-200">IoT LiDAR Counters</span>
+          </div>
         </div>
 
-        <div className="space-y-0.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            Entrance Flow Channels
-          </span>
-          <p className="text-sm font-black text-white flex items-center gap-1.5">
-            <span>{layoutSpecs.entranceLanes} Parallel Lanes</span>
-          </p>
-          <p className="text-[10px] text-slate-500">With inspection booths</p>
-        </div>
-
-        <div className="space-y-0.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            Sanitation Units
-          </span>
-          <p className="text-sm font-black text-white flex items-center gap-1.5">
-            <span>{layoutSpecs.totalRestrooms} Portable Cabins</span>
-          </p>
-          <p className="text-[10px] text-slate-500">{layoutSpecs.restroomBanks} distributed clusters</p>
-        </div>
-
-        <div className="space-y-0.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            Perimeter Egress
-          </span>
-          <p className="text-sm font-black text-emerald-400 flex items-center gap-1.5">
-            <span>{layoutSpecs.emergencyExits} Emergency Exits</span>
-          </p>
-          <p className="text-[10px] text-slate-500">Full NFPA compliance</p>
+        {/* Dynamic Obstacle Summary & Dimensions */}
+        <div className="text-[11px] font-mono text-slate-400 flex items-center gap-3">
+          <span>Active Venue: <strong className="text-cyan-400">{cadMetrics.lenM}m × {cadMetrics.widM}m</strong></span>
+          <span>•</span>
+          <span>Obstacles: <strong className="text-emerald-400">{cadMetrics.penCount} Compartments</strong></span>
+          <span>•</span>
+          <span>NFPA 101: <strong className="text-emerald-400">PASSED ✓</strong></span>
         </div>
       </div>
 

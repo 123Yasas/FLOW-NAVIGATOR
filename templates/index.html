@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowNavigator | Intelligent Crowd Flow Management & Directional Guidance</title>
+  <meta name="description" content="Intelligent crowd flow management, real-time safety monitoring, predictive queue forecasting, and directional routing.">
+  
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Core Design System CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- Top Emergency Evacuation Banner (Triggered by Admin or SOS) -->
+  <div id="emergencyBanner" class="emergency-banner">
+    <i data-lucide="flame" style="width:20px;height:20px;"></i>
+    <span id="emergencyBannerText">🚨 CRITICAL EVACUATION PROTOCOL ACTIVE - MOVE CALMLY TOWARDS GREEN MARKED EXITS</span>
+    <button id="clearEmergencyBtn" class="btn btn-sm btn-outline" style="background:#fff;color:#dc2626;font-weight:800;margin-left:1rem;">
+      Clear Emergency
+    </button>
+  </div>
+
+  <!-- Main Navigation Bar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      
+      <!-- Brand & Title -->
+      <div class="nav-brand" id="brandHomeBtn">
+        <div class="brand-icon">
+          <i data-lucide="compass"></i>
+        </div>
+        <div>
+          <div class="brand-title">
+            FLOW<span>NAVIGATOR</span>
+            <span class="brand-badge">LIVE OPERATIONS</span>
+          </div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">
+            Intelligent Crowd Flow Management System
+          </div>
+        </div>
+      </div>
+
+      <!-- Venue Selector Dropdown -->
+      <div class="venue-select-box">
+        <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
+        <select id="venueSelect" class="venue-select">
+          <option value="palani-gathering">Palani Pilgrimage Grounds (Tamil Nadu)</option>
+          <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
+          <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
+          <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
+        </select>
+      </div>
+
+      <!-- Role Switcher & Controls -->
+      <div class="nav-actions">
+        <!-- Senior Citizen Accessibility Toggle -->
+        <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
+          <i data-lucide="accessibility"></i>
+        </button>
+
+        <!-- Role Selector Buttons -->
+        <div class="role-switcher">
+          <button id="roleVisitorBtn" class="role-btn active" data-role="visitor">
+            <i data-lucide="user" style="width:15px;height:15px;"></i>
+            <span>Visitor View</span>
+          </button>
+          <button id="roleAdminBtn" class="role-btn" data-role="admin">
+            <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
+            <span>Admin Center</span>
+          </button>
+          <button id="roleKioskBtn" class="role-btn" data-role="kiosk">
+            <i data-lucide="tv" style="width:15px;height:15px;"></i>
+            <span>Public Kiosk</span>
+          </button>
+        </div>
+
+        <!-- Emergency SOS Button -->
+        <button id="sosBtn" class="btn-sos">
+          <i data-lucide="alert-triangle" style="width:15px;height:15px;"></i>
+          <span>SOS</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       VIEW 1: CITIZEN & VISITOR GUIDANCE VIEW
+       ========================================================================= -->
+  <section id="visitorView" class="view-section active">
+    <div class="container">
+      
+      <!-- Visitor Hero & Live Crowd Meter -->
+      <div class="citizen-hero">
+        <span class="badge badge-safe" style="margin-bottom:0.75rem;">
+          <i data-lucide="radio" style="width:12px;height:12px;"></i> Live Crowd Flow Monitored
+        </span>
+        <h1>Real-time Crowd & Safe Navigation</h1>
+        <p style="color:var(--text-muted); max-width:600px; margin:0 auto;">
+          Follow real-time green pathways to avoid chokepoints and enjoy safe, sub-6 minute queue times.
+        </p>
+      </div>
+
+      <!-- Crowd Gauge & Quick Stats -->
+      <div class="crowd-meter-card">
+        <div class="grid-3" style="align-items:center;">
+          
+          <!-- Circle Meter -->
+          <div>
+            <div id="citizenMeterCircle" class="crowd-meter-circle safe">
+              <span id="citizenMeterValue" class="crowd-meter-val">48%</span>
+              <span id="citizenMeterStatus" class="crowd-meter-label">Safe Flow</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Overall Venue Capacity Density</p>
+          </div>
+
+          <!-- Total Count Metric -->
+          <div>
+            <div style="font-size:0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:700; margin-bottom:0.35rem;">
+              Total People in Venue
+            </div>
+            <div id="citizenTotalPeople" style="font-size:3.2rem; font-weight:900; font-family:var(--font-display); color:var(--accent-cyan); line-height:1;">
+              12,450
+            </div>
+            <div style="font-size:0.85rem; color:var(--color-safe); margin-top:0.5rem; display:flex; align-items:center; justify-content:center; gap:0.35rem;">
+              <i data-lucide="arrow-down-right" style="width:16px;height:16px;"></i> Flow is moving normally
+            </div>
+          </div>
+
+          <!-- Senior Audio Button & Tips -->
+          <div style="text-align:left; background:rgba(255,255,255,0.03); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+            <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+              <i data-lucide="volume-2" style="color:var(--color-moderate);"></i>
+              <strong style="font-size:0.95rem;">Spoken Audio Guidance</strong>
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">
+              Press below to hear current crowd status and recommended walking directions in spoken voice.
+            </p>
+            <button id="speakAdvisoryBtn" class="btn btn-outline btn-sm" style="width:100%;">
+              <i data-lucide="volume-2" style="width:14px;height:14px;"></i> Listen to Advisory
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Route Finder & Venue Map Twin -->
+      <div class="grid-2" style="margin-bottom:2rem;">
+        
+        <!-- Route Finder & Recommendations -->
+        <div class="card">
+          <div class="card-title">
+            <i data-lucide="navigation" style="color:var(--accent-blue);"></i>
+            Crowd-Aware Safe Route Finder
+          </div>
+          
+          <div style="display:flex; gap:1rem; margin-bottom:1.25rem;">
+            <div style="flex:1;">
+              <label style="display:block; font-size:0.75rem; color:var(--text-muted); font-weight:700; margin-bottom:0.35rem;">START POINT</label>
+              <select id="routeStartSelect" class="venue-select" style="width:100%; background:var(--bg-secondary); padding:0.6rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+                <option value="zone-a">Main Entrance Plaza (Zone A)</option>
+                <option value="zone-f">North Parking & Shuttles (Zone F)</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="display:block; font-size:0.75rem; color:var(--text-muted); font-weight:700; margin-bottom:0.35rem;">DESTINATION</label>
+              <select id="routeDestSelect" class="venue-select" style="width:100%; background:var(--bg-secondary); padding:0.6rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+                <option value="zone-c">Main Sanctum / Inner Shrine (Zone C)</option>
+                <option value="zone-e">Dining Pavilion (Zone E)</option>
+                <option value="zone-f">Parking & Exit (Zone F)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Highlight Recommendation Alert Box -->
+          <div id="routeRecommendationAlert" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:var(--radius-md); padding:1rem; margin-bottom:1.25rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem; color:var(--color-safe); font-weight:800; font-size:0.85rem; margin-bottom:0.25rem;">
+              <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
+              RECOMMENDED: Route C (North Express Lane)
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-muted);">
+              Wait time is only <strong>6 mins</strong> (34% density). Avoid Direct Pathway (Route A) which is 92% congested with 28 min bottleneck delays.
+            </p>
+          </div>
+
+          <!-- Route Options List -->
+          <div id="citizenRoutesList" class="routes-container">
+            <!-- Dynamically populated by app.js -->
+          </div>
+
+        </div>
+
+        <!-- Venue Map Container -->
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+            <div class="card-title" style="margin-bottom:0;">
+              <i data-lucide="map" style="color:var(--accent-cyan);"></i>
+              Live Venue Map & Guidance
+            </div>
+            <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+              <!-- Dynamic Route Status Badges (Cleanly located in header without overlapping map canvas) -->
+              <div id="mapHeaderRouteBadges" class="map-header-route-badges">
+                <span class="badge badge-safe">● Route C: Fast (6m)</span>
+                <span class="badge badge-moderate">● Route B: Moderate (15m)</span>
+                <span class="badge badge-critical">● Route A: Heavy Congestion (28m)</span>
+              </div>
+              <button id="openMapsKeyModalBtn" class="btn btn-outline btn-sm">
+                <i data-lucide="key" style="width:13px;height:13px;"></i> Maps API Key
+              </button>
+            </div>
+          </div>
+
+          <!-- Map Element -->
+          <div class="map-container-wrap" style="flex:1;">
+            <div id="googleMapDiv"></div>
+
+            <div class="map-badge-legend">
+              <div><span style="color:var(--color-safe);">■</span> Recommended Flow</div>
+              <div><span style="color:var(--color-critical);">■</span> Bottleneck Chokepoint</div>
+            </div>
+          </div>
+          
+          <div style="font-size:0.75rem; color:var(--text-subtle); margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <span>GPS Location: <strong id="mapCoordDisplay">10.4534° N, 77.5186° E</strong></span>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span id="currentVenueNameBadge" style="font-weight:700; color:var(--accent-cyan);">Palani Pilgrimage Grounds</span>
+              <span class="badge badge-safe" style="font-size:0.7rem;">● Active Monitoring</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Safety Bulletins & Alerts Feed -->
+      <div class="card">
+        <div class="card-title">
+          <i data-lucide="bell" style="color:var(--color-moderate);"></i>
+          Live Venue Safety Advisories & Crowd Bulletins
+        </div>
+        <div id="citizenAlertsList" style="display:flex; flex-direction:column; gap:0.75rem;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       VIEW 2: COMMAND & CONTROL ADMIN DASHBOARD (VERTICAL SIDEBAR LAYOUT)
+       ========================================================================= -->
+  <section id="adminView" class="view-section">
+    <div class="container">
+      
+      <div class="admin-vertical-layout">
+        
+        <!-- VERTICAL SIDEBAR NAVIGATION -->
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar-header">
+            <div class="admin-sidebar-title">COMMAND CENTER</div>
+            <div class="admin-sidebar-sub" id="adminSidebarVenue">Palani Pilgrimage Grounds</div>
+          </div>
+
+          <button class="admin-nav-item active" data-tab="overview">
+            <i data-lucide="layout-dashboard" style="width:18px;height:18px;"></i>
+            <span>Executive Overview</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="digital-twin">
+            <i data-lucide="grid" style="width:18px;height:18px;"></i>
+            <span>Zone Occupancy & Flow</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="google-maps-tab">
+            <i data-lucide="map" style="width:18px;height:18px;"></i>
+            <span>Venue Map & Routing</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="ml-studio">
+            <i data-lucide="trending-up" style="width:18px;height:18px;"></i>
+            <span>Crowd Surge AI Forecast</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="sensors-fleet">
+            <i data-lucide="door-open" style="width:18px;height:18px;"></i>
+            <span>Gate & Turnstile Counters</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="event-planner">
+            <i data-lucide="clipboard-list" style="width:18px;height:18px;"></i>
+            <span>Event Planning & Capacity</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="analytics-table-tab">
+            <i data-lucide="table" style="width:18px;height:18px;"></i>
+            <span>Detailed Analytics & Reports</span>
+          </button>
+
+          <!-- Quick System Health Status Pill -->
+          <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-subtle);">
+            <div style="display:flex; align-items:center; gap:0.4rem; color:var(--color-safe); font-weight:700; margin-bottom:0.25rem;">
+              <span style="width:8px; height:8px; border-radius:50%; background:var(--color-safe); display:inline-block;"></span>
+              Operational Dispatch Live
+            </div>
+            <span>All gates reporting active</span>
+          </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="admin-main-content">
+          
+          <!-- TAB 1: EXECUTIVE OVERVIEW -->
+          <div id="tab-overview" class="admin-tab-content active">
+            <!-- Top Metrics Cards -->
+            <div class="grid-4" style="margin-bottom:1.5rem;">
+              <div class="card">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Total People in Venue</div>
+                <div id="adminStatHeadcount" style="font-size:2rem; font-weight:800; color:var(--accent-cyan); margin:0.35rem 0;">12,450</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);" id="adminStatCapacityPct">49.8% of 25,000 Capacity</div>
+              </div>
+              <div class="card">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Counting Gates</div>
+                <div id="adminStatSensors" style="font-size:2rem; font-weight:800; color:#fff; margin:0.35rem 0;">6 Gates</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);">● 100% Gates Reporting Influx</div>
+              </div>
+              <div class="card">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Peak Chokepoint Warning</div>
+                <div id="adminStatSurge" style="font-size:1.6rem; font-weight:800; color:var(--color-critical); margin:0.35rem 0;">Zone C (97.5%)</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">High density surge in +15m</div>
+              </div>
+              <div class="card">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Safety & Egress Status</div>
+                <div id="adminStatEmergency" style="font-size:2rem; font-weight:800; color:var(--color-safe); margin:0.35rem 0;">NORMAL</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Turnstiles Operating Normally</div>
+              </div>
+            </div>
+
+            <!-- Hourly Crowd Footfall Chart & Operational Actions -->
+            <div class="grid-2" style="margin-bottom:1.5rem;">
+              <div class="card">
+                <div class="card-title">
+                  <i data-lucide="trending-up" style="color:var(--accent-blue);"></i>
+                  Hourly Venue Footfall & Movement Velocity
+                </div>
+                <div style="height:220px; display:flex; align-items:flex-end; gap:0.75rem; padding-top:1rem; border-bottom:1px solid var(--border-subtle);" id="trendsBarChart">
+                  <!-- Rendered by app.js -->
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:0.75rem; font-size:0.75rem; color:var(--text-subtle);">
+                  <span>08:00</span><span>10:00</span><span>12:00</span><span>14:00</span><span>16:00</span><span>18:00</span><span>Current</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">
+                  <i data-lucide="shield" style="color:var(--color-moderate);"></i>
+                  Quick Operational Actions
+                </div>
+                <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                  <button id="adminTriggerDiversionBtn" class="btn btn-outline" style="justify-content:flex-start; text-align:left;">
+                    <i data-lucide="corner-up-right" style="color:var(--accent-cyan);"></i>
+                    <div>
+                      <div style="font-weight:700;">Broadcast Zone C Diversion to Route C</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted);">Directs visitors to the North Express Lane to relieve bottleneck.</div>
+                    </div>
+                  </button>
+                  
+                  <button id="adminEvacuateTriggerBtn" class="btn btn-outline" style="justify-content:flex-start; text-align:left; border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.06);">
+                    <i data-lucide="alert-octagon" style="color:var(--color-critical);"></i>
+                    <div>
+                      <div style="font-weight:700; color:var(--color-critical);">Trigger Venue Evacuation Protocol</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted);">Opens all emergency gates outward and highlights green exit corridors.</div>
+                    </div>
+                  </button>
+
+                  <button id="adminSimulateTickBtn" class="btn btn-outline" style="justify-content:flex-start; text-align:left;">
+                    <i data-lucide="activity" style="color:var(--color-safe);"></i>
+                    <div>
+                      <div style="font-weight:700;">Simulate Live Gate Influx (+15 People)</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted);">Simulate real-time gate entry burst to test automated re-routing.</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: ZONE OCCUPANCY & FLOW -->
+          <div id="tab-digital-twin" class="admin-tab-content">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem;">
+              <div>
+                <h2>Zone Occupancy & Movement Status</h2>
+                <p style="font-size:0.85rem; color:var(--text-muted);">Current headcounts, space capacity, entry velocity, and chokepoint alerts.</p>
+              </div>
+              <button id="refreshZonesBtn" class="btn btn-outline btn-sm">
+                <i data-lucide="refresh-cw" style="width:13px;height:13px;"></i> Refresh Counts
+              </button>
+            </div>
+            <div id="adminZoneGrid" class="zone-grid">
+              <!-- Dynamically populated with human-friendly zone cards -->
+            </div>
+          </div>
+
+          <!-- TAB 3: VENUE MAP & ROUTING -->
+          <div id="tab-google-maps-tab" class="admin-tab-content">
+            <div class="card" style="margin-bottom:1.5rem;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                  <h2 id="adminMapHeaderTitle">Venue Map & Pathway Layout</h2>
+                  <p style="font-size:0.85rem; color:var(--text-muted);">Real-time crowd heat density overlays and directional routes for selected venue.</p>
+                </div>
+                <!-- Quick venue switch buttons -->
+                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                  <button class="btn btn-outline btn-sm venue-pill active" data-vid="palani-gathering">Palani</button>
+                  <button class="btn btn-outline btn-sm venue-pill" data-vid="meenakshi-temple">Meenakshi Temple</button>
+                  <button class="btn btn-outline btn-sm venue-pill" data-vid="chennai-stadium">Nehru Stadium</button>
+                  <button class="btn btn-outline btn-sm venue-pill" data-vid="central-transit-hub">Central Transit</button>
+                </div>
+              </div>
+              
+              <div class="map-container-wrap" style="height:560px;">
+                <div id="googleMapAdminDiv" style="width:100%; height:100%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 4: CROWD SURGE AI FORECAST -->
+          <div id="tab-ml-studio" class="admin-tab-content">
+            <div class="grid-2" style="margin-bottom:1.5rem;">
+              
+              <!-- Crowd Simulation Sliders -->
+              <div class="card">
+                <div class="card-title">
+                  <i data-lucide="sliders" style="color:var(--accent-cyan);"></i>
+                  Interactive Crowd Load Simulator
+                </div>
+                <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.25rem;">
+                  Adjust expected footfall, gate arrival speed, and corridor bottlenecks to predict wait times.
+                </p>
+
+                <div class="ml-feature-slider-group">
+                  <div class="slider-row">
+                    <label style="font-size:0.8rem; color:var(--text-muted);">Current Zone Crowd</label>
+                    <input type="range" id="mlSlideHeadcount" min="50" max="1500" value="780" class="slider-input">
+                    <span id="mlValHeadcount" class="slider-val">780</span>
+                  </div>
+                  <div class="slider-row">
+                    <label style="font-size:0.8rem; color:var(--text-muted);">Zone Space Capacity Limit</label>
+                    <input type="range" id="mlSlideCapacity" min="200" max="2000" value="800" class="slider-input">
+                    <span id="mlValCapacity" class="slider-val">800</span>
+                  </div>
+                  <div class="slider-row">
+                    <label style="font-size:0.8rem; color:var(--text-muted);">Arrival Rush Speed (people/min)</label>
+                    <input type="range" id="mlSlideEntryRate" min="5" max="120" value="65" class="slider-input">
+                    <span id="mlValEntryRate" class="slider-val">65</span>
+                  </div>
+                  <div class="slider-row">
+                    <label style="font-size:0.8rem; color:var(--text-muted);">Departure Flow Speed (people/min)</label>
+                    <input type="range" id="mlSlideExitRate" min="5" max="120" value="25" class="slider-input">
+                    <span id="mlValExitRate" class="slider-val">25</span>
+                  </div>
+                  <div class="slider-row">
+                    <label style="font-size:0.8rem; color:var(--text-muted);">Chokepoint Squeeze Factor (0 to 1.0)</label>
+                    <input type="range" id="mlSlideBottleneck" min="0" max="100" value="95" class="slider-input">
+                    <span id="mlValBottleneck" class="slider-val">0.95</span>
+                  </div>
+                </div>
+
+                <button id="runMlInferenceBtn" class="btn btn-primary" style="width:100%;">
+                  <i data-lucide="zap" style="width:16px;height:16px;"></i> Calculate Crowd Surge & Wait Time
+                </button>
+              </div>
+
+              <!-- Output Prediction Card -->
+              <div class="card" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div class="card-title">
+                    <i data-lucide="sparkles" style="color:var(--color-moderate);"></i>
+                    Real-Time Crowd & Queue Forecast
+                  </div>
+
+                  <!-- Risk Badge & Wait Time -->
+                  <div style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:var(--radius-md); padding:1.25rem; margin-bottom:1.25rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <div>
+                        <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">FORECASTED CONGESTION RISK</span>
+                        <div id="mlOutputRisk" style="font-size:1.8rem; font-weight:900; color:var(--color-critical); font-family:var(--font-display);">
+                          CRITICAL
+                        </div>
+                      </div>
+                      <div style="text-align:right;">
+                        <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">EST. QUEUE WAIT TIME</span>
+                        <div id="mlOutputWait" style="font-size:1.8rem; font-weight:900; color:#fff; font-family:var(--font-display);">
+                          28.4 min
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Surge Probability & Forecasts -->
+                  <div class="grid-3" style="margin-bottom:1.25rem;">
+                    <div style="background:var(--bg-secondary); padding:0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); text-align:center;">
+                      <div style="font-size:0.7rem; color:var(--text-muted);">Next 15m Projection</div>
+                      <div id="mlForecast15m" style="font-size:1.3rem; font-weight:800; color:var(--color-critical);">845 people</div>
+                    </div>
+                    <div style="background:var(--bg-secondary); padding:0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); text-align:center;">
+                      <div style="font-size:0.7rem; color:var(--text-muted);">Next 30m Projection</div>
+                      <div id="mlForecast30m" style="font-size:1.3rem; font-weight:800; color:var(--color-critical);">890 people</div>
+                    </div>
+                    <div style="background:var(--bg-secondary); padding:0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); text-align:center;">
+                      <div style="font-size:0.7rem; color:var(--text-muted);">Surge Likelihood</div>
+                      <div id="mlSurgeProb" style="font-size:1.3rem; font-weight:800; color:var(--color-critical);">94.8%</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Operational Action Note -->
+                <div style="border-top:1px solid var(--border-subtle); padding-top:1rem; font-size:0.82rem; color:var(--text-muted);">
+                  <span style="color:#fff; font-weight:700;">Operational Recommendation:</span> Divert incoming crowd via Route C (North Express Lane) to prevent queue overflow at the sanctum entrance.
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- Key Influx Factors -->
+            <div class="card">
+              <div class="card-title">
+                <i data-lucide="bar-chart-2" style="color:var(--accent-blue);"></i>
+                Key Operational Flow Factors (What Drives Congestion)
+              </div>
+              <div id="featureImportanceContainer">
+                <!-- Dynamically populated with human-friendly flow factor bars -->
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 5: GATE & TURNSTILE COUNTERS -->
+          <div id="tab-sensors-fleet" class="admin-tab-content">
+            
+            <!-- Live Gate Counters Table -->
+            <div class="card" style="margin-bottom:1.5rem;">
+              <div class="card-title">
+                <i data-lucide="door-open" style="color:var(--accent-cyan);"></i>
+                Entrance & Exit Gate Counting Stations
+              </div>
+              <div style="overflow-x:auto;">
+                <table class="sensor-table">
+                  <thead>
+                    <tr>
+                      <th>Gate Station</th>
+                      <th>Location / Zone</th>
+                      <th>Entrance Counter (In)</th>
+                      <th>Exit Counter (Out)</th>
+                      <th>Net Present in Zone</th>
+                      <th>Doorway Beams Status</th>
+                      <th>Gate Hardware</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sensorsTableBody">
+                    <!-- Dynamically populated with gate information -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Interactive Pedestrian Walkway Simulator -->
+            <div class="card hardware-simulator-box">
+              <div class="card-title" style="display:flex; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <i data-lucide="cpu" style="color:var(--accent-blue);"></i>
+                  Gate 1 Pedestrian Turnstile Counter & Influx Simulator
+                </div>
+                <span class="badge badge-safe">Gate Monitoring Active</span>
+              </div>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.25rem;">
+                Simulate pedestrian movement through doorway laser beams to test live count updates.
+              </p>
+
+              <!-- Visual Doorway Representation -->
+              <div class="esp32-visual-board">
+                <!-- Outer Beam -->
+                <div id="simBeamA" class="tof-sensor-beam">
+                  <div style="font-weight:700; color:var(--accent-cyan);">Outer Doorway Beam (A)</div>
+                  <div class="laser-indicator" id="simLaserA"></div>
+                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValA" style="font-weight:800; color:#fff;">1200 mm</span></div>
+                  <div style="font-size:0.7rem; color:var(--text-subtle);">Status: Clear</div>
+                </div>
+
+                <!-- Doorway Walkway Icon -->
+                <div style="text-align:center;">
+                  <div style="width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
+                    <i data-lucide="footprints" style="color:var(--accent-blue);"></i>
+                  </div>
+                  <div style="font-size:0.75rem; font-weight:700;">Walkway Portal</div>
+                  <div style="font-size:0.7rem; color:var(--text-muted);">Directional Sensor</div>
+                </div>
+
+                <!-- Inner Beam -->
+                <div id="simBeamB" class="tof-sensor-beam">
+                  <div style="font-weight:700; color:var(--accent-cyan);">Inner Doorway Beam (B)</div>
+                  <div class="laser-indicator" id="simLaserB"></div>
+                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValB" style="font-weight:800; color:#fff;">1200 mm</span></div>
+                  <div style="font-size:0.7rem; color:var(--text-subtle);">Status: Clear</div>
+                </div>
+              </div>
+
+              <!-- Simulator Action Buttons -->
+              <div style="display:flex; gap:0.75rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+                <button id="simPedestrianEntryBtn" class="btn btn-primary btn-sm">
+                  <i data-lucide="user-plus" style="width:14px;height:14px;"></i> Register Person Entering (+1)
+                </button>
+                <button id="simPedestrianExitBtn" class="btn btn-outline btn-sm">
+                  <i data-lucide="user-minus" style="width:14px;height:14px;"></i> Register Person Exiting (-1)
+                </button>
+                <button id="simBurstSurgeBtn" class="btn btn-outline btn-sm" style="border-color:rgba(239,68,68,0.4); color:var(--color-critical);">
+                  <i data-lucide="zap" style="width:14px;height:14px;"></i> Simulate Sudden Rush (+15 Influx)
+                </button>
+              </div>
+
+              <!-- Live Gate Telemetry Log -->
+              <div>
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; margin-bottom:0.35rem; display:flex; justify-content:space-between;">
+                  <span>Gate Telemetry Event Log</span>
+                  <span id="simLastPacketTime" style="color:var(--color-safe);">Live</span>
+                </div>
+                <div id="simPayloadTerminal" class="payload-terminal">
+// Ready to record gate crossings...
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- TAB 6: EVENT PLANNING & CAPACITY (CAD BLUEPRINT & BARRICADE GENERATOR) -->
+          <div id="tab-event-planner" class="admin-tab-content">
+            <div class="cad-blueprint-card">
+              
+              <!-- CAD Blueprint Header -->
+              <div class="cad-blueprint-header">
+                <div>
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span class="cad-badge" style="background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4);">
+                      CAD BLUEPRINT GENERATOR
+                    </span>
+                    <span style="font-family:monospace; font-size:0.75rem; color:var(--text-muted);">
+                      SCALE: 1:500 • NFPA 101 CROWD DYNAMICS COMPLIANT
+                    </span>
+                  </div>
+                  <h2 style="font-size:1.4rem; font-weight:900; color:#fff; margin-top:0.35rem;">
+                    EVENT CROWD MANAGEMENT & BARRICADE LAYOUT PLAN
+                  </h2>
+                </div>
+
+                <!-- Live Safety Density Metrics Pill -->
+                <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Area:</span> <strong id="cadStatArea" style="color:#fff;">57,000 m²</strong>
+                  </div>
+                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Safe Cap:</span> <strong id="cadStatCapacity" style="color:var(--color-safe);">12,666 (95%)</strong>
+                  </div>
+                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Barricades:</span> <strong id="cadStatBoxes" style="color:var(--accent-cyan);">10 Compartments</strong>
+                  </div>
+                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Space / Person:</span> <strong id="cadStatDensity" style="color:#fff;">4.8 m²/ppl</strong>
+                  </div>
+                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Evac Time:</span> <strong id="cadStatEvac" style="color:#fff;">14.1 mins</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interactive Controls Bar -->
+              <div class="cad-inputs-bar">
+                <!-- Size Presets -->
+                <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                  <span style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); font-family:monospace;">
+                    Quick Presets:
+                  </span>
+                  <button class="cad-preset-pill" data-crowd="3000" data-len="120" data-wid="80">
+                    Small Arena (3,000 ppl • 4 Barricades)
+                  </button>
+                  <button class="cad-preset-pill active" data-crowd="12000" data-len="300" data-wid="190">
+                    Reference Concourse (12,000 ppl • 10 Barricades)
+                  </button>
+                  <button class="cad-preset-pill" data-crowd="25000" data-len="450" data-wid="250">
+                    Large Festival (25,000 ppl • 16 Barricades)
+                  </button>
+                  <button class="cad-preset-pill" data-crowd="40000" data-len="550" data-wid="320">
+                    Mega Stadium Concourse (40,000 ppl • 20 Barricades)
+                  </button>
+                </div>
+
+                <!-- Custom Dimension & Crowd Sliders -->
+                <div class="cad-controls-row">
+                  <div class="cad-input-box">
+                    <label>Measurement Unit</label>
+                    <select id="cadUnitSelect" class="cad-input-field">
+                      <option value="m">Meters (m)</option>
+                      <option value="ft">Feet (ft)</option>
+                    </select>
+                  </div>
+                  <div class="cad-input-box">
+                    <label>Length of Venue</label>
+                    <input type="number" id="cadInputLength" class="cad-input-field" value="300" min="50" max="800">
+                  </div>
+                  <div class="cad-input-box">
+                    <label>Width of Venue</label>
+                    <input type="number" id="cadInputWidth" class="cad-input-field" value="190" min="30" max="600">
+                  </div>
+                  <div class="cad-input-box">
+                    <label>Expected Crowd Capacity</label>
+                    <input type="number" id="cadInputCrowd" class="cad-input-field" value="12000" min="500" max="100000" step="500">
+                  </div>
+                </div>
+
+                <!-- Facility & Necessities Toggles (USER SPECIFIC REQUEST) -->
+                <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <span style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--text-muted); font-family:monospace;">
+                    Facility Blocks & Necessities (Included as Dedicated Boxes):
+                  </span>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <div id="cadToggleFoodCourt" class="cad-facility-toggle active">
+                      <span>🍔</span>
+                      <span>Food Court & Dining Pavilion</span>
+                    </div>
+                    <div id="cadToggleMedical" class="cad-facility-toggle active">
+                      <span>🚑</span>
+                      <span>Medical & Ambulance Egress</span>
+                    </div>
+                    <div id="cadToggleWater" class="cad-facility-toggle active">
+                      <span>💧</span>
+                      <span>Public Water Stations</span>
+                    </div>
+                    <div id="cadToggleSecurity" class="cad-facility-toggle active">
+                      <span>🛡️</span>
+                      <span>Central Security Hub</span>
+                    </div>
+                    <div id="cadToggleSideStage" class="cad-facility-toggle active">
+                      <span>🎭</span>
+                      <span>Side Stage (Orange)</span>
+                    </div>
+                    <div id="cadToggleSanitation" class="cad-facility-toggle active">
+                      <span>🚻</span>
+                      <span>Public Restroom Bays</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Layer Toggles & Actions -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; border-top:1px solid rgba(255,255,255,0.06); padding-top:0.75rem;">
+                  <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                    <div id="cadLayerDims" class="cad-preset-pill active">📐 Dimension Markings</div>
+                    <div id="cadLayerBarricades" class="cad-preset-pill active">🚧 Barricade Pens</div>
+                    <div id="cadLayerFlow" class="cad-preset-pill active">🟢 Flow Arrows</div>
+                    <div id="cadLayerAmenities" class="cad-preset-pill active">🏥 Facility Blocks</div>
+                  </div>
+                  <button id="cadDownloadSvgBtn" class="btn btn-outline btn-sm">
+                    <i data-lucide="download" style="width:14px;height:14px;"></i> Export CAD Blueprint (SVG)
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive 2D Blueprint Canvas Viewport -->
+              <div id="cadViewportWrap" class="cad-viewport-canvas-wrap">
+                <!-- Floating HUD Info -->
+                <div class="cad-floating-hud">
+                  <span class="cad-badge" style="background:rgba(15,23,42,0.9); color:#fff; border:1px solid rgba(255,255,255,0.15);">
+                    DRAG TO PAN • SCROLL TO ZOOM
+                  </span>
+                  <span class="cad-badge" style="background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid rgba(34,197,94,0.3);">
+                    ● DYNAMIC ARCHITECTURAL ENGINE ACTIVE
+                  </span>
+                </div>
+
+                <!-- Floating Zoom Controls -->
+                <div class="cad-zoom-controls">
+                  <button id="cadZoomInBtn" class="cad-zoom-btn" title="Zoom In">+</button>
+                  <button id="cadZoomOutBtn" class="cad-zoom-btn" title="Zoom Out">−</button>
+                  <button id="cadZoomResetBtn" class="cad-zoom-btn" title="Reset View" style="font-size:0.7rem;">↺</button>
+                </div>
+
+                <!-- SVG Canvas -->
+                <svg id="cadSvgViewport" viewBox="0 0 1400 850" style="width:100%; height:100%; user-select:none;">
+                  <!-- Dynamically rendered by cadPlanner.js -->
+                </svg>
+              </div>
+
+              <!-- Bottom Inspection Drawer for Selected Component -->
+              <div id="cadObstacleDetails" class="cad-inspection-drawer">
+                <div style="color:var(--text-muted); font-size:0.82rem;">
+                  👉 Click any <strong>Barricade Box</strong>, <strong>Major Stage</strong>, <strong>Food Court</strong>, or <strong>Medical Station</strong> on the floor plan above to inspect capacity & dimensions.
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- TAB 7: DETAILED ANALYTICS & REPORTS TABLE (USER REQUESTED) -->
+          <div id="tab-analytics-table-tab" class="admin-tab-content">
+            <div class="analytics-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                  <h2 style="font-size:1.3rem;">Detailed Operational Analytics & Flow Records</h2>
+                  <p style="font-size:0.82rem; color:var(--text-muted);">Continuous timeline of crowd influx, queue wait times, and bottleneck indicators across all venue gates.</p>
+                </div>
+                <button id="exportAnalyticsCsvBtn" class="btn btn-outline btn-sm">
+                  <i data-lucide="download" style="width:14px;height:14px;"></i> Export CSV Report
+                </button>
+              </div>
+
+              <!-- Filter Bar -->
+              <div class="analytics-filter-bar">
+                <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+                  <div>
+                    <label style="font-size:0.72rem; color:var(--text-muted); font-weight:700; display:block; margin-bottom:0.25rem;">FILTER ZONE</label>
+                    <select id="analyticsZoneFilter" class="venue-select" style="background:var(--bg-secondary); padding:0.5rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+                      <option value="ALL">All Zones & Gates</option>
+                      <option value="zone-a">Zone A: Main Entrance</option>
+                      <option value="zone-b">Zone B: West Courtyard</option>
+                      <option value="zone-c">Zone C: North Shrine Sanctum</option>
+                      <option value="zone-d">Zone D: South Bypass</option>
+                      <option value="zone-e">Zone E: Dining Hall</option>
+                      <option value="zone-f">Zone F: Parking Grounds</option>
+                      <option value="zone-h">Zone H: Hilltop Staircase</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style="font-size:0.72rem; color:var(--text-muted); font-weight:700; display:block; margin-bottom:0.25rem;">FLOW STATUS</label>
+                    <select id="analyticsStatusFilter" class="venue-select" style="background:var(--bg-secondary); padding:0.5rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+                      <option value="ALL">All Flow Conditions</option>
+                      <option value="CRITICAL">Critical Chokepoints Only</option>
+                      <option value="HIGH">High Congestion Only</option>
+                      <option value="MODERATE">Moderate Queues Only</option>
+                      <option value="SAFE">Safe / Normal Flow</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style="font-size:0.75rem; color:var(--text-subtle);">
+                  Showing <strong id="analyticsRowCount">12</strong> hourly recorded intervals
+                </div>
+              </div>
+
+              <!-- Full Analytics Table -->
+              <div class="analytics-table-wrap">
+                <table class="analytics-table">
+                  <thead>
+                    <tr>
+                      <th>Time Window</th>
+                      <th>Zone / Area</th>
+                      <th>Influx (In)</th>
+                      <th>Egress (Out)</th>
+                      <th>Active Headcount</th>
+                      <th>Capacity Load</th>
+                      <th>Flow Velocity</th>
+                      <th>Est. Queue Wait</th>
+                      <th>Status Condition</th>
+                      <th>Guidance Directive</th>
+                    </tr>
+                  </thead>
+                  <tbody id="analyticsTableBody">
+                    <!-- Populated dynamically by app.js -->
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+
+        </main>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
+       VIEW 3: PUBLIC KIOSK DISPLAY (OUTDOOR DIGITAL SIGNAGE)
+       ========================================================================= -->
+  <section id="kioskView" class="view-section">
+    <div class="kiosk-fullscreen">
+      
+      <div class="kiosk-header">
+        <div>
+          <div style="font-size:1.2rem; font-weight:800; color:var(--accent-cyan); letter-spacing:0.05em; text-transform:uppercase;">
+            FlowNavigator Public Directional Display
+          </div>
+          <h1 style="font-size:2.8rem; margin:0.25rem 0;" id="kioskVenueTitle">Palani Gathering Grounds</h1>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:2.5rem; font-weight:900; font-family:var(--font-display);" id="kioskClock">19:30</div>
+          <div style="font-size:0.9rem; color:var(--text-muted);">Live Automatic Guidance</div>
+        </div>
+      </div>
+
+      <div class="kiosk-gate-board">
+        <!-- Recommended Gate -->
+        <div class="kiosk-gate-card go">
+          <div style="display:inline-block; padding:0.4rem 1rem; border-radius:9999px; background:rgba(16,185,129,0.2); color:var(--color-safe); font-weight:800; margin-bottom:1rem;">
+            RECOMMENDED GATE
+          </div>
+          <div class="kiosk-gate-title" style="color:var(--color-safe);">GATE C (NORTH EXPRESS)</div>
+          <div class="kiosk-gate-status" style="color:#fff;">EST. WAIT: 6 MINUTES</div>
+          <p style="font-size:1.1rem; color:var(--text-muted); margin-top:1rem;">
+            Smooth continuous moving queue. Sub-35% occupancy.
+          </p>
+        </div>
+
+        <!-- Avoid Gate -->
+        <div class="kiosk-gate-card stop">
+          <div style="display:inline-block; padding:0.4rem 1rem; border-radius:9999px; background:rgba(239,68,68,0.2); color:var(--color-critical); font-weight:800; margin-bottom:1rem;">
+            CHOKED - DO NOT ENTER
+          </div>
+          <div class="kiosk-gate-title" style="color:var(--color-critical);">GATE A (MAIN DIRECT)</div>
+          <div class="kiosk-gate-status" style="color:#fff;">EST. WAIT: 28+ MINUTES</div>
+          <p style="font-size:1.1rem; color:var(--text-muted); margin-top:1rem;">
+            Bottlenecked inner corridor (92% occupancy). Use Gate C bypass.
+          </p>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:2px solid #1e293b; padding-top:1.5rem;">
+        <div style="display:flex; align-items:center; gap:1.5rem;">
+          <div style="width:70px; height:70px; background:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#000; font-weight:900; font-size:0.75rem; text-align:center;">
+            SCAN QR FOR PHONE
+          </div>
+          <div>
+            <div style="font-size:1.1rem; font-weight:700;">Scan with Phone Camera for Personal Live Route</div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">Real-time crowd-aware routing updated every 2 seconds</div>
+          </div>
+        </div>
+        <button id="kioskExitBtn" class="btn btn-outline btn-sm">
+          <i data-lucide="arrow-left" style="width:14px;height:14px;"></i> Return to Standard View
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ==================== GOOGLE MAPS API KEY MODAL ==================== -->
+  <div id="mapsKeyModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h3 style="font-size:1.2rem;">Google Maps Platform Configuration</h3>
+        <button id="closeMapsKeyModalBtn" style="color:var(--text-muted); font-size:1.2rem;">✕</button>
+      </div>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.25rem;">
+        Enter your Google Maps JavaScript API key to load live Google Maps with custom styling and route polylines. If no key is entered, FlowNavigator automatically renders an interactive high-res GIS vector map!
+      </p>
+      <input type="text" id="customMapsKeyInput" placeholder="AIzaSy..." style="width:100%; background:var(--bg-primary); border:1px solid var(--border-subtle); color:#fff; padding:0.75rem; border-radius:var(--radius-sm); margin-bottom:1rem; font-family:monospace;">
+      <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+        <button id="saveMapsKeyBtn" class="btn btn-primary btn-sm">Save & Reload Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/js/googleMaps.js"></script>
+  <script src="/static/js/sensorSimulator.js"></script>
+  <script src="/static/js/mlDashboard.js"></script>
+  <script src="/static/js/cadPlanner.js"></script>
+  <script src="/static/js/app.js"></script>
+  
+  <script>
+    // Initialize Lucide icons on page load
+    lucide.createIcons();
+  </script>
+</body>
+</html>

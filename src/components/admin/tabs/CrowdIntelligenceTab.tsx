@@ -32,81 +32,54 @@ export const CrowdIntelligenceTab: React.FC = () => {
     { time: '10:30 AM', density: occupancyPercentage },
   ];
 
-  const pipelineStages = [
-    'SENSOR DATA',
-    'DATA PROCESSING',
-    'DENSITY CALCULATION',
-    'TREND ANALYSIS',
-    'RISK PREDICTION',
-    'DECISION ENGINE'
-  ];
-
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (
     <div className="space-y-6 pb-16">
       
-      {/* HEADER WITH ANIMATED 6-STAGE PIPELINE */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700">
-              <BrainCircuit className="w-5 h-5" />
-            </span>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">
-              Explainable Crowd Intelligence & Decision Engine
-            </h3>
+      {/* HEADER */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black">
+            <BrainCircuit className="w-6 h-6" />
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            How raw sensor data is transformed into explainable crowd predictions without black-box opacity.
-          </p>
-        </div>
-
-        {/* Animated Pipeline Ribbon */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
-          {pipelineStages.map((stage, idx) => (
-            <div 
-              key={idx}
-              className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-center space-y-1 relative group hover:bg-blue-50/60 hover:border-blue-300 transition-all"
-            >
-              <span className="text-[10px] font-mono font-bold text-blue-600 block">STEP 0{idx + 1}</span>
-              <h5 className="font-black text-xs text-slate-900 leading-tight">{stage}</h5>
-              {idx < pipelineStages.length - 1 && (
-                <div className="hidden lg:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 text-slate-400 font-black text-xs">
-                  →
-                </div>
-              )}
-            </div>
-          ))}
+          <div>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">
+              Crowd Intelligence & Risk Forecasting
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Real-time influx velocity, congestion modeling, and predictive queue delay estimation.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* 5 INTERACTIVE CARDS DEMONSTRATING EXPLAINABLE PREDICTION */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* CROWD FORECASTING CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        {/* CARD 1: SENSOR DATA */}
+        {/* CARD 1: SENSOR TELEMETRY & GATE COUNTS */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-              1. SENSOR DATA
+              GATE INFLUX & THROUGHPUT
             </span>
-            <span className="text-[11px] font-mono text-slate-400">ESP32 Telemetry</span>
+            <span className="text-[11px] font-mono text-slate-400">Live Counters</span>
           </div>
 
           <div>
             <h4 className="font-black text-lg text-slate-900">{focusZone.name}</h4>
-            <p className="text-xs text-slate-500">Live hardware gate counts from beam break sensors</p>
+            <p className="text-xs text-slate-500">Live physical gate counts from optical beam sensors</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2">
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-0.5">
-              <span className="text-[11px] font-bold text-slate-500">Entry Count</span>
+              <span className="text-[11px] font-bold text-slate-500">Entry Influx</span>
               <span className="text-xl font-black text-emerald-600 block">740</span>
               <span className="text-[10px] text-slate-400">+65 / min velocity</span>
             </div>
 
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-0.5">
-              <span className="text-[11px] font-bold text-slate-500">Exit Count</span>
+              <span className="text-[11px] font-bold text-slate-500">Exit Outflow</span>
               <span className="text-xl font-black text-red-500 block">260</span>
               <span className="text-[10px] text-slate-400">-25 / min throughput</span>
             </div>
@@ -118,47 +91,14 @@ export const CrowdIntelligenceTab: React.FC = () => {
           </div>
         </div>
 
-        {/* CARD 2: DENSITY CALCULATION */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-              2. DENSITY CALCULATION
-            </span>
-            <span className="text-[11px] font-mono text-slate-400">Standard Formula</span>
-          </div>
-
-          <div>
-            <h4 className="font-black text-lg text-slate-900">Occupancy vs Capacity</h4>
-            <p className="text-xs text-slate-500">Instantaneous ratio computation for safety compliance</p>
-          </div>
-
-          {/* Formula Display */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center space-y-2">
-            <div className="text-xs font-mono font-bold text-slate-700">
-              <div className="inline-block border-b-2 border-slate-400 px-3 pb-0.5">Current Occupancy (480)</div>
-              <div className="pt-0.5">Zone Capacity (600)</div>
-            </div>
-            <div className="text-xs font-black text-slate-500">× 100</div>
-            <div className="text-2xl font-black text-indigo-600">= 80%</div>
-          </div>
-
-          {/* Circular Progress Ring Representation */}
-          <div className="flex items-center justify-between px-2 text-xs">
-            <span className="font-bold text-slate-600">Density Threshold:</span>
-            <span className="font-black text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
-              HIGH DENSITY (80%)
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 3: TREND ANALYSIS */}
+        {/* CARD 2: TREND ANALYSIS */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-              3. TREND ANALYSIS
+              INFLUX VELOCITY TRENDS
             </span>
             <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" /> Rapid Growth
+              <TrendingUp className="w-3.5 h-3.5" /> Rapid Influx
             </span>
           </div>
 
@@ -180,22 +120,22 @@ export const CrowdIntelligenceTab: React.FC = () => {
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-center text-xs font-black text-amber-900">
-            <span>60% → 67% → 75% → 84%: Rapid crowd growth detected</span>
+            <span>60% → 67% → 75% → 84%: Influx growth detected</span>
           </div>
         </div>
 
-        {/* CARD 4: AI RISK PREDICTION (EXPLAINABLE MODEL) */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 lg:col-span-2">
+        {/* CARD 3: AI RISK PREDICTION */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-red-700 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
-              4. AI RISK PREDICTION (EXPLAINABLE)
+              AI CONGESTION RISK
             </span>
-            <span className="text-xs font-bold text-slate-400">Rule-based Machine Reasoning</span>
+            <span className="text-xs font-bold text-slate-400">Continuous Assessment</span>
           </div>
 
           <div>
-            <h4 className="font-black text-lg text-slate-900">Predictive Congestion & Time-to-Critical</h4>
-            <p className="text-xs text-slate-500">No unexplained AI "magic". Transparent evaluation of input telemetry.</p>
+            <h4 className="font-black text-lg text-slate-900">Congestion & Time-to-Critical</h4>
+            <p className="text-xs text-slate-500">Predictive evaluation based on net influx drift and corridor capacity.</p>
           </div>
 
           {/* Visual Risk Meter */}
@@ -209,7 +149,6 @@ export const CrowdIntelligenceTab: React.FC = () => {
 
             {/* Visual Risk Bar with Cursor */}
             <div className="relative w-full h-3 bg-gradient-to-r from-emerald-400 via-amber-400 to-red-600 rounded-full">
-              {/* Pointer indicator positioned at High (approx 78%) */}
               <div className="absolute top-1/2 -translate-y-1/2 left-[78%] -translate-x-1/2 w-5 h-5 bg-white border-2 border-slate-900 rounded-full shadow-md flex items-center justify-center text-[8px] font-black text-slate-900">
                 ▲
               </div>
@@ -217,11 +156,11 @@ export const CrowdIntelligenceTab: React.FC = () => {
 
             <div className="flex items-center justify-between text-xs font-bold pt-1">
               <span className="text-slate-700">Predicted Congestion: <strong className="text-orange-600 font-black">HIGH RISK</strong></span>
-              <span className="text-red-600 font-black">Est. Time to Critical: 8 Minutes</span>
+              <span className="text-red-600 font-black">Est. Time to Critical: 8 Mins</span>
             </div>
           </div>
 
-          {/* Explainable Factor Breakdown */}
+          {/* Influencing Factor Breakdown */}
           <div className="space-y-1.5 text-xs">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
               Influencing Factors Analyzed:
@@ -233,47 +172,47 @@ export const CrowdIntelligenceTab: React.FC = () => {
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                 <span className="text-slate-400 block text-[10px]">Entry Rate</span>
-                <strong className="text-emerald-700">+65 people/min</strong>
+                <strong className="text-emerald-700">+65 /min</strong>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                 <span className="text-slate-400 block text-[10px]">Exit Rate</span>
-                <strong className="text-slate-700">-25 people/min</strong>
+                <strong className="text-slate-700">-25 /min</strong>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                 <span className="text-slate-400 block text-[10px]">Occupancy Trend</span>
-                <strong className="text-amber-600">+14% in 15 mins</strong>
+                <strong className="text-amber-600">+14% in 15m</strong>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                 <span className="text-slate-400 block text-[10px]">Corridor Capacity</span>
-                <strong className="text-slate-800">600 Max Standing</strong>
+                <strong className="text-slate-800">600 Max</strong>
               </div>
               <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                 <span className="text-slate-400 block text-[10px]">Net Influx Drift</span>
-                <strong className="text-red-600">+40 net crowd/min</strong>
+                <strong className="text-red-600">+40 net/min</strong>
               </div>
             </div>
           </div>
         </div>
 
-        {/* CARD 5: WAITING TIME ESTIMATOR */}
+        {/* CARD 4: WAITING TIME ESTIMATOR */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-cyan-700 bg-cyan-50 px-2.5 py-0.5 rounded-full border border-cyan-200">
-              5. WAITING TIME
+              DYNAMIC QUEUE DELAY
             </span>
             <div className="relative">
               <button
                 onClick={() => setShowTooltip(!showTooltip)}
                 className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                title="Explain formula"
+                title="Queue delay details"
               >
                 <HelpCircle className="w-4 h-4" />
               </button>
               {showTooltip && (
                 <div className="absolute right-0 top-6 w-60 p-3 bg-slate-900 text-white text-[11px] rounded-xl shadow-xl z-20 space-y-1">
-                  <span className="font-black text-cyan-300 block">Queue Formula:</span>
+                  <span className="font-black text-cyan-300 block">Queue Delay Calculation:</span>
                   <p className="text-slate-300">
-                    Estimated using the number of people ahead and the observed movement / service rate (480 people ÷ 40 service/min = 12 mins).
+                    Estimated using active queue size and throughput rate (480 people ÷ 40 service/min = 12 mins).
                   </p>
                 </div>
               )}

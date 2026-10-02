@@ -11,7 +11,6 @@ import {
   ShieldCheck, 
   Navigation, 
   ArrowRight, 
-  Sparkles, 
   Flame,
   CheckCircle2,
   ChevronRight
@@ -23,7 +22,6 @@ export const OverviewTab: React.FC = () => {
     sensors, 
     notifications, 
     setAdminTab, 
-    startJuryDemo, 
     emergencyMode,
     isOfflineMode,
     bufferedTelemetryCount
@@ -37,7 +35,7 @@ export const OverviewTab: React.FC = () => {
   const pillars = [
     { title: 'PLAN', label: 'Venue Layout', desc: 'Pre-event safety density & zone boundaries', tab: 'smart_plan' as const, color: 'border-blue-300 bg-blue-50 text-blue-700' },
     { title: 'MONITOR', label: 'IoT Telemetry', desc: 'Sub-second ESP32 people counting sensors', tab: 'live_monitor' as const, color: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
-    { title: 'PREDICT', label: 'AI Forecasting', desc: 'Explainable bottleneck & stampede risk estimation', tab: 'crowd_intelligence' as const, color: 'border-indigo-300 bg-indigo-50 text-indigo-700' },
+    { title: 'PREDICT', label: 'AI Forecasting', desc: 'Bottleneck & stampede risk estimation', tab: 'crowd_intelligence' as const, color: 'border-indigo-300 bg-indigo-50 text-indigo-700' },
     { title: 'GUIDE', label: 'Dynamic Reroute', desc: 'Real-time alternative pathfinding for visitors', tab: 'route_management' as const, color: 'border-cyan-300 bg-cyan-50 text-cyan-700' },
     { title: 'MANAGE', label: 'Automated Control', desc: 'Gate barriers, staff dispatch & emergency evacuation', tab: 'alerts' as const, color: 'border-amber-300 bg-amber-50 text-amber-700' },
   ];
@@ -59,14 +57,6 @@ export const OverviewTab: React.FC = () => {
               FlowNavigator completes the full end-to-end lifecycle of modern crowd safety.
             </p>
           </div>
-
-          <button
-            onClick={startJuryDemo}
-            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 fill-white" />
-            <span>Launch Jury Walkthrough</span>
-          </button>
         </div>
 
         {/* 5 Interactive Pipeline Cards */}

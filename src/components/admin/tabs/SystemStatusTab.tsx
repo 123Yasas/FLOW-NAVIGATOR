@@ -1,160 +1,154 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  Cpu, 
   Server, 
-  Database, 
-  Wifi, 
-  WifiOff, 
-  ShieldCheck, 
-  Layers, 
-  Users, 
-  Navigation, 
   CheckCircle2, 
-  Info,
-  Zap,
-  HardDrive
+  Cpu, 
+  Activity, 
+  Database, 
+  ShieldCheck, 
+  Zap, 
+  Radio, 
+  Lock,
+  Clock,
+  Sparkles
 } from 'lucide-react';
+import { useCrowd } from '../../../context/CrowdContext';
 
 export const SystemStatusTab: React.FC = () => {
-  const [activeLayer, setActiveLayer] = useState<number>(1);
+  const { zones, sensors, routes } = useCrowd();
 
-  const layers = [
+  const services = [
     {
-      step: 1,
-      title: 'PEOPLE MOVEMENT',
-      icon: Users,
-      short: 'Crowd enters venue pathways & gates',
-      details: 'Physical crowd movement through access gates, walkways, bottlenecks, and concourses.',
-      techSpec: 'No cameras, no facial recognition, no personal identification tracked.'
-    },
-    {
-      step: 2,
-      title: 'PHYSICAL COUNTING SENSORS',
-      icon: Cpu,
-      short: 'Dual-Laser IR, ToF LiDAR, mmWave Radar',
-      details: 'Direct optical beam break and Time-of-Flight sensors that register directional count pulses (IN / OUT).',
-      techSpec: '100% visitor privacy guaranteed. Functional in complete darkness, fog, and rain.'
-    },
-    {
-      step: 3,
-      title: 'ESP32 EDGE CONTROLLER',
+      name: 'Express Web & API Server',
+      desc: 'REST API, static assets, and local Vite dev server on port 3000',
       icon: Server,
-      short: 'Sub-second edge debounce & packet dispatch',
-      details: 'Low-power ESP32 microcontroller aggregates counting pulses, runs local debounce, and manages flash ring-buffer.',
-      techSpec: 'Dual-core 240MHz, ultra-low power consumption (<80mA), hardware GPIO interrupts.'
+      status: 'OPERATIONAL',
+      latency: '3ms',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     },
     {
-      step: 4,
-      title: 'EDGE BUFFER & NETWORK FAILOVER',
-      icon: HardDrive,
-      short: 'Automatic offline buffering when internet fails',
-      details: 'If Wi-Fi drops, telemetry is saved to localized non-volatile flash. Basic risk heuristics continue on venue LAN.',
-      techSpec: 'Zero data loss. Automatic batched cloud synchronization upon network restoration.'
+      name: 'Gemini AI Safety Engine',
+      desc: 'Automated crowd management planning & safety advisory model',
+      icon: Sparkles,
+      status: 'CONNECTED',
+      latency: '180ms',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     },
     {
-      step: 5,
-      title: 'FLOWNAVIGATOR BACKEND & AI',
+      name: 'IoT Telemetry Ingestion',
+      desc: `Sub-second pulse stream from ${sensors.length} optical and radar sensor nodes`,
+      icon: Radio,
+      status: 'STREAMING',
+      latency: '<50ms',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    },
+    {
+      name: 'Dynamic Pathfinding Engine',
+      desc: `Real-time alternative routing solver across ${routes.length} venue pathways`,
+      icon: Zap,
+      status: 'OPERATIONAL',
+      latency: '12ms',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    },
+    {
+      name: 'Hardware Barrier Actuators',
+      desc: `Automated electronic gate locks across ${zones.length} venue zones`,
+      icon: Lock,
+      status: 'READY',
+      latency: 'Instant',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    },
+    {
+      name: 'Zone Occupancy Cache',
+      desc: 'In-memory rolling buffer for real-time density calculations',
       icon: Database,
-      short: 'Explainable risk evaluation & route solver',
-      details: 'Ingests real-time sensor packets, computes live density percentages, models queue wait times, and evaluates stampede choke points.',
-      techSpec: 'Sub-50ms rule calculation engine with automated barrier actuator relays.'
+      status: 'HEALTHY',
+      latency: '1ms',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     },
-    {
-      step: 6,
-      title: 'ADMIN + CITIZEN DISPATCH',
-      icon: Navigation,
-      short: 'Authority command center & public guidance',
-      details: 'Simultaneous distribution: Administrators receive barrier controls & staff deployment recommendations; Citizens receive simplified route guidance.',
-      techSpec: 'Mobile-first PWA, responsive public kiosk displays, spoken accessibility guidance.'
-    }
   ];
-
-  const current = layers.find(l => l.step === activeLayer) || layers[0];
 
   return (
     <div className="space-y-6 pb-16">
       
       {/* HEADER */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700">
-            <Layers className="w-5 h-5" />
-          </span>
-          <h3 className="text-xl font-black text-slate-900 tracking-tight">
-            System Architecture & IoT Engineering Pipeline
-          </h3>
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+            <Server className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">
+              System Status & Infrastructure Health
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Live operational health of core services, AI engines, and hardware controllers.
+            </p>
+          </div>
         </div>
-        <p className="text-xs sm:text-sm text-slate-500">
-          Click each architectural tier to inspect technical guarantees, edge failover mechanics, and privacy design.
-        </p>
+
+        <div className="flex items-center gap-2">
+          <span className="px-4 py-2 bg-emerald-500/10 text-emerald-700 border border-emerald-500/30 rounded-full text-xs font-black flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>All Systems Operational (99.98%)</span>
+          </span>
+        </div>
       </div>
 
-      {/* INTERACTIVE ARCHITECTURAL PIPELINE DIAGRAM */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-          {layers.map((layer) => {
-            const Icon = layer.icon;
-            const isSelected = activeLayer === layer.step;
-
-            return (
-              <button
-                key={layer.step}
-                onClick={() => setActiveLayer(layer.step)}
-                className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer space-y-2 ${
-                  isSelected
-                    ? 'border-blue-600 bg-blue-50/70 ring-4 ring-blue-300/40 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                    isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {layer.step}
-                  </span>
-                  <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+      {/* CORE SERVICES GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {services.map((srv, idx) => {
+          const Icon = srv.icon;
+          return (
+            <div 
+              key={idx}
+              className="bg-white rounded-2xl p-5 border border-slate-200/90 hover:border-slate-300 hover:shadow-xs transition-all space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-200">
+                  <Icon className="w-5 h-5" />
                 </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${srv.badge}`}>
+                  {srv.status}
+                </span>
+              </div>
 
-                <div>
-                  <h4 className="font-extrabold text-xs text-slate-900 leading-tight">{layer.title}</h4>
-                  <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{layer.short}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+              <div>
+                <h4 className="font-black text-slate-900 text-sm">{srv.name}</h4>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{srv.desc}</p>
+              </div>
 
-        {/* ACTIVE LAYER DEEP INSPECTION CARD */}
-        <div className="bg-slate-50 border-2 border-blue-200/80 rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-blue-700 uppercase tracking-wider">
-              LAYER {current.step} OF 6 DETAILS
-            </span>
-            <span className="px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-bold text-slate-700">
-              {current.title}
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-lg font-black text-slate-900">{current.details}</h4>
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700 font-medium">
-              <strong className="text-slate-900 block font-bold mb-1">Technical Specification:</strong>
-              {current.techSpec}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 font-medium">
+                <span className="flex items-center gap-1">
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Response Time:</span>
+                </span>
+                <span className="font-mono font-bold text-slate-700">{srv.latency}</span>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
+      </div>
 
-        {/* PRIVACY & NO-CCTV GUARANTEE CALLOUT */}
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 space-y-2 text-emerald-950">
+      {/* SYSTEM OVERVIEW & PRIVACY SPECIFICATION */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/90 space-y-2 lg:col-span-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-600" />
-            <h4 className="font-black text-sm text-emerald-900">
-              Why FlowNavigator Replaces CCTV Cameras with Physical Pulse Sensors:
-            </h4>
+            <h4 className="font-black text-slate-900 text-sm">Privacy & Security Guarantees</h4>
           </div>
-          <p className="text-xs leading-relaxed text-emerald-900 font-medium">
-            Unlike vision-based AI that suffers from camera blind spots, high bandwidth costs, latency, and severe privacy backlash in public gatherings, FlowNavigator relies on <strong>direct optical and radar beam interruption counters</strong>. This guarantees 100% anonymity, sub-second telemetry over standard ESP32 Wi-Fi, and continuous reliability through rain, smoke, and nighttime conditions.
+          <p className="text-xs text-slate-600 leading-relaxed">
+            FlowNavigator utilizes direct optical beam-break and radar pulses for count aggregation. No facial recognition, biometric data, or camera footage is captured or stored, ensuring complete privacy compliance.
           </p>
+        </div>
+
+        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <Clock className="w-4 h-4 text-slate-400" />
+            <span>Telemetry Uptime</span>
+          </div>
+          <span className="text-2xl font-black text-slate-900 block">99.98%</span>
+          <p className="text-[11px] text-slate-400">Continuous hardware heartbeat sync</p>
         </div>
       </div>
 

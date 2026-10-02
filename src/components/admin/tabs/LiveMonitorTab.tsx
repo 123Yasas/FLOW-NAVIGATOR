@@ -35,13 +35,6 @@ export const LiveMonitorTab: React.FC = () => {
   const highRiskCount = metrics.highCount;
   const safeCount = metrics.safeCount;
 
-  // Live status from ESP32-01
-  const esp32Sample = sensors[0] || {
-    id: 'ESP32-01',
-    zoneName: 'Zone A',
-    lastUpdated: '3 seconds ago',
-    status: 'ONLINE',
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -338,45 +331,6 @@ export const LiveMonitorTab: React.FC = () => {
         </div>
       </div>
 
-      {/* IOT DATA SOURCE PIPELINE PANEL */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-md border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <span className="text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider block">
-              IoT Sensor Data Telemetry Pipeline
-            </span>
-            <h4 className="text-lg font-black text-white mt-0.5">
-              Live Hardware Heartbeat & Influx Routing
-            </h4>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>🟢 {esp32Sample.id} Online</span>
-            </span>
-            <span className="text-xs text-slate-400">
-              Last update: {esp32Sample.lastUpdated} (Zone: {esp32Sample.zoneName})
-            </span>
-          </div>
-        </div>
-
-        {/* Visual Pipeline Stages */}
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-2 text-center text-xs">
-          {[
-            { step: '1. IoT Sensor', desc: 'Dual-Laser IR / ToF LiDAR Beam Counter' },
-            { step: '2. ESP32', desc: 'Edge Microcontroller Pulse Packet' },
-            { step: '3. Local Processing', desc: 'Debounce & Directional Velocity Filter' },
-            { step: '4. Cloud / ThingSpeak', desc: 'Secure MQTT / HTTP Influx Telemetry' },
-            { step: '5. FlowNavigator', desc: 'AI Decision Engine & Dynamic Rerouting' },
-          ].map((s, idx) => (
-            <div key={idx} className="bg-white/10 rounded-2xl p-3 border border-white/15 space-y-1 relative">
-              <span className="text-cyan-300 font-black text-xs block">{s.step}</span>
-              <p className="text-[11px] text-slate-300 leading-snug">{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
 
     </div>
   );

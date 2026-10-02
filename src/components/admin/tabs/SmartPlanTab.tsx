@@ -490,13 +490,24 @@ export const SmartPlanTab: React.FC = () => {
             </div>
           )}
 
-          {/* ISOMETRIC EVENT CROWD MANAGEMENT LAYOUT PLAN (Dynamically scaled by square footage) */}
+          {/* ARCHITECTURAL CAD EVENT CROWD MANAGEMENT LAYOUT PLAN (Dynamically scaled by size & crowd) */}
           <EventCrowdManagementLayoutPlan
             areaSqFt={totalAreaSqFt}
             onAreaChange={handleAreaChange}
+            expectedCrowd={venuePlanInput.expectedCrowd}
+            onCrowdChange={(c) => setVenuePlanInput(prev => ({ ...prev, expectedCrowd: c }))}
+            length={venuePlanInput.length}
+            width={venuePlanInput.width}
+            unit={venuePlanInput.unit}
+            onDimensionsChange={(newLen, newWid) => {
+              setVenuePlanInput(prev => ({
+                ...prev,
+                length: newLen,
+                width: newWid,
+              }));
+            }}
             venueName={venuePlanInput.venueName}
             eventName={venuePlanInput.eventName}
-            expectedCrowd={venuePlanInput.expectedCrowd}
             isSimulating={isCrowdFlowSimulating}
             onToggleSimulate={toggleCrowdFlowSimulation}
           />
