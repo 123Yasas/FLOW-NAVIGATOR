@@ -40,14 +40,10 @@ class MongoDatabase:
             print(f"[MongoDB] Connected to real MongoDB server: {MONGO_URI.split('@')[-1]}")
         except (ConnectionFailure, ServerSelectionTimeoutError, Exception) as e:
             print(f"[MongoDB] Real MongoDB connection not available ({e}). Initializing high-fidelity in-memory MongoDB fallback.")
-            try:
-                import mongomock
-                self.client = mongomock.MongoClient()
-                self.db = self.client[DB_NAME]
-                self.is_mock = True
-            except Exception as ex:
-                print(f"[MongoDB] mongomock error: {ex}")
-                self.is_mock = True
+            import mongomock
+            self.client = mongomock.MongoClient()
+            self.db = self.client[DB_NAME]
+            self.is_mock = True
 
     def get_status(self):
         return {
