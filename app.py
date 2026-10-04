@@ -47,6 +47,26 @@ def index():
 def kiosk():
     return render_template("index.html")
 
+# ==================== ADMIN AUTHENTICATION ====================
+
+@app.route("/api/admin/login", methods=["POST"])
+def admin_login():
+    data = request.get_json() or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+    
+    if username == "admin" and password == "admin123":
+        return jsonify({
+            "success": True,
+            "role": "admin",
+            "token": "fn_admin_session_token_authenticated",
+            "message": "Authentication successful"
+        })
+    return jsonify({
+        "success": False,
+        "message": "Invalid credentials. Use admin / admin123"
+    }), 401
+
 # ==================== REST API ENDPOINTS ====================
 
 @app.route("/api/health", methods=["GET"])

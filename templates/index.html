@@ -58,6 +58,11 @@
           <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
         </select>
       </div>
+      <!-- Add Custom Venue Button (Admin Only) -->
+      <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:none;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;">
+        <i data-lucide="plus-circle" style="width:15px;height:15px;"></i>
+        Add Venue
+      </button>
 
       <!-- Role Switcher & Controls -->
       <div class="nav-actions">
@@ -68,7 +73,11 @@
 
         <!-- Role Selector Buttons -->
         <div class="role-switcher">
-          <button id="roleVisitorBtn" class="role-btn active" data-role="visitor">
+          <button id="roleLandingBtn" class="role-btn active" data-role="landing">
+            <i data-lucide="home" style="width:15px;height:15px;"></i>
+            <span>Home</span>
+          </button>
+          <button id="roleVisitorBtn" class="role-btn" data-role="visitor">
             <i data-lucide="user" style="width:15px;height:15px;"></i>
             <span>Visitor View</span>
           </button>
@@ -93,9 +102,155 @@
   </header>
 
   <!-- =========================================================================
+       VIEW 0: LANDING PAGE & PLATFORM OVERVIEW
+       ========================================================================= -->
+  <section id="landingView" class="view-section active">
+    <div class="container" style="padding-top:1.5rem; padding-bottom:3rem;">
+      
+      <!-- Landing Hero -->
+      <div style="text-align:center; max-width:860px; margin:0 auto 3rem auto;">
+        <span class="badge badge-safe" style="margin-bottom:1rem; padding:0.4rem 1rem; font-size:0.82rem; background:rgba(37,99,235,0.08); border-color:rgba(37,99,235,0.25); color:#1d4ed8;">
+          <i data-lucide="sparkles" style="width:14px;height:14px;color:#2563eb;"></i> AI-Powered Spatial Safety & Crowd Dynamics Platform
+        </span>
+        <h1 style="font-size:2.8rem; font-weight:900; line-height:1.15; color:var(--text-main); margin-bottom:1rem; font-family:var(--font-display);">
+          Intelligent Crowd Flow Management <br>&amp; Real-Time Safety Navigation
+        </h1>
+        <p style="font-size:1.05rem; color:var(--text-muted); line-height:1.6; max-width:720px; margin:0 auto 2rem auto;">
+          FlowNavigator combines Random Forest machine learning, ToF optical gate counters, interactive GIS vector maps, and NFPA-101 crowd dynamics to prevent stampedes and streamline large-scale event movements.
+        </p>
+
+        <!-- Live System Metric Pills -->
+        <div style="display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap; margin-bottom:2.5rem;">
+          <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.6rem 1.25rem; border-radius:30px; display:flex; align-items:center; gap:0.5rem; box-shadow:var(--shadow-sm); font-size:0.82rem; font-weight:700;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
+            <span>ML Model Accuracy: <strong style="color:#2563eb;">91.6%</strong></span>
+          </div>
+          <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.6rem 1.25rem; border-radius:30px; display:flex; align-items:center; gap:0.5rem; box-shadow:var(--shadow-sm); font-size:0.82rem; font-weight:700;">
+            <i data-lucide="map-pin" style="width:14px;height:14px;color:#0284c7;"></i>
+            <span>Active Venues: <strong style="color:#0284c7;">4 Standard + Custom Grounds</strong></span>
+          </div>
+          <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.6rem 1.25rem; border-radius:30px; display:flex; align-items:center; gap:0.5rem; box-shadow:var(--shadow-sm); font-size:0.82rem; font-weight:700;">
+            <i data-lucide="shield-check" style="width:14px;height:14px;color:#059669;"></i>
+            <span>NFPA-101 CAD Dynamics Compliant</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PORTAL SELECTION CTA CARDS (VISITOR VS ADMIN) -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.75rem; max-width:980px; margin:0 auto 3.5rem auto;">
+        
+        <!-- CARD 1: CITIZEN / VISITOR PORTAL -->
+        <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; border:2px solid rgba(16,185,129,0.3); background:linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); padding:2rem; box-shadow:var(--shadow-md);">
+          <div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <span class="badge badge-safe" style="font-size:0.75rem; font-weight:800;">🌐 PUBLIC ACCESS PORTAL</span>
+              <i data-lucide="user-check" style="width:28px;height:28px;color:#059669;"></i>
+            </div>
+            <h2 style="font-size:1.5rem; font-weight:800; color:var(--text-main); margin-bottom:0.6rem;">Citizen & Visitor Guidance</h2>
+            <p style="font-size:0.88rem; color:var(--text-muted); line-height:1.5; margin-bottom:1.5rem;">
+              Access live queue wait times, interactive GIS vector pathways, color-coded crowd density heatmaps, and spoken audio directions in multiple languages.
+            </p>
+            <ul style="list-style:none; padding:0; margin:0 0 1.5rem 0; font-size:0.82rem; color:var(--text-muted); display:flex; flex-direction:column; gap:0.5rem;">
+              <li style="display:flex; align-items:center; gap:0.5rem;"><i data-lucide="check" style="width:14px;height:14px;color:#059669;"></i> Live sub-6 min recommended route finder</li>
+              <li style="display:flex; align-items:center; gap:0.5rem;"><i data-lucide="check" style="width:14px;height:14px;color:#059669;"></i> Senior Citizen accessibility & spoken voice guidance</li>
+              <li style="display:flex; align-items:center; gap:0.5rem;"><i data-lucide="check" style="width:14px;height:14px;color:#059669;"></i> Real-time safety bulletins & exit pathway maps</li>
+            </ul>
+          </div>
+          <button id="landingVisitorCtaBtn" class="btn btn-primary" style="width:100%; justify-content:center; background:#059669; border-color:#047857; font-size:0.95rem; font-weight:800; padding:0.85rem;">
+            <span>Explore Visitor Live Portal</span>
+            <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
+          </button>
+        </div>
+
+        <!-- CARD 2: ADMIN COMMAND CENTER -->
+        <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; border:2px solid rgba(37,99,235,0.3); background:linear-gradient(135deg, #ffffff 0%, #eff6ff 100%); padding:2rem; box-shadow:var(--shadow-md);">
+          <div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <span class="badge" style="font-size:0.75rem; font-weight:800; background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe;">🔒 AUTHENTICATED PORTAL</span>
+              <i data-lucide="shield-alert" style="width:28px;height:28px;color:#1d4ed8;"></i>
+            </div>
+            <h2 style="font-size:1.5rem; font-weight:800; color:var(--text-main); margin-bottom:0.6rem;">Admin Command Center</h2>
+            <p style="font-size:0.88rem; color:var(--text-muted); line-height:1.5; margin-bottom:1.5rem;">
+              Full authority dashboard for security officers, safety dispatchers, and event managers to monitor ML surge forecasts and generate CAD barricade layouts.
+            </p>
+
+            <!-- Admin Credentials Hint Box -->
+            <div style="background:#ffffff; border:1px dashed #3b82f6; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1.5rem; font-size:0.8rem; color:#1e40af;">
+              <div style="font-weight:800; margin-bottom:0.2rem; display:flex; align-items:center; gap:0.4rem;">
+                <i data-lucide="key" style="width:14px;height:14px;"></i> Demo Admin Login Credentials:
+              </div>
+              <div style="font-family:monospace; font-size:0.85rem; font-weight:700;">
+                Username: <strong style="color:#1d4ed8;">admin</strong> &nbsp;|&nbsp; Password: <strong style="color:#1d4ed8;">admin123</strong>
+              </div>
+            </div>
+
+          </div>
+          <button id="landingAdminCtaBtn" class="btn btn-primary" style="width:100%; justify-content:center; background:#1d4ed8; border-color:#1e40af; font-size:0.95rem; font-weight:800; padding:0.85rem;">
+            <i data-lucide="lock" style="width:16px;height:16px;"></i>
+            <span>Login to Admin Center</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- PLATFORM FEATURE GRID -->
+      <div style="max-width:1100px; margin:0 auto;">
+        <h3 style="font-size:1.25rem; font-weight:800; text-align:center; color:var(--text-main); margin-bottom:1.75rem;">
+          Core Safety Capabilities & Architecture
+        </h3>
+
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1.25rem;">
+          
+          <div class="card" style="padding:1.25rem;">
+            <div style="width:40px;height:40px;background:#eff6ff;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+              <i data-lucide="trending-up" style="width:20px;height:20px;color:#2563eb;"></i>
+            </div>
+            <h4 style="font-size:0.98rem; font-weight:800; color:var(--text-main); margin-bottom:0.4rem;">Crowd Surge AI</h4>
+            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.45; margin:0;">
+              Random Forest Machine Learning predicts bottleneck risk and queue wait times 15 minutes before crowd density hits critical capacity.
+            </p>
+          </div>
+
+          <div class="card" style="padding:1.25rem;">
+            <div style="width:40px;height:40px;background:#f0fdf4;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+              <i data-lucide="map" style="width:20px;height:20px;color:#059669;"></i>
+            </div>
+            <h4 style="font-size:0.98rem; font-weight:800; color:var(--text-main); margin-bottom:0.4rem;">GIS Vector Twin</h4>
+            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.45; margin:0;">
+              High-resolution vector spatial maps combined with Google Maps Platform polylines for dynamic real-time crowd visualization.
+            </p>
+          </div>
+
+          <div class="card" style="padding:1.25rem;">
+            <div style="width:40px;height:40px;background:#fff7ed;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+              <i data-lucide="layout" style="width:20px;height:20px;color:#ea580c;"></i>
+            </div>
+            <h4 style="font-size:0.98rem; font-weight:800; color:var(--text-main); margin-bottom:0.4rem;">CAD Barricade Planner</h4>
+            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.45; margin:0;">
+              NFPA-101 crowd dynamics layout generator. Auto-calculates compartment pens, exit widths, and evacuation times for custom grounds.
+            </p>
+          </div>
+
+          <div class="card" style="padding:1.25rem;">
+            <div style="width:40px;height:40px;background:#fef2f2;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+              <i data-lucide="alert-octagon" style="width:20px;height:20px;color:#dc2626;"></i>
+            </div>
+            <h4 style="font-size:0.98rem; font-weight:800; color:var(--text-main); margin-bottom:0.4rem;">Disaster Egress & SOS</h4>
+            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.45; margin:0;">
+              Instant 1-click evacuation trigger opens turnstile gates outwards and highlights green egress arterial corridors across all displays.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- =========================================================================
        VIEW 1: CITIZEN & VISITOR GUIDANCE VIEW
        ========================================================================= -->
-  <section id="visitorView" class="view-section active">
+  <section id="visitorView" class="view-section">
     <div class="container">
       
       <!-- Visitor Hero & Live Crowd Meter -->
@@ -363,6 +518,14 @@
                   Quick Operational Actions
                 </div>
                 <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                  <button id="adminOpenAddVenueBtn" class="btn btn-outline" style="justify-content:flex-start; text-align:left; border-color:#2563eb; background:#eff6ff;">
+                    <i data-lucide="plus-circle" style="color:#1d4ed8;"></i>
+                    <div>
+                      <div style="font-weight:700; color:#1d4ed8;">Register New Ground / College Event</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted);">Add custom sports grounds, fests, or halls based on area size.</div>
+                    </div>
+                  </button>
+
                   <button id="adminTriggerDiversionBtn" class="btn btn-outline" style="justify-content:flex-start; text-align:left;">
                     <i data-lucide="corner-up-right" style="color:var(--accent-cyan);"></i>
                     <div>
@@ -948,6 +1111,73 @@
     </div>
   </section>
 
+  <!-- ==================== ADMIN LOGIN MODAL ==================== -->
+  <div id="adminLoginModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width:440px; width:100%;">
+      
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <div style="width:36px;height:36px;background:#1e40af;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="shield-alert" style="width:18px;height:18px;color:#fff;"></i>
+          </div>
+          <div>
+            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main);">Admin Command Center Login</h3>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Security & Operational Dispatch Authentication</p>
+          </div>
+        </div>
+        <button id="closeAdminLoginModalBtn" style="color:var(--text-muted); font-size:1.2rem; line-height:1;">✕</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border-subtle);margin:1rem 0;">
+
+      <!-- Form Body -->
+      <form id="adminLoginForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:1rem;">
+        
+        <div>
+          <label class="av-label">Username</label>
+          <div style="position:relative;">
+            <i data-lucide="user" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--text-muted);"></i>
+            <input type="text" id="adminUsernameInput" class="av-input" style="padding-left:2.4rem;" placeholder="admin" required autocomplete="username">
+          </div>
+        </div>
+
+        <div>
+          <label class="av-label">Password</label>
+          <div style="position:relative;">
+            <i data-lucide="lock" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--text-muted);"></i>
+            <input type="password" id="adminPasswordInput" class="av-input" style="padding-left:2.4rem;" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+        </div>
+
+        <!-- Demo credentials hint box -->
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:0.75rem; font-size:0.8rem; color:#1d4ed8; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700;">🔑 Demo Credentials:</div>
+            <div>Username: <strong>admin</strong> | Password: <strong>admin123</strong></div>
+          </div>
+          <button type="button" id="autoFillDemoAdminBtn" class="btn btn-outline btn-sm" style="font-size:0.72rem; padding:0.3rem 0.6rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd; white-space:nowrap;">
+            ⚡ Auto-Fill
+          </button>
+        </div>
+
+        <!-- Error Feedback Container -->
+        <div id="adminLoginError" style="display:none; color:#b91c1c; background:#fef2f2; border:1px solid #fca5a5; padding:0.6rem 0.85rem; border-radius:6px; font-size:0.8rem; font-weight:600;"></div>
+
+        <!-- Actions -->
+        <div style="display:flex; gap:0.6rem; justify-content:flex-end; margin-top:0.5rem;">
+          <button type="button" id="cancelAdminLoginBtn" class="btn btn-outline btn-sm">Cancel</button>
+          <button type="submit" id="submitAdminLoginBtn" class="btn btn-primary btn-sm" style="background:#1d4ed8; border-color:#1e40af; font-weight:800; padding:0.6rem 1.25rem;">
+            <i data-lucide="log-in" style="width:14px;height:14px;"></i>
+            Login to Admin Center
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
   <!-- ==================== GOOGLE MAPS API KEY MODAL ==================== -->
   <div id="mapsKeyModal" class="modal-backdrop">
     <div class="modal-card">
@@ -958,10 +1188,139 @@
       <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.25rem;">
         Enter your Google Maps JavaScript API key to load live Google Maps with custom styling and route polylines. If no key is entered, FlowNavigator automatically renders an interactive high-res GIS vector map!
       </p>
-      <input type="text" id="customMapsKeyInput" placeholder="AIzaSy..." style="width:100%; background:var(--bg-primary); border:1px solid var(--border-subtle); color:#fff; padding:0.75rem; border-radius:var(--radius-sm); margin-bottom:1rem; font-family:monospace;">
+      <input type="text" id="customMapsKeyInput" placeholder="AIzaSy..." style="width:100%; background:var(--bg-primary); border:1px solid var(--border-subtle); color:var(--text-main); padding:0.75rem; border-radius:var(--radius-sm); margin-bottom:1rem; font-family:monospace;">
       <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
         <button id="saveMapsKeyBtn" class="btn btn-primary btn-sm">Save & Reload Map</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ==================== ADD CUSTOM VENUE MODAL ==================== -->
+  <div id="addVenueModal" class="modal-backdrop" style="align-items:flex-start; padding-top:3rem;">
+    <div class="modal-card" style="max-width:680px; width:100%;">
+
+      <!-- Modal Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+        <div style="display:flex; align-items:center; gap:0.65rem;">
+          <div style="width:38px;height:38px;background:#1e40af;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="plus-circle" style="width:20px;height:20px;color:#fff;"></i>
+          </div>
+          <div>
+            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main);">Add Custom Venue / Ground</h3>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">College events, sports grounds, festivals, and more</p>
+          </div>
+        </div>
+        <button id="closeAddVenueModalBtn" style="color:var(--text-muted); font-size:1.3rem; line-height:1;">✕</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border-subtle);margin:1rem 0;">
+
+      <!-- Form Body -->
+      <div style="display:flex; flex-direction:column; gap:1.1rem;">
+
+        <!-- Row 1: Venue Name & Type -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div>
+            <label class="av-label">Venue / Ground Name <span style="color:#b91c1c;">*</span></label>
+            <input id="avName" type="text" class="av-input" placeholder="e.g. PSG College Ground" required>
+          </div>
+          <div>
+            <label class="av-label">Event / Venue Type <span style="color:#b91c1c;">*</span></label>
+            <select id="avType" class="av-input">
+              <option value="college-event">🎓 College Event / Cultural Fest</option>
+              <option value="sports-ground">⚽ Sports Ground / Tournament</option>
+              <option value="outdoor-festival">🎪 Outdoor Festival / Mela</option>
+              <option value="concert-hall">🎵 Concert / Music Event</option>
+              <option value="exhibition">🏛️ Exhibition / Trade Fair</option>
+              <option value="pilgrimage">🙏 Pilgrimage / Religious Gathering</option>
+              <option value="transit">🚉 Transit Hub / Station</option>
+              <option value="custom">📍 Custom / Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Ground Size inputs -->
+        <div>
+          <label class="av-label">Ground / Venue Size</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.85rem;">
+            <div>
+              <label class="av-sublabel">Length (meters)</label>
+              <input id="avLength" type="number" class="av-input" placeholder="e.g. 200" min="10" max="5000">
+            </div>
+            <div>
+              <label class="av-sublabel">Width (meters)</label>
+              <input id="avWidth" type="number" class="av-input" placeholder="e.g. 150" min="10" max="5000">
+            </div>
+            <div>
+              <label class="av-sublabel">OR Total Area (m²)</label>
+              <input id="avArea" type="number" class="av-input" placeholder="e.g. 30000" min="100">
+            </div>
+          </div>
+          <!-- Auto-calculated capacity hint -->
+          <div id="avCapacityHint" style="margin-top:0.6rem; padding:0.65rem 0.85rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:0.8rem; color:#1d4ed8; display:none;">
+            <strong>📊 Estimated Safe Capacity:</strong> <span id="avCapacityHintValue"></span>
+          </div>
+        </div>
+
+        <!-- Row 3: Capacity & Zones -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.85rem;">
+          <div>
+            <label class="av-label">Expected Crowd Capacity <span style="color:#b91c1c;">*</span></label>
+            <input id="avCapacity" type="number" class="av-input" placeholder="e.g. 5000" min="50" required>
+          </div>
+          <div>
+            <label class="av-label">Number of Entry Gates</label>
+            <input id="avGates" type="number" class="av-input" placeholder="e.g. 4" min="1" max="50" value="4">
+          </div>
+          <div>
+            <label class="av-label">Number of Zones</label>
+            <input id="avZones" type="number" class="av-input" placeholder="e.g. 5" min="2" max="20" value="5">
+          </div>
+        </div>
+
+        <!-- Row 4: Location -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div>
+            <label class="av-label">City / Location</label>
+            <input id="avCity" type="text" class="av-input" placeholder="e.g. Coimbatore, Tamil Nadu">
+          </div>
+          <div>
+            <label class="av-label">Event Date (optional)</label>
+            <input id="avDate" type="date" class="av-input">
+          </div>
+        </div>
+
+        <!-- Row 5: Quick Size Presets -->
+        <div>
+          <label class="av-label">Quick Size Presets</label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" class="av-preset-btn" data-length="60" data-width="40" data-cap="500" data-zones="3" data-gates="2">🏛️ Small Hall (60×40m · 500 ppl)</button>
+            <button type="button" class="av-preset-btn" data-length="120" data-width="80" data-cap="2000" data-zones="4" data-gates="3">🏟️ College Ground (120×80m · 2K)</button>
+            <button type="button" class="av-preset-btn" data-length="200" data-width="150" data-cap="8000" data-zones="6" data-gates="5">⚽ Sports Complex (200×150m · 8K)</button>
+            <button type="button" class="av-preset-btn" data-length="400" data-width="300" data-cap="25000" data-zones="10" data-gates="8">🎪 Large Festival Ground (400×300m · 25K)</button>
+          </div>
+        </div>
+
+        <!-- Added Venues Preview List -->
+        <div id="avAddedList" style="display:none;">
+          <label class="av-label" style="color:#047857;">✅ Your Added Venues</label>
+          <div id="avAddedListBody" style="display:flex; flex-direction:column; gap:0.5rem; max-height:120px; overflow-y:auto;"></div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--border-subtle);">
+        <span style="font-size:0.78rem; color:var(--text-muted);">Venue will be added to the selector dropdown and monitored live</span>
+        <div style="display:flex; gap:0.6rem;">
+          <button id="closeAddVenueModalBtn2" class="btn btn-outline btn-sm">Cancel</button>
+          <button id="addVenueSubmitBtn" class="btn btn-primary btn-sm">
+            <i data-lucide="plus-circle" style="width:14px;height:14px;"></i>
+            Add Venue & Monitor
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -970,6 +1329,7 @@
   <script src="/static/js/sensorSimulator.js"></script>
   <script src="/static/js/mlDashboard.js"></script>
   <script src="/static/js/cadPlanner.js"></script>
+  <script src="/static/js/addVenue.js"></script>
   <script src="/static/js/app.js"></script>
   
   <script>

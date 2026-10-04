@@ -1378,3 +1378,92 @@ button {
   flex-wrap: wrap;
   gap: 1rem;
 }
+
+/* ==================== ADD VENUE MODAL FORM ELEMENTS ==================== */
+.av-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+
+.av-sublabel {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-bottom: 0.25rem;
+}
+
+.av-input {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: var(--font-body);
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+.av-input:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.av-input::placeholder {
+  color: #94a3b8;
+}
+
+.av-preset-btn {
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  font-family: var(--font-body);
+}
+
+.av-preset-btn:hover,
+.av-preset-btn.active {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.av-venue-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #047857;
+}
+
+.av-venue-chip button {
+  color: #6b7280;
+  font-size: 1rem;
+  line-height: 1;
+  transition: var(--transition-fast);
+}
+
+.av-venue-chip button:hover {
+  color: #b91c1c;
+}
+

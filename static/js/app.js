@@ -5,16 +5,18 @@
  */
 
 const FlowApp = {
-  currentRole: 'visitor',
+  currentRole: 'landing',
   currentAdminTab: 'overview',
   activeVenueId: 'palani-gathering',
   isSeniorMode: false,
   emergencyActive: false,
+  isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
   pollTimer: null,
   cachedAnalyticsData: [],
 
   init: function() {
     this.bindRoleNavigation();
+    this.bindAdminAuth();
     this.bindAdminSidebar();
     this.bindSeniorMode();
     this.bindEmergencyProtocol();
@@ -23,6 +25,9 @@ const FlowApp = {
     this.bindAnalyticsFilters();
     this.bindMapsKeyModal();
     this.startClock();
+
+    // Default entry: Landing view
+    this.switchRole('landing');
 
     // Initialize sub-modules
     if (window.GoogleMapsManager) window.GoogleMapsManager.init();
@@ -36,21 +41,172 @@ const FlowApp = {
     this.pollTimer = setInterval(() => this.refreshData(), 4000);
   },
 
-  // -------------------- ROLE NAVIGATION --------------------
+  // -------------------- ROLE NAVIGATION & ADMIN AUTH --------------------
   bindRoleNavigation: function() {
-    const roles = ['visitor', 'admin', 'kiosk'];
+    const roles = ['landing', 'visitor', 'admin', 'kiosk'];
     roles.forEach(role => {
       const btn = document.getElementById(`role${role.charAt(0).toUpperCase() + role.slice(1)}Btn`);
       if (btn) {
-        btn.addEventListener('click', () => this.switchRole(role));
+        btn.addEventListener('click', () => {
+          if (role === 'admin' && !this.isAdminLoggedIn) {
+            this.openAdminLoginModal();
+          } else {
+            this.switchRole(role);
+          }
+        });
       }
     });
 
     const brandBtn = document.getElementById('brandHomeBtn');
-    if (brandBtn) brandBtn.addEventListener('click', () => this.switchRole('visitor'));
+    if (brandBtn) brandBtn.addEventListener('click', () => this.switchRole('landing'));
 
     const kioskExitBtn = document.getElementById('kioskExitBtn');
     if (kioskExitBtn) kioskExitBtn.addEventListener('click', () => this.switchRole('visitor'));
+
+    const landingVisitorBtn = document.getElementById('landingVisitorCtaBtn');
+    if (landingVisitorBtn) landingVisitorBtn.addEventListener('click', () => this.switchRole('visitor'));
+
+    const landingAdminBtn = document.getElementById('landingAdminCtaBtn');
+    if (landingAdminBtn) {
+      landingAdminBtn.addEventListener('click', () => {
+        if (this.isAdminLoggedIn) {
+          this.switchRole('admin');
+        } else {
+          this.openAdminLoginModal();
+        }
+      });
+    }
+  },
+
+  bindAdminAuth: function() {
+    const modal = document.getElementById('adminLoginModal');
+    const closeBtn = document.getElementById('closeAdminLoginModalBtn');
+    const cancelBtn = document.getElementById('cancelAdminLoginBtn');
+    const form = document.getElementById('adminLoginForm');
+    const autoFillBtn = document.getElementById('autoFillDemoAdminBtn');
+
+    if (closeBtn) closeBtn.addEventListener('click', () => this.closeAdminLoginModal());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeAdminLoginModal());
+    
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) this.closeAdminLoginModal();
+      });
+    }
+
+    if (autoFillBtn) {
+      autoFillBtn.addEventListener('click', () => {
+        const u = document.getElementById('adminUsernameInput');
+        const p = document.getElementById('adminPasswordInput');
+        if (u) u.value = 'admin';
+        if (p) p.value = 'admin123';
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.performAdminLogin();
+      });
+    }
+
+    this.updateAdminNavBadge();
+  },
+
+  openAdminLoginModal: function() {
+    const modal = document.getElementById('adminLoginModal');
+    const err = document.getElementById('adminLoginError');
+    if (err) err.style.display = 'none';
+    if (modal) {
+      modal.classList.add('active');
+      const u = document.getElementById('adminUsernameInput');
+      if (u) u.focus();
+      if (window.lucide) lucide.createIcons();
+    }
+  },
+
+  closeAdminLoginModal: function() {
+    const modal = document.getElementById('adminLoginModal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  performAdminLogin: async function() {
+    const u = document.getElementById('adminUsernameInput')?.value.trim();
+    const p = document.getElementById('adminPasswordInput')?.value.trim();
+    const err = document.getElementById('adminLoginError');
+    const submitBtn = document.getElementById('submitAdminLoginBtn');
+
+    if (!u || !p) {
+      if (err) {
+        err.textContent = 'Please enter both username and password';
+        err.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      if (submitBtn) submitBtn.disabled = true;
+
+      const resp = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        this.isAdminLoggedIn = true;
+        sessionStorage.setItem('fn_admin_token', data.token);
+        this.closeAdminLoginModal();
+        this.updateAdminNavBadge();
+        this.switchRole('admin');
+      } else {
+        if (err) {
+          err.textContent = data.message || 'Invalid username or password (use admin / admin123)';
+          err.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      console.error('[AdminLogin] Error:', e);
+      // Fallback check if backend call fails
+      if (u === 'admin' && p === 'admin123') {
+        this.isAdminLoggedIn = true;
+        sessionStorage.setItem('fn_admin_token', 'fn_admin_session_token_authenticated');
+        this.closeAdminLoginModal();
+        this.updateAdminNavBadge();
+        this.switchRole('admin');
+      } else if (err) {
+        err.textContent = 'Login failed. Please verify credentials (admin / admin123)';
+        err.style.display = 'block';
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  },
+
+  adminLogout: function() {
+    this.isAdminLoggedIn = false;
+    sessionStorage.removeItem('fn_admin_token');
+    this.updateAdminNavBadge();
+    this.switchRole('landing');
+  },
+
+  updateAdminNavBadge: function() {
+    const adminBtn = document.getElementById('roleAdminBtn');
+    if (!adminBtn) return;
+    if (this.isAdminLoggedIn) {
+      adminBtn.innerHTML = `
+        <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
+        <span>Admin (Active)</span>
+      `;
+    } else {
+      adminBtn.innerHTML = `
+        <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
+        <span>Admin Center</span>
+      `;
+    }
+    if (window.lucide) lucide.createIcons();
   },
 
   switchRole: function(role) {
@@ -65,6 +221,12 @@ const FlowApp = {
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
     const target = document.getElementById(`${role}View`);
     if (target) target.classList.add('active');
+
+    // Add Venue button: ONLY visible in Admin Center when logged in
+    const addVenueBtn = document.getElementById('openAddVenueModalBtn');
+    if (addVenueBtn) {
+      addVenueBtn.style.display = (role === 'admin' && this.isAdminLoggedIn) ? 'flex' : 'none';
+    }
 
     // Trigger icon render
     if (window.lucide) lucide.createIcons();
@@ -84,6 +246,14 @@ const FlowApp = {
         this.switchAdminTab(tab);
       });
     });
+
+    // Admin center open venue modal button
+    const adminAddBtn = document.getElementById('adminOpenAddVenueBtn');
+    if (adminAddBtn) {
+      adminAddBtn.addEventListener('click', () => {
+        if (window.AddVenueManager) window.AddVenueManager.openModal();
+      });
+    }
 
     // Map venue pill buttons
     document.querySelectorAll('.venue-pill').forEach(pill => {
