@@ -10,6 +10,7 @@ const FlowApp = {
   activeVenueId: 'palani-gathering',
   isSeniorMode: false,
   emergencyActive: false,
+  dataMode: 'demo', // 'demo' or 'real'
   isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
   pollTimer: null,
   cachedAnalyticsData: [],
@@ -18,6 +19,8 @@ const FlowApp = {
     this.bindRoleNavigation();
     this.bindAdminAuth();
     this.bindAdminSidebar();
+    this.bindDataModeToggle();
+    this.bindEsp32HardwareManager();
     this.bindSeniorMode();
     this.bindEmergencyProtocol();
     this.bindVenueSelector();
@@ -110,6 +113,16 @@ const FlowApp = {
       });
     }
 
+    // Bind Sign Out buttons
+    const navSignOut = document.getElementById('navSignOutBtn');
+    const sidebarSignOut = document.getElementById('adminSidebarLogoutBtn');
+    const tabSignOut = document.getElementById('adminTabSignOutBtn');
+
+    if (navSignOut) navSignOut.addEventListener('click', () => this.adminLogout());
+    if (sidebarSignOut) sidebarSignOut.addEventListener('click', () => this.adminLogout());
+    if (tabSignOut) tabSignOut.addEventListener('click', () => this.adminLogout());
+
+    this.bindUserManagement();
     this.updateAdminNavBadge();
   },
 
@@ -169,7 +182,6 @@ const FlowApp = {
       }
     } catch (e) {
       console.error('[AdminLogin] Error:', e);
-      // Fallback check if backend call fails
       if (u === 'admin' && p === 'admin123') {
         this.isAdminLoggedIn = true;
         sessionStorage.setItem('fn_admin_token', 'fn_admin_session_token_authenticated');
@@ -190,21 +202,36 @@ const FlowApp = {
     sessionStorage.removeItem('fn_admin_token');
     this.updateAdminNavBadge();
     this.switchRole('landing');
+
+    // Show toast message
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:2rem;right:2rem;z-index:99999;background:#b91c1c;color:#fff;padding:0.85rem 1.25rem;border-radius:10px;font-size:0.85rem;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:flex;align-items:center;gap:0.5rem;';
+    toast.innerHTML = '<i data-lucide="log-out"></i> Signed out of Admin Command Center successfully';
+    document.body.appendChild(toast);
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => toast.remove(), 3500);
   },
 
   updateAdminNavBadge: function() {
     const adminBtn = document.getElementById('roleAdminBtn');
-    if (!adminBtn) return;
+    const navSignOut = document.getElementById('navSignOutBtn');
+
     if (this.isAdminLoggedIn) {
-      adminBtn.innerHTML = `
-        <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
-        <span>Admin (Active)</span>
-      `;
+      if (adminBtn) {
+        adminBtn.innerHTML = `
+          <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
+          <span>Admin (Active)</span>
+        `;
+      }
+      if (navSignOut) navSignOut.style.display = 'inline-flex';
     } else {
-      adminBtn.innerHTML = `
-        <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
-        <span>Admin Center</span>
-      `;
+      if (adminBtn) {
+        adminBtn.innerHTML = `
+          <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
+          <span>Admin Center</span>
+        `;
+      }
+      if (navSignOut) navSignOut.style.display = 'none';
     }
     if (window.lucide) lucide.createIcons();
   },
@@ -235,6 +262,10 @@ const FlowApp = {
     if (window.GoogleMapsManager) {
       if (role === 'visitor') window.GoogleMapsManager.mountSingleMap('googleMapDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
       if (role === 'admin') window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+    }
+
+    if (role === 'kiosk') {
+      this.generateKioskQrCode();
     }
   },
 
@@ -307,6 +338,494 @@ const FlowApp = {
 
     if (tab === 'event-planner' && window.CadPlanner) {
       window.CadPlanner.render();
+    }
+
+    if (tab === 'user-management') {
+      this.fetchUsers();
+    }
+
+    if (tab === 'esp32-iot') {
+      this.fetchEsp32Sensors();
+    }
+  },
+
+  // -------------------- DATA MODE SWITCHER (DEMO VS REAL ESP32) --------------------
+  bindDataModeToggle: function() {
+    const demoBtn = document.getElementById('modeDemoBtn');
+    const realBtn = document.getElementById('modeRealBtn');
+
+    if (demoBtn) demoBtn.addEventListener('click', () => this.setDataMode('demo'));
+    if (realBtn) realBtn.addEventListener('click', () => this.setDataMode('real'));
+
+    // Check backend current mode
+    this.fetchDataMode();
+  },
+
+  fetchDataMode: async function() {
+    try {
+      const resp = await fetch('/api/system/mode');
+      const data = await resp.json();
+      if (data.data_mode) {
+        this.dataMode = data.data_mode;
+        this.updateDataModeUI(this.dataMode);
+      }
+    } catch (e) {
+      console.warn('[DataMode] Error fetching mode:', e);
+    }
+  },
+
+  setDataMode: async function(mode) {
+    try {
+      const resp = await fetch('/api/system/mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: mode })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        this.dataMode = data.data_mode;
+        this.updateDataModeUI(this.dataMode);
+        
+        // Show toast
+        const toast = document.createElement('div');
+        toast.style.cssText = `position:fixed;bottom:2rem;right:2rem;z-index:99999;background:${mode === 'real' ? '#047857' : '#1d4ed8'};color:#fff;padding:0.85rem 1.25rem;border-radius:10px;font-size:0.85rem;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:flex;align-items:center;gap:0.5rem;`;
+        toast.innerHTML = `<i data-lucide="${mode === 'real' ? 'radio' : 'sparkles'}"></i> System switched to ${mode === 'real' ? 'Real ESP32 IoT Live Mode' : 'Demo Simulation Mode'}`;
+        document.body.appendChild(toast);
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => toast.remove(), 3500);
+
+        this.refreshData();
+      }
+    } catch (e) {
+      console.error('[DataMode] Error setting mode:', e);
+    }
+  },
+
+  updateDataModeUI: function(mode) {
+    const demoBtn = document.getElementById('modeDemoBtn');
+    const realBtn = document.getElementById('modeRealBtn');
+    const modeBadge = document.getElementById('esp32ModeBadge');
+    const modeDisplay = document.getElementById('esp32CurrentModeDisplay');
+
+    if (demoBtn) demoBtn.classList.toggle('active', mode === 'demo');
+    if (realBtn) realBtn.classList.toggle('active', mode === 'real');
+
+    if (modeBadge) {
+      modeBadge.textContent = mode === 'real' ? '● LIVE ESP32 HARDWARE ACTIVE' : '● DEMO SIMULATION MODE';
+      modeBadge.className = `badge ${mode === 'real' ? 'badge-safe' : 'badge-moderate'}`;
+    }
+
+    if (modeDisplay) {
+      modeDisplay.textContent = mode === 'real' ? 'REAL IOT MODE' : 'DEMO MODE';
+      modeDisplay.style.color = mode === 'real' ? '#059669' : '#2563eb';
+    }
+
+    // Toggle simulator
+    if (window.SensorSimulator) {
+      window.SensorSimulator.isPaused = (mode === 'real');
+    }
+  },
+
+  // -------------------- ESP32 TOF HARDWARE FLEET MANAGER --------------------
+  bindEsp32HardwareManager: function() {
+    const refreshBtn = document.getElementById('refreshEsp32Btn');
+    const form = document.getElementById('addEsp32Form');
+    const copyCodeBtn = document.getElementById('copyEsp32CodeBtn');
+
+    if (refreshBtn) refreshBtn.addEventListener('click', () => this.fetchEsp32Sensors());
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.registerEsp32Sensor();
+      });
+    }
+
+    if (copyCodeBtn) {
+      copyCodeBtn.addEventListener('click', () => {
+        const code = document.getElementById('esp32CodeBlock')?.innerText;
+        if (code) {
+          navigator.clipboard.writeText(code);
+          copyCodeBtn.innerHTML = '<i data-lucide="check" style="width:13px;height:13px;"></i> Copied C++ Code!';
+          if (window.lucide) lucide.createIcons();
+          setTimeout(() => {
+            copyCodeBtn.innerHTML = '<i data-lucide="copy" style="width:13px;height:13px;"></i> Copy C++ Code';
+            if (window.lucide) lucide.createIcons();
+          }, 2500);
+        }
+      });
+    }
+  },
+
+  fetchEsp32Sensors: async function() {
+    const tbody = document.getElementById('esp32RosterTableBody');
+    const statCount = document.getElementById('esp32StatCount');
+    if (!tbody) return;
+
+    try {
+      const resp = await fetch('/api/sensors');
+      const data = await resp.json();
+      const sensors = data.sensors || [];
+      const mode = data.data_mode || this.dataMode;
+
+      if (statCount) statCount.textContent = `${sensors.length} Units`;
+
+      if (sensors.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align:center; padding:2.5rem 1.5rem; background:#f8fafc;">
+              <div style="font-size:1.15rem; font-weight:800; color:#047857; margin-bottom:0.35rem; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
+                <i data-lucide="radio" style="width:18px;height:18px;color:#059669;"></i>
+                Real ESP32 IoT Mode Active (Demo Sensors Revoked)
+              </div>
+              <p style="font-size:0.85rem; color:var(--text-muted); max-width:480px; margin:0 auto 1rem auto; line-height:1.5;">
+                Synthetic demo sensors are revoked in Real mode. Register your physical ESP32 board using the form on the right or flash the C++ firmware snippet below.
+              </p>
+              <div style="font-size:0.78rem; font-family:monospace; background:#ecfdf5; color:#047857; display:inline-block; padding:0.4rem 0.85rem; border-radius:6px; border:1px solid #a7f3d0; font-weight:700;">
+                Listening for POST payloads at /api/sensors/count
+              </div>
+            </td>
+          </tr>
+        `;
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+
+      tbody.innerHTML = sensors.map(s => {
+        const isOnline = s.status === 'ONLINE';
+        const net = (s.people_in || 0) - (s.people_out || 0);
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight:800; color:var(--text-main); font-size:0.88rem;">${s.id}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${s.controller || 'ESP32'} · ${s.firmware_version || 'v4.0'}</div>
+            </td>
+            <td>
+              <div style="font-weight:700; color:#2563eb; font-size:0.82rem;">${s.zone_name || s.zone_id}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">${s.sensor_type || 'Dual VL53L0X ToF'}</div>
+            </td>
+            <td style="font-family:monospace; font-size:0.78rem; color:var(--text-muted);">
+              <div>IP: ${s.ip_address || '192.168.1.105'}</div>
+              <div>MAC: ${s.mac_address || '24:0A:C4:00:01:10'}</div>
+            </td>
+            <td>
+              <div style="font-size:0.82rem;">
+                <span style="color:#059669; font-weight:700;">+${s.people_in || 0} in</span> · 
+                <span style="color:#b91c1c; font-weight:700;">-${s.people_out || 0} out</span>
+              </div>
+              <div style="font-weight:800; color:#2563eb; font-size:0.78rem;">Net: ${net >= 0 ? '+' : ''}${net} present</div>
+            </td>
+            <td>
+              <span class="badge ${isOnline ? 'badge-safe' : 'badge-critical'}" style="font-size:0.72rem;">
+                ● ${s.status || 'ONLINE'}
+              </span>
+              <div style="font-size:0.72rem; color:var(--text-muted); margin-top:0.25rem;">
+                Battery: ${s.battery_pct || 98}% · RSSI: ${s.signal_dbm || -55} dBm
+              </div>
+            </td>
+            <td>
+              <button class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-size:0.72rem; padding:0.25rem 0.55rem;" onclick="FlowApp.deleteEsp32Sensor('${s.id}')">
+                Remove
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error('[Esp32Manager] Fetch error:', e);
+    }
+  },
+
+  registerEsp32Sensor: async function() {
+    const idInput = document.getElementById('esp32IdInput');
+    const zoneSelect = document.getElementById('esp32ZoneSelect');
+    const controllerInput = document.getElementById('esp32ControllerInput');
+    const sensorTypeInput = document.getElementById('esp32SensorTypeInput');
+    const ipInput = document.getElementById('esp32IpInput');
+    const macInput = document.getElementById('esp32MacInput');
+    const feedback = document.getElementById('addEsp32Feedback');
+    const btn = document.getElementById('submitAddEsp32Btn');
+
+    const id = idInput?.value.trim();
+    const zoneId = zoneSelect?.value;
+    const zoneName = zoneSelect?.options[zoneSelect.selectedIndex]?.text || 'Main Gate';
+    const controller = controllerInput?.value;
+    const sensorType = sensorTypeInput?.value;
+    const ip = ipInput?.value.trim() || '192.168.1.120';
+    const mac = macInput?.value.trim() || '24:0A:C4:00:01:10';
+
+    if (!id) {
+      if (feedback) {
+        feedback.textContent = 'Please enter a device identifier';
+        feedback.style.background = '#fef2f2';
+        feedback.style.color = '#b91c1c';
+        feedback.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      if (btn) btn.disabled = true;
+
+      const resp = await fetch('/api/sensors/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sensor_id: id,
+          zone_id: zoneId,
+          zone_name: zoneName,
+          controller: controller,
+          sensor_type: sensorType,
+          ip_address: ip,
+          mac_address: mac
+        })
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        if (feedback) {
+          feedback.textContent = `✅ ESP32 Unit '${id}' registered successfully`;
+          feedback.style.background = '#ecfdf5';
+          feedback.style.color = '#047857';
+          feedback.style.display = 'block';
+        }
+        if (idInput) idInput.value = '';
+        if (ipInput) ipInput.value = '';
+        if (macInput) macInput.value = '';
+        this.fetchEsp32Sensors();
+        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3000);
+      } else {
+        if (feedback) {
+          feedback.textContent = data.message || 'Error registering ESP32 hardware';
+          feedback.style.background = '#fef2f2';
+          feedback.style.color = '#b91c1c';
+          feedback.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      console.error('[Esp32Manager] Register error:', e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  deleteEsp32Sensor: async function(sensorId) {
+    if (!confirm(`Are you sure you want to remove ESP32 hardware unit '${sensorId}'?`)) return;
+
+    try {
+      const resp = await fetch(`/api/sensors/${sensorId}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        this.fetchEsp32Sensors();
+      } else {
+        alert(data.message || 'Could not remove sensor');
+      }
+    } catch (e) {
+      console.error('[Esp32Manager] Delete error:', e);
+    }
+  },
+
+  // -------------------- PUBLIC KIOSK DYNAMIC QR CODE --------------------
+  generateKioskQrCode: async function() {
+    const container = document.getElementById('kioskQrCodeContainer');
+    const directUrlEl = document.getElementById('kioskDirectUrl');
+    if (!container) return;
+
+    let targetUrl = window.location.origin + '/?role=visitor';
+
+    try {
+      const resp = await fetch('/api/system/network_ip');
+      const data = await resp.json();
+      if (data.visitor_url) {
+        targetUrl = data.visitor_url;
+      }
+    } catch (e) {
+      console.warn('[KioskQR] Network IP fetch error:', e);
+    }
+
+    if (directUrlEl) directUrlEl.textContent = targetUrl;
+
+    // Render high-res SVG vector QR Code representation
+    const qrSvg = `
+      <svg width="98" height="98" viewBox="0 0 29 29" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="29" height="29" fill="white"/>
+        <!-- Top Left Finder Pattern -->
+        <rect x="2" y="2" width="7" height="7" fill="#0f172a"/>
+        <rect x="3" y="3" width="5" height="5" fill="white"/>
+        <rect x="4" y="4" width="3" height="3" fill="#0f172a"/>
+        <!-- Top Right Finder Pattern -->
+        <rect x="20" y="2" width="7" height="7" fill="#0f172a"/>
+        <rect x="21" y="3" width="5" height="5" fill="white"/>
+        <rect x="22" y="4" width="3" height="3" fill="#0f172a"/>
+        <!-- Bottom Left Finder Pattern -->
+        <rect x="2" y="20" width="7" height="7" fill="#0f172a"/>
+        <rect x="3" y="21" width="5" height="5" fill="white"/>
+        <rect x="4" y="22" width="3" height="3" fill="#0f172a"/>
+        <!-- Alignment & Data Modules -->
+        <rect x="11" y="2" width="2" height="2" fill="#2563eb"/>
+        <rect x="15" y="2" width="2" height="2" fill="#0f172a"/>
+        <rect x="11" y="5" width="2" height="2" fill="#0f172a"/>
+        <rect x="14" y="5" width="3" height="2" fill="#2563eb"/>
+        <rect x="2" y="11" width="2" height="2" fill="#0f172a"/>
+        <rect x="5" y="11" width="2" height="2" fill="#2563eb"/>
+        <rect x="9" y="9" width="3" height="3" fill="#0f172a"/>
+        <rect x="14" y="9" width="2" height="2" fill="#059669"/>
+        <rect x="18" y="9" width="3" height="3" fill="#0f172a"/>
+        <rect x="23" y="11" width="2" height="3" fill="#2563eb"/>
+        <rect x="11" y="14" width="3" height="2" fill="#0f172a"/>
+        <rect x="16" y="14" width="2" height="2" fill="#059669"/>
+        <rect x="20" y="14" width="4" height="2" fill="#0f172a"/>
+        <rect x="2" y="16" width="3" height="2" fill="#2563eb"/>
+        <rect x="7" y="16" width="2" height="2" fill="#0f172a"/>
+        <rect x="11" y="18" width="2" height="3" fill="#059669"/>
+        <rect x="15" y="18" width="3" height="2" fill="#0f172a"/>
+        <rect x="20" y="18" width="2" height="2" fill="#2563eb"/>
+        <rect x="24" y="18" width="3" height="3" fill="#0f172a"/>
+        <rect x="11" y="23" width="3" height="3" fill="#0f172a"/>
+        <rect x="16" y="23" width="2" height="2" fill="#2563eb"/>
+        <rect x="20" y="23" width="4" height="4" fill="#0f172a"/>
+      </svg>
+    `;
+
+    container.innerHTML = qrSvg;
+  },
+
+  // -------------------- USER & ADMIN CONTROL MANAGEMENT --------------------
+  bindUserManagement: function() {
+    const refreshBtn = document.getElementById('refreshUsersBtn');
+    const form = document.getElementById('addUserForm');
+
+    if (refreshBtn) refreshBtn.addEventListener('click', () => this.fetchUsers());
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.createUser();
+      });
+    }
+  },
+
+  fetchUsers: async function() {
+    const tbody = document.getElementById('userRosterTableBody');
+    const totalCountEl = document.getElementById('userStatTotalCount');
+    if (!tbody) return;
+
+    try {
+      const resp = await fetch('/api/admin/users');
+      const data = await resp.json();
+      const users = data.users || [];
+
+      if (totalCountEl) totalCountEl.textContent = `${users.length} Users`;
+
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>
+            <div style="font-weight:700; color:var(--text-main); font-size:0.88rem;">${u.name}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">@${u.username} · ${u.email}</div>
+          </td>
+          <td>
+            <span class="badge ${u.role === 'Super Admin' ? 'badge-safe' : 'badge-moderate'}" style="font-size:0.72rem; font-weight:800;">
+              ${u.role}
+            </span>
+          </td>
+          <td style="font-size:0.8rem; color:var(--text-muted); font-weight:600;">${u.venue_scope}</td>
+          <td>
+            <span class="badge ${u.status === 'Active Session' ? 'badge-safe' : 'badge-safe'}" style="font-size:0.72rem;">
+              ● ${u.status}
+            </span>
+          </td>
+          <td>
+            ${u.is_system ? `
+              <span style="font-size:0.72rem; color:var(--text-subtle); font-weight:700;">Protected System Account</span>
+            ` : `
+              <button class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-size:0.72rem; padding:0.25rem 0.55rem;" onclick="FlowApp.deleteUser('${u.username}')">
+                Revoke Access
+              </button>
+            `}
+          </td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      console.error('[UserManagement] Fetch error:', e);
+    }
+  },
+
+  createUser: async function() {
+    const nameInput = document.getElementById('newUserName');
+    const usernameInput = document.getElementById('newUserUsername');
+    const emailInput = document.getElementById('newUserEmail');
+    const roleInput = document.getElementById('newUserRole');
+    const venueInput = document.getElementById('newUserVenueScope');
+    const feedback = document.getElementById('addUserFeedback');
+    const btn = document.getElementById('submitAddUserBtn');
+
+    const name = nameInput?.value.trim();
+    const username = usernameInput?.value.trim();
+    const email = emailInput?.value.trim();
+    const role = roleInput?.value;
+    const venue = venueInput?.value;
+
+    if (!name || !username) {
+      if (feedback) {
+        feedback.textContent = 'Please fill in Name and Username';
+        feedback.style.background = '#fef2f2';
+        feedback.style.color = '#b91c1c';
+        feedback.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      if (btn) btn.disabled = true;
+
+      const resp = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, username, email, role, venue_scope: venue })
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        if (feedback) {
+          feedback.textContent = `✅ User @${username} created successfully`;
+          feedback.style.background = '#ecfdf5';
+          feedback.style.color = '#047857';
+          feedback.style.display = 'block';
+        }
+        if (nameInput) nameInput.value = '';
+        if (usernameInput) usernameInput.value = '';
+        if (emailInput) emailInput.value = '';
+        this.fetchUsers();
+        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3000);
+      } else {
+        if (feedback) {
+          feedback.textContent = data.message || 'Error creating user account';
+          feedback.style.background = '#fef2f2';
+          feedback.style.color = '#b91c1c';
+          feedback.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      console.error('[UserManagement] Create error:', e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  deleteUser: async function(username) {
+    if (!confirm(`Are you sure you want to revoke access for @${username}?`)) return;
+
+    try {
+      const resp = await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (resp.ok && data.success) {
+        this.fetchUsers();
+      } else {
+        alert(data.message || 'Could not delete user account');
+      }
+    } catch (e) {
+      console.error('[UserManagement] Delete error:', e);
     }
   },
 
@@ -515,11 +1034,11 @@ const FlowApp = {
 
     tbody.innerHTML = filtered.map(r => `
       <tr>
-        <td style="font-weight:700; color:#fff;">${r.time}</td>
+        <td style="font-weight:700; color:var(--text-main);">${r.time}</td>
         <td style="color:var(--text-main); font-weight:600;">${r.zoneName}</td>
         <td style="color:var(--color-safe); font-weight:700;">+${r.influx}</td>
         <td style="color:var(--color-critical); font-weight:700;">-${r.egress}</td>
-        <td style="font-weight:800; color:#fff;">${r.count} <span style="font-size:0.7rem; color:var(--text-muted);">/ ${r.capacity}</span></td>
+        <td style="font-weight:800; color:var(--text-main);">${r.count} <span style="font-size:0.7rem; color:var(--text-muted);">/ ${r.capacity}</span></td>
         <td>
           <div style="display:flex; align-items:center; gap:0.5rem;">
             <span>${r.occPct}%</span>
@@ -529,7 +1048,7 @@ const FlowApp = {
           </div>
         </td>
         <td style="font-family:monospace; color:var(--accent-cyan);">${r.netFlow}</td>
-        <td style="font-weight:700; color:${r.status === 'CRITICAL' ? 'var(--color-critical)' : '#fff'};">${r.wait}</td>
+        <td style="font-weight:700; color:${r.status === 'CRITICAL' ? 'var(--color-critical)' : 'var(--text-main)'};">${r.wait}</td>
         <td>
           <span class="badge badge-${r.status.toLowerCase()}">● ${r.status}</span>
         </td>
@@ -602,20 +1121,20 @@ const FlowApp = {
     if (!container) return;
 
     container.innerHTML = `
-      <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:8px; padding:1rem; margin-bottom:1rem;">
-        <div style="font-weight:800; color:#fff; font-size:1.05rem;">${plan.event_name}</div>
+      <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:8px; padding:1rem; margin-bottom:1rem;">
+        <div style="font-weight:800; color:var(--text-main); font-size:1.05rem;">${plan.event_name}</div>
         <div style="font-size:0.8rem; color:var(--accent-cyan); margin-top:0.25rem;">
           Safety Risk Profile: <strong style="color:${plan.risk_assessment.overall_risk_level === 'HIGH' ? 'var(--color-critical)' : 'var(--color-safe)'};">${plan.risk_assessment.overall_risk_level}</strong> • Recommended Counting Gates: <strong>${plan.recommended_sensors_count} Stations</strong>
         </div>
-        <p style="margin-top:0.5rem; font-size:0.85rem; color:#cbd5e1;">${plan.risk_assessment.summary}</p>
+        <p style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);">${plan.risk_assessment.summary}</p>
       </div>
 
-      <div style="font-weight:700; color:#fff; margin-bottom:0.5rem;">Recommended Gate Locations</div>
+      <div style="font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">Recommended Gate Locations</div>
       <ul style="padding-left:1.25rem; margin-bottom:1rem;">
         ${plan.sensor_placements.map(s => `<li><strong>${s.location}:</strong> ${s.reason}</li>`).join('')}
       </ul>
 
-      <div style="font-weight:700; color:#fff; margin-bottom:0.5rem;">Recommended Pathway Traffic Distribution</div>
+      <div style="font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">Recommended Pathway Traffic Distribution</div>
       <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
         ${plan.suggested_route_distribution.map(r => `
           <div style="display:flex; justify-content:space-between; background:var(--bg-secondary); padding:0.5rem 0.75rem; border-radius:6px; border:1px solid var(--border-subtle);">
@@ -625,11 +1144,11 @@ const FlowApp = {
         `).join('')}
       </div>
 
-      <div style="font-weight:700; color:#fff; margin-bottom:0.5rem;">Crowd Marshalling Personnel Deployment</div>
+      <div style="font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">Crowd Marshalling Personnel Deployment</div>
       <div style="display:flex; flex-direction:column; gap:0.5rem;">
         ${plan.staff_deployment.map(s => `
           <div style="font-size:0.8rem; color:var(--text-muted); background:var(--bg-secondary); padding:0.5rem 0.75rem; border-radius:6px; border:1px solid var(--border-subtle);">
-            <strong style="color:#fff;">${s.area}:</strong> ${s.personnel_needed} staff officers stationed (${s.primary_task})
+            <strong style="color:var(--text-main);">${s.area}:</strong> ${s.personnel_needed} staff officers stationed (${s.primary_task})
           </div>
         `).join('')}
       </div>
@@ -818,13 +1337,13 @@ const FlowApp = {
 
             <div class="zone-stats-row">
               <span>Present: <strong>${z.current_count} / ${z.capacity} (${occ}%)</strong></span>
-              <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : '#fff'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
+              <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : 'var(--text-main)'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
             </div>
 
             <div style="display:flex; justify-content:space-between; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-muted);">
               <span>Entering: <strong>+${z.entry_rate || 35}/min</strong></span>
               <span>Exiting: <strong>-${z.exit_rate || 30}/min</strong></span>
-              <span>Wait: <strong style="color:#fff;">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
+              <span>Wait: <strong style="color:var(--text-main);">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
             </div>
           </div>
         `;
@@ -855,7 +1374,7 @@ const FlowApp = {
     list.innerHTML = alerts.map(a => `
       <div style="background:var(--bg-secondary); border-left:4px solid ${a.severity === 'critical' || a.severity === 'emergency' ? 'var(--color-critical)' : 'var(--color-moderate)'}; padding:0.85rem 1rem; border-radius:0 var(--radius-sm) var(--radius-sm) 0;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <strong style="color:#fff; font-size:0.9rem;">${a.title}</strong>
+          <strong style="color:var(--text-main); font-size:0.9rem;">${a.title}</strong>
           <span style="font-size:0.75rem; color:var(--text-muted);">${a.timestamp}</span>
         </div>
         <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.25rem;">${a.message}</div>

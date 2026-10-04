@@ -154,13 +154,13 @@ const SensorSimulator = {
     tbody.innerHTML = sensors.map((s, idx) => `
       <tr class="sensor-row">
         <td>
-          <div style="font-weight:700; color:#fff;">Gate Station ${idx + 1}</div>
+          <div style="font-weight:700; color:var(--text-main);">Gate Station ${idx + 1}</div>
           <div style="font-size:0.72rem; color:var(--text-muted);">${s.id}</div>
         </td>
         <td style="font-weight:600; color:var(--text-main);">${s.zone_name}</td>
         <td><strong style="color:var(--color-safe);">+${s.people_in}</strong></td>
         <td><strong style="color:var(--color-critical);">-${s.people_out}</strong></td>
-        <td><strong style="font-size:0.95rem; color:#fff;">${s.current_count} people</strong></td>
+        <td><strong style="font-size:0.95rem; color:var(--text-main);">${s.current_count} people</strong></td>
         <td>
           <span style="font-family:monospace; color:var(--accent-cyan); font-size:0.75rem;">Beam A: ${s.tof_distance_mm_a || 420}mm</span><br>
           <span style="font-family:monospace; color:var(--accent-cyan); font-size:0.75rem;">Beam B: ${s.tof_distance_mm_b || 1180}mm</span>

@@ -648,7 +648,7 @@ const CadPlanner = {
       <div style="display:flex; align-items:center; gap:1.25rem;">
         <div>
           <span style="font-size:0.72rem; color:var(--accent-cyan); font-weight:800; text-transform:uppercase;">INSPECTED SECTOR</span>
-          <div style="font-size:1.1rem; font-weight:800; color:#fff;">${title}</div>
+          <div style="font-size:1.1rem; font-weight:800; color:var(--text-main);">${title}</div>
         </div>
         <div style="border-left:1px solid var(--border-subtle); padding-left:1.25rem;">
           <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">SAFE HOLDING CAPACITY</span>
@@ -656,7 +656,7 @@ const CadPlanner = {
         </div>
         <div style="border-left:1px solid var(--border-subtle); padding-left:1.25rem; max-width:450px;">
           <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700;">SPECIFICATIONS & SAFETY DIRECTIVE</span>
-          <div style="font-size:0.8rem; color:#cbd5e1;">${specs}</div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">${specs}</div>
         </div>
       </div>
     `;

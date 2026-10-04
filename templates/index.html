@@ -39,11 +39,11 @@
         </div>
         <div>
           <div class="brand-title">
-            FLOW<span>NAVIGATOR</span>
+            <span data-i18n="brand.title">FLOW NAVIGATOR</span>
             <span class="brand-badge">LIVE OPERATIONS</span>
           </div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">
-            Intelligent Crowd Flow Management System
+          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;" data-i18n="brand.subtitle">
+            Autonomous Crowd Telemetry & Dynamic Venue Routing
           </div>
         </div>
       </div>
@@ -61,11 +61,32 @@
       <!-- Add Custom Venue Button (Admin Only) -->
       <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:none;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;">
         <i data-lucide="plus-circle" style="width:15px;height:15px;"></i>
-        Add Venue
+        <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
       </button>
+
+      <!-- DATA MODE SWITCHER (DEMO SIMULATION VS REAL ESP32 IOT LIVE) -->
+      <div id="dataModeSwitcher" class="data-mode-toggle" title="Switch between Demo Simulation and Real ESP32 IoT Hardware Telemetry">
+        <button id="modeDemoBtn" class="mode-btn active" data-mode="demo">
+          <i data-lucide="sparkles" style="width:13px;height:13px;"></i>
+          <span data-i18n="nav.mode_demo">Demo Data Mode</span>
+        </button>
+        <button id="modeRealBtn" class="mode-btn" data-mode="real">
+          <i data-lucide="radio" style="width:13px;height:13px;"></i>
+          <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
+        </button>
+      </div>
 
       <!-- Role Switcher & Controls -->
       <div class="nav-actions">
+        <!-- Language Switcher (English / Tamil) -->
+        <div class="lang-switcher-box" title="Select Language / மொழியைத் தேர்ந்தெடுக்கவும்">
+          <i data-lucide="globe" style="width:14px;height:14px;color:#2563eb;"></i>
+          <select id="langSelect" class="lang-select">
+            <option value="en">English (EN)</option>
+            <option value="ta">தமிழ் (Tamil)</option>
+          </select>
+        </div>
+
         <!-- Senior Citizen Accessibility Toggle -->
         <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
           <i data-lucide="accessibility"></i>
@@ -79,17 +100,23 @@
           </button>
           <button id="roleVisitorBtn" class="role-btn" data-role="visitor">
             <i data-lucide="user" style="width:15px;height:15px;"></i>
-            <span>Visitor View</span>
+            <span data-i18n="nav.role_visitor">Visitor View</span>
           </button>
           <button id="roleAdminBtn" class="role-btn" data-role="admin">
             <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
-            <span>Admin Center</span>
+            <span data-i18n="nav.role_admin">Admin Control</span>
           </button>
           <button id="roleKioskBtn" class="role-btn" data-role="kiosk">
             <i data-lucide="tv" style="width:15px;height:15px;"></i>
-            <span>Public Kiosk</span>
+            <span data-i18n="nav.role_kiosk">Public Kiosk</span>
           </button>
         </div>
+
+        <!-- Admin Sign Out Button (Visible when logged in as Admin) -->
+        <button id="navSignOutBtn" class="btn btn-outline btn-sm" style="display:none; align-items:center; gap:0.35rem; color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700;">
+          <i data-lucide="log-out" style="width:14px;height:14px;"></i>
+          <span data-i18n="nav.sign_out">Sign Out</span>
+        </button>
 
         <!-- Emergency SOS Button -->
         <button id="sosBtn" class="btn-sos">
@@ -109,14 +136,14 @@
       
       <!-- Landing Hero -->
       <div style="text-align:center; max-width:860px; margin:0 auto 3rem auto;">
-        <span class="badge badge-safe" style="margin-bottom:1rem; padding:0.4rem 1rem; font-size:0.82rem; background:rgba(37,99,235,0.08); border-color:rgba(37,99,235,0.25); color:#1d4ed8;">
-          <i data-lucide="sparkles" style="width:14px;height:14px;color:#2563eb;"></i> AI-Powered Spatial Safety & Crowd Dynamics Platform
+        <span class="badge badge-safe" style="margin-bottom:1rem; padding:0.4rem 1rem; font-size:0.82rem; background:rgba(37,99,235,0.08); border-color:rgba(37,99,235,0.25); color:#1d4ed8;" data-i18n="landing.badge">
+          <i data-lucide="sparkles" style="width:14px;height:14px;color:#2563eb;"></i> ⚡ AI-POWERED CROWD TELEMETRY & HARDWARE GATEWAY
         </span>
-        <h1 style="font-size:2.8rem; font-weight:900; line-height:1.15; color:var(--text-main); margin-bottom:1rem; font-family:var(--font-display);">
-          Intelligent Crowd Flow Management <br>&amp; Real-Time Safety Navigation
+        <h1 style="font-size:2.8rem; font-weight:900; line-height:1.15; color:var(--text-main); margin-bottom:1rem; font-family:var(--font-display);" data-i18n="landing.title">
+          Dynamic Campus Navigation & Real-time Flow Telemetry
         </h1>
-        <p style="font-size:1.05rem; color:var(--text-muted); line-height:1.6; max-width:720px; margin:0 auto 2rem auto;">
-          FlowNavigator combines Random Forest machine learning, ToF optical gate counters, interactive GIS vector maps, and NFPA-101 crowd dynamics to prevent stampedes and streamline large-scale event movements.
+        <p style="font-size:1.05rem; color:var(--text-muted); line-height:1.6; max-width:720px; margin:0 auto 2rem auto;" data-i18n="landing.desc">
+          Optimized crowd routing, venue occupancy analytics, and hardware-integrated ESP32 ToF IoT sensor monitoring for college events, auditoriums, and open grounds.
         </p>
 
         <!-- Live System Metric Pills -->
@@ -458,6 +485,16 @@
             <span>Detailed Analytics & Reports</span>
           </button>
 
+          <button class="admin-nav-item" data-tab="esp32-iot">
+            <i data-lucide="cpu" style="width:18px;height:18px;"></i>
+            <span>ESP32 ToF IoT Gateway</span>
+          </button>
+          
+          <button class="admin-nav-item" data-tab="user-management">
+            <i data-lucide="users" style="width:18px;height:18px;"></i>
+            <span>User & Admin Control</span>
+          </button>
+
           <!-- Quick System Health Status Pill -->
           <div style="margin-top:auto; padding-top:1rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-subtle);">
             <div style="display:flex; align-items:center; gap:0.4rem; color:var(--color-safe); font-weight:700; margin-bottom:0.25rem;">
@@ -465,6 +502,14 @@
               Operational Dispatch Live
             </div>
             <span>All gates reporting active</span>
+          </div>
+
+          <!-- Admin Sidebar Sign Out Button -->
+          <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle);">
+            <button id="adminSidebarLogoutBtn" class="btn btn-outline btn-sm" style="width:100%; color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
+              <i data-lucide="log-out" style="width:14px;height:14px;"></i>
+              Sign Out of Admin Center
+            </button>
           </div>
         </aside>
 
@@ -482,7 +527,7 @@
               </div>
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Counting Gates</div>
-                <div id="adminStatSensors" style="font-size:2rem; font-weight:800; color:#fff; margin:0.35rem 0;">6 Gates</div>
+                <div id="adminStatSensors" style="font-size:2rem; font-weight:800; color:var(--text-main); margin:0.35rem 0;">6 Gates</div>
                 <div style="font-size:0.75rem; color:var(--color-safe);">● 100% Gates Reporting Influx</div>
               </div>
               <div class="card">
@@ -659,7 +704,7 @@
                       </div>
                       <div style="text-align:right;">
                         <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">EST. QUEUE WAIT TIME</span>
-                        <div id="mlOutputWait" style="font-size:1.8rem; font-weight:900; color:#fff; font-family:var(--font-display);">
+                        <div id="mlOutputWait" style="font-size:1.8rem; font-weight:900; color:var(--accent-blue); font-family:var(--font-display);">
                           28.4 min
                         </div>
                       </div>
@@ -685,7 +730,7 @@
 
                 <!-- Operational Action Note -->
                 <div style="border-top:1px solid var(--border-subtle); padding-top:1rem; font-size:0.82rem; color:var(--text-muted);">
-                  <span style="color:#fff; font-weight:700;">Operational Recommendation:</span> Divert incoming crowd via Route C (North Express Lane) to prevent queue overflow at the sanctum entrance.
+                  <span style="color:var(--text-main); font-weight:800;">Operational Recommendation:</span> Divert incoming crowd via Route C (North Express Lane) to prevent queue overflow at the sanctum entrance.
                 </div>
 
               </div>
@@ -753,13 +798,13 @@
                 <div id="simBeamA" class="tof-sensor-beam">
                   <div style="font-weight:700; color:var(--accent-cyan);">Outer Doorway Beam (A)</div>
                   <div class="laser-indicator" id="simLaserA"></div>
-                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValA" style="font-weight:800; color:#fff;">1200 mm</span></div>
+                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValA" style="font-weight:800; color:var(--text-main);">1200 mm</span></div>
                   <div style="font-size:0.7rem; color:var(--text-subtle);">Status: Clear</div>
                 </div>
 
                 <!-- Doorway Walkway Icon -->
                 <div style="text-align:center;">
-                  <div style="width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
+                  <div style="width:48px; height:48px; border-radius:50%; background:rgba(37,99,235,0.08); display:flex; align-items:center; justify-content:center; margin:0 auto 0.5rem auto;">
                     <i data-lucide="footprints" style="color:var(--accent-blue);"></i>
                   </div>
                   <div style="font-size:0.75rem; font-weight:700;">Walkway Portal</div>
@@ -770,7 +815,7 @@
                 <div id="simBeamB" class="tof-sensor-beam">
                   <div style="font-weight:700; color:var(--accent-cyan);">Inner Doorway Beam (B)</div>
                   <div class="laser-indicator" id="simLaserB"></div>
-                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValB" style="font-weight:800; color:#fff;">1200 mm</span></div>
+                  <div style="font-size:0.8rem; color:var(--text-muted);">Beam Clearance: <span id="simDistValB" style="font-weight:800; color:var(--text-main);">1200 mm</span></div>
                   <div style="font-size:0.7rem; color:var(--text-subtle);">Status: Clear</div>
                 </div>
               </div>
@@ -811,34 +856,34 @@
               <div class="cad-blueprint-header">
                 <div>
                   <div style="display:flex; align-items:center; gap:0.5rem;">
-                    <span class="cad-badge" style="background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4);">
+                    <span class="cad-badge" style="background:rgba(56,189,248,0.2); color:#0284c7; border:1px solid rgba(56,189,248,0.4);">
                       CAD BLUEPRINT GENERATOR
                     </span>
                     <span style="font-family:monospace; font-size:0.75rem; color:var(--text-muted);">
                       SCALE: 1:500 • NFPA 101 CROWD DYNAMICS COMPLIANT
                     </span>
                   </div>
-                  <h2 style="font-size:1.4rem; font-weight:900; color:#fff; margin-top:0.35rem;">
+                  <h2 style="font-size:1.4rem; font-weight:900; color:var(--text-main); margin-top:0.35rem;">
                     EVENT CROWD MANAGEMENT & BARRICADE LAYOUT PLAN
                   </h2>
                 </div>
 
                 <!-- Live Safety Density Metrics Pill -->
                 <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
-                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
-                    <span style="color:var(--text-muted);">Area:</span> <strong id="cadStatArea" style="color:#fff;">57,000 m²</strong>
+                  <div style="background:var(--bg-card); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Area:</span> <strong id="cadStatArea" style="color:var(--text-main);">57,000 m²</strong>
                   </div>
-                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                  <div style="background:var(--bg-card); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
                     <span style="color:var(--text-muted);">Safe Cap:</span> <strong id="cadStatCapacity" style="color:var(--color-safe);">12,666 (95%)</strong>
                   </div>
-                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
-                    <span style="color:var(--text-muted);">Barricades:</span> <strong id="cadStatBoxes" style="color:var(--accent-cyan);">10 Compartments</strong>
+                  <div style="background:var(--bg-card); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Barricades:</span> <strong id="cadStatBoxes" style="color:var(--accent-blue);">10 Compartments</strong>
                   </div>
-                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
-                    <span style="color:var(--text-muted);">Space / Person:</span> <strong id="cadStatDensity" style="color:#fff;">4.8 m²/ppl</strong>
+                  <div style="background:var(--bg-card); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Space / Person:</span> <strong id="cadStatDensity" style="color:var(--text-main);">4.8 m²/ppl</strong>
                   </div>
-                  <div style="background:rgba(15,23,42,0.9); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
-                    <span style="color:var(--text-muted);">Evac Time:</span> <strong id="cadStatEvac" style="color:#fff;">14.1 mins</strong>
+                  <div style="background:var(--bg-card); border:1px solid var(--border-subtle); padding:0.4rem 0.85rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+                    <span style="color:var(--text-muted);">Evac Time:</span> <strong id="cadStatEvac" style="color:var(--text-main);">14.1 mins</strong>
                   </div>
                 </div>
               </div>
@@ -1042,6 +1087,454 @@
             </div>
           </div>
 
+          <!-- TAB 8: USER & ADMIN MANAGEMENT -->
+          <div id="tab-user-management" class="admin-tab-content">
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h2 style="font-size:1.4rem; font-weight:800; color:var(--text-main); margin-bottom:0.25rem;" data-i18n="users.title">
+                  User Control & Permission Management
+                </h2>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;" data-i18n="users.subtitle">
+                  Create new system accounts and assign security roles
+                </p>
+              </div>
+
+              <div style="display:flex; gap:0.6rem;">
+                <button id="refreshUsersBtn" class="btn btn-outline btn-sm">
+                  <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> <span data-i18n="btn.refresh">Refresh</span>
+                </button>
+                <button id="adminTabSignOutBtn" class="btn btn-outline btn-sm" style="color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700;">
+                  <i data-lucide="log-out" style="width:14px;height:14px;"></i> <span data-i18n="nav.sign_out">Sign Out</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Top Summary Cards -->
+            <div class="grid-4" style="margin-bottom:1.5rem;">
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Registered Accounts</div>
+                <div id="userStatTotalCount" style="font-size:2rem; font-weight:800; color:#2563eb; margin:0.25rem 0;">4 Users</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);">● 1 Super Admin, 3 Dispatchers</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Security Session</div>
+                <div style="font-size:1.6rem; font-weight:800; color:#059669; margin:0.25rem 0;">AUTH ACTIVE</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Session Token Validated</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Current Admin User</div>
+                <div style="font-size:1.6rem; font-weight:800; color:var(--text-main); margin:0.25rem 0;">admin</div>
+                <div style="font-size:0.75rem; color:#2563eb; font-weight:700;">Super Administrator</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">RBAC Enforcement</div>
+                <div style="font-size:1.6rem; font-weight:800; color:#1d4ed8; margin:0.25rem 0;">ENFORCED</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Session & Token Security On</div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="grid-template-columns: 1.8fr 1fr; gap:1.5rem; margin-bottom:1.75rem;">
+              
+              <!-- USER ROSTER TABLE CARD -->
+              <div class="card">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <i data-lucide="shield" style="color:#2563eb;"></i>
+                    <span>Administrative User Roster</span>
+                  </div>
+                  <span class="badge badge-safe" style="font-size:0.72rem;">● System Verified</span>
+                </div>
+
+                <div style="overflow-x:auto;">
+                  <table class="analytics-table" style="width:100%;">
+                    <thead>
+                      <tr>
+                        <th>User / Account Name</th>
+                        <th>Role</th>
+                        <th>Assigned Venue Scope</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="userRosterTableBody">
+                      <!-- Rendered by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- ADD USER FORM CARD -->
+              <div class="card">
+                <div class="card-title">
+                  <i data-lucide="user-plus" style="color:#059669;"></i>
+                  Add System User / Dispatcher
+                </div>
+
+                <form id="addUserForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.85rem;">
+                  <div>
+                    <label class="av-label">Full Name <span style="color:#b91c1c;">*</span></label>
+                    <input id="newUserName" type="text" class="av-input" placeholder="e.g. Rajesh Kumar" required>
+                  </div>
+
+                  <div>
+                    <label class="av-label">Username <span style="color:#b91c1c;">*</span></label>
+                    <input id="newUserUsername" type="text" class="av-input" placeholder="e.g. rajesh_palani" required>
+                  </div>
+
+                  <div>
+                    <label class="av-label">Email Address</label>
+                    <input id="newUserEmail" type="email" class="av-input" placeholder="rajesh@flownavigator.org">
+                  </div>
+
+                  <div>
+                    <label class="av-label">Access Role</label>
+                    <select id="newUserRole" class="av-input">
+                      <option value="Safety Dispatcher">Safety Dispatcher</option>
+                      <option value="Gate Supervisor">Gate Supervisor</option>
+                      <option value="Event Coordinator">Event Coordinator</option>
+                      <option value="Super Admin">Super Admin</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="av-label">Assigned Venue Access</label>
+                    <select id="newUserVenueScope" class="av-input">
+                      <option value="All Venues & Grounds">All Venues &amp; Grounds</option>
+                      <option value="Palani Pilgrimage Grounds">Palani Pilgrimage Grounds</option>
+                      <option value="Meenakshi Temple Complex">Meenakshi Temple Complex</option>
+                      <option value="Jawaharlal Nehru Stadium">Jawaharlal Nehru Stadium</option>
+                      <option value="Custom Event Grounds">Custom Event Grounds</option>
+                    </select>
+                  </div>
+
+                  <div id="addUserFeedback" style="display:none; font-size:0.8rem; font-weight:600; padding:0.5rem; border-radius:6px;"></div>
+
+                  <button type="submit" id="submitAddUserBtn" class="btn btn-primary btn-sm" style="margin-top:0.35rem; width:100%; justify-content:center; font-weight:800; background:#059669; border-color:#047857;">
+                    <i data-lucide="plus-circle" style="width:14px;height:14px;"></i>
+                    Create User Account
+                  </button>
+                </form>
+
+              </div>
+
+            </div>
+
+            <!-- PERMISSION MATRIX CARD -->
+            <div class="card">
+              <div class="card-title">
+                <i data-lucide="lock" style="color:#1d4ed8;"></i>
+                Role-Based Access Control (RBAC) Permission Matrix
+              </div>
+
+              <div style="overflow-x:auto;">
+                <table class="analytics-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th>Access Permission Scope</th>
+                      <th>Super Admin</th>
+                      <th>Safety Dispatcher</th>
+                      <th>Gate Supervisor</th>
+                      <th>Event Coordinator</th>
+                      <th>Public Visitor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-weight:700; color:var(--text-main);">View Executive Dashboard &amp; ML Surge Forecast</td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Access</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ View Only</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ View Only</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ View Only</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:700; color:var(--text-main);">Add &amp; Configure Grounds / Custom Venues</td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Access</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Create Only</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Assigned Grounds</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:700; color:var(--text-main);">CAD Blueprint Barricade Layout Generator</td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Access</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ View &amp; Export</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ View &amp; Export</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:700; color:var(--text-main);">Trigger Disaster SOS &amp; Emergency Evacuation</td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Control</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Control</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ SOS Only</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Panic SOS Button</span></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:700; color:var(--text-main);">User Account &amp; Access Control Management</td>
+                      <td><span style="color:#059669; font-weight:800;">✓ Full Control</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                      <td><span style="color:#b91c1c;">✕ Restricted</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- TAB 9: ESP32 TOF IOT GATEWAY & HARDWARE FLEET -->
+          <div id="tab-esp32-iot" class="admin-tab-content">
+            
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <div style="display:flex; align-items:center; gap:0.6rem;">
+                  <h2 style="font-size:1.4rem; font-weight:800; color:var(--text-main); margin-bottom:0.25rem;">
+                    ESP32 ToF Hardware Gateway &amp; IoT Fleet
+                  </h2>
+                  <span id="esp32ModeBadge" class="badge badge-safe" style="font-size:0.75rem;">● LIVE ESP32 HARDWARE READY</span>
+                </div>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
+                  Register, calibrate, and monitor physical ESP32 optical Time-of-Flight (VL53L0X) pedestrian counter hardware.
+                </p>
+              </div>
+
+              <div style="display:flex; gap:0.6rem;">
+                <button id="refreshEsp32Btn" class="btn btn-outline btn-sm">
+                  <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh Fleet
+                </button>
+                <button id="showEsp32CodeBtn" class="btn btn-primary btn-sm" style="background:#0284c7; border-color:#0369a1;">
+                  <i data-lucide="code" style="width:14px;height:14px;"></i> ESP32 C++ Code Generator
+                </button>
+              </div>
+            </div>
+
+            <!-- Top Summary Stat Cards -->
+            <div class="grid-4" style="margin-bottom:1.5rem;">
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Connected Hardware Units</div>
+                <div id="esp32StatCount" style="font-size:2rem; font-weight:800; color:#0284c7; margin:0.25rem 0;">6 Units</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);">● 100% Units Online &amp; Pinged</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Optical Sensor Array</div>
+                <div style="font-size:1.6rem; font-weight:800; color:var(--text-main); margin:0.25rem 0;">Dual VL53L0X ToF</div>
+                <div style="font-size:0.75rem; color:#059669; font-weight:700;">Directional Millimeter Vectoring</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Server Ingestion API</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#2563eb; margin:0.25rem 0; font-family:monospace;">/api/sensors/count</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">HTTP POST JSON Telemetry Payload</div>
+              </div>
+
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Data Mode</div>
+                <div id="esp32CurrentModeDisplay" style="font-size:1.6rem; font-weight:800; color:#059669; margin:0.25rem 0;">REAL IOT MODE</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Direct Hardware Counter Stream</div>
+              </div>
+            </div>
+
+            <!-- MAIN GRID: HARDWARE ROSTER TABLE & REGISTER FORM -->
+            <div class="grid-2" style="grid-template-columns: 1.8fr 1fr; gap:1.5rem; margin-bottom:1.75rem;">
+              
+              <!-- HARDWARE FLEET ROSTER TABLE CARD -->
+              <div class="card">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <i data-lucide="cpu" style="color:#0284c7;"></i>
+                    <span>Hardware Sensor Fleet Roster</span>
+                  </div>
+                  <span class="badge badge-safe" style="font-size:0.72rem;">● Edge Telemetry Active</span>
+                </div>
+
+                <div style="overflow-x:auto;">
+                  <table class="analytics-table" style="width:100%;">
+                    <thead>
+                      <tr>
+                        <th>Device ID &amp; Controller</th>
+                        <th>Gate / Zone Scope</th>
+                        <th>IP / MAC Address</th>
+                        <th>Counts (In / Out / Net)</th>
+                        <th>Status &amp; Signal</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="esp32RosterTableBody">
+                      <!-- Dynamically rendered by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- MANUAL REGISTER ESP32 UNIT FORM CARD -->
+              <div class="card">
+                <div class="card-title">
+                  <i data-lucide="plus-circle" style="color:#0284c7;"></i>
+                  Register Real ESP32 Hardware Unit
+                </div>
+
+                <form id="addEsp32Form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.85rem;">
+                  <div>
+                    <label class="av-label">Device Identifier <span style="color:#b91c1c;">*</span></label>
+                    <input id="esp32IdInput" type="text" class="av-input" placeholder="e.g. ESP32-GATE-NORTH-01" required>
+                  </div>
+
+                  <div>
+                    <label class="av-label">Target Gate / Zone <span style="color:#b91c1c;">*</span></label>
+                    <select id="esp32ZoneSelect" class="av-input">
+                      <option value="zone-a">Zone A: Main Entrance Plaza Gate 1</option>
+                      <option value="zone-b">Zone B: West Courtyard Portal</option>
+                      <option value="zone-c">Zone C: North Shrine Corridor</option>
+                      <option value="zone-d">Zone D: South Bypass Gate</option>
+                      <option value="zone-e">Zone E: Dining Hall Pavilion</option>
+                      <option value="zone-f">Zone F: Parking Grounds Shuttle</option>
+                      <option value="zone-h">Zone H: Hilltop Staircase Gate</option>
+                    </select>
+                  </div>
+
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                    <div>
+                      <label class="av-label">Controller Model</label>
+                      <select id="esp32ControllerInput" class="av-input">
+                        <option value="ESP32-WROOM-32D">ESP32-WROOM-32D</option>
+                        <option value="ESP32-S3-DevKit">ESP32-S3 DevKit</option>
+                        <option value="ESP32-C3-RISCV">ESP32-C3 RISC-V</option>
+                        <option value="ESP8266-NodeMCU">ESP8266 NodeMCU</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="av-label">Sensor Array</label>
+                      <select id="esp32SensorTypeInput" class="av-input">
+                        <option value="VL53L0X Time-of-Flight (ToF)">Dual VL53L0X ToF</option>
+                        <option value="VL53L1X Long-Distance ToF">VL53L1X Long ToF</option>
+                        <option value="Ultrasonic HC-SR04 Array">Dual Ultrasonic</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                    <div>
+                      <label class="av-label">IP Address (optional)</label>
+                      <input id="esp32IpInput" type="text" class="av-input" placeholder="192.168.1.105">
+                    </div>
+                    <div>
+                      <label class="av-label">MAC Address</label>
+                      <input id="esp32MacInput" type="text" class="av-input" placeholder="24:0A:C4:00:01:10">
+                    </div>
+                  </div>
+
+                  <div id="addEsp32Feedback" style="display:none; font-size:0.8rem; font-weight:600; padding:0.5rem; border-radius:6px;"></div>
+
+                  <button type="submit" id="submitAddEsp32Btn" class="btn btn-primary btn-sm" style="margin-top:0.35rem; width:100%; justify-content:center; font-weight:800; background:#0284c7; border-color:#0369a1;">
+                    <i data-lucide="cpu" style="width:14px;height:14px;"></i>
+                    Register Hardware Unit &amp; Generate API Key
+                  </button>
+                </form>
+              </div>
+
+            </div>
+
+            <!-- ARDUINO ESP32 C++ CODE GENERATOR CARD -->
+            <div class="card">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+                <div class="card-title" style="margin:0;">
+                  <i data-lucide="code" style="color:#0284c7;"></i>
+                  ESP32 Arduino C++ Firmware Code Generator (Production Hardware Ready)
+                </div>
+                <button id="copyEsp32CodeBtn" class="btn btn-outline btn-sm" style="font-weight:700;">
+                  <i data-lucide="copy" style="width:13px;height:13px;"></i> Copy C++ Code
+                </button>
+              </div>
+              <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1rem;">
+                Flash this code directly to your ESP32 via Arduino IDE or PlatformIO. It connects to Wi-Fi, initializes dual VL53L0X ToF sensors on I2C, tracks pedestrian entrance vs exit vectors, and posts HTTP JSON counts to <code style="color:#2563eb; font-weight:700;">/api/sensors/count</code>.
+              </p>
+
+              <pre id="esp32CodeBlock" style="background:#0f172a; color:#38bdf8; padding:1.25rem; border-radius:8px; font-family:monospace; font-size:0.78rem; max-height:280px; overflow-y:auto; border:1px solid #1e293b; line-height:1.5;">
+// =========================================================================
+// FlowNavigator ESP32 Dual VL53L0X ToF Pedestrian Counter Firmware
+// Target: ESP32-WROOM-32D | Framework: Arduino IDE
+// =========================================================================
+#include &lt;WiFi.h&gt;
+#include &lt;HTTPClient.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_VL53L0X.h&gt;
+
+const char* ssid     = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+const char* serverUrl = "http://192.168.31.10:5000/api/sensors/count";
+
+#define SENSOR1_XSHUT 16
+#define SENSOR2_XSHUT 17
+
+Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
+Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
+
+int peopleIn = 0;
+int peopleOut = 0;
+String sensorId = "ESP32-GATE-001";
+String zoneId   = "zone-a";
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(SENSOR1_XSHUT, OUTPUT);
+  pinMode(SENSOR2_XSHUT, OUTPUT);
+  digitalWrite(SENSOR1_XSHUT, LOW);
+  digitalWrite(SENSOR2_XSHUT, LOW);
+  
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  Serial.println("\nWiFi Connected! IP: " + WiFi.localIP().toString());
+  
+  // Reset and set distinct I2C addresses (0x30, 0x31)
+  digitalWrite(SENSOR1_XSHUT, HIGH); delay(10);
+  lox1.begin(0x30);
+  digitalWrite(SENSOR2_XSHUT, HIGH); delay(10);
+  lox2.begin(0x31);
+}
+
+void loop() {
+  VL53L0X_RangingMeasurementData_t measure1, measure2;
+  lox1.rangingTest(&measure1, false);
+  lox2.rangingTest(&measure2, false);
+
+  int d1 = (measure1.RangeStatus != 4) ? measure1.RangeMilliMeter : 2000;
+  int d2 = (measure2.RangeStatus != 4) ? measure2.RangeMilliMeter : 2000;
+
+  // Directional Vector Logic: Sensor 1 hit before Sensor 2 = IN; Sensor 2 before 1 = OUT
+  if (d1 &lt; 800 &amp;&amp; d2 &gt; 1200) { peopleIn++;  sendTelemetry(d1, d2); delay(600); }
+  if (d2 &lt; 800 &amp;&amp; d1 &gt; 1200) { peopleOut++; sendTelemetry(d1, d2); delay(600); }
+  delay(50);
+}
+
+void sendTelemetry(int d1, int d2) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverUrl);
+    http.addHeader("Content-Type", "application/json");
+    
+    String json = "{\"sensor_id\":\"" + sensorId + "\",\"zone_id\":\"" + zoneId + 
+                  "\",\"people_in\":" + String(peopleIn) + ",\"people_out\":" + String(peopleOut) + 
+                  ",\"tof_distance_mm_a\":" + String(d1) + ",\"tof_distance_mm_b\":" + String(d2) + "}";
+    
+    int httpCode = http.POST(json);
+    Serial.println("Telemetry HTTP POST: " + String(httpCode));
+    http.end();
+  }
+}</pre>
+            </div>
+
+          </div>
+
         </main>
       </div>
 
@@ -1095,12 +1588,15 @@
 
       <div style="display:flex; justify-content:space-between; align-items:center; border-top:2px solid #1e293b; padding-top:1.5rem;">
         <div style="display:flex; align-items:center; gap:1.5rem;">
-          <div style="width:70px; height:70px; background:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#000; font-weight:900; font-size:0.75rem; text-align:center;">
-            SCAN QR FOR PHONE
+          <!-- DYNAMIC QR CODE CONTAINER -->
+          <div id="kioskQrCodeContainer" style="width:110px; height:110px; background:#fff; padding:6px; border-radius:10px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+            <!-- QR SVG code rendered dynamically by JS -->
           </div>
           <div>
-            <div style="font-size:1.1rem; font-weight:700;">Scan with Phone Camera for Personal Live Route</div>
-            <div style="font-size:0.85rem; color:var(--text-muted);">Real-time crowd-aware routing updated every 2 seconds</div>
+            <div style="font-size:1.15rem; font-weight:800; color:#ffffff;">Scan QR Code to open Mobile Live Route Navigator</div>
+            <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem;">
+              Direct Link: <strong id="kioskDirectUrl" style="color:var(--accent-cyan); font-family:monospace;">http://127.0.0.1:5000/?role=visitor</strong>
+            </div>
           </div>
         </div>
         <button id="kioskExitBtn" class="btn btn-outline btn-sm">
@@ -1330,6 +1826,7 @@
   <script src="/static/js/mlDashboard.js"></script>
   <script src="/static/js/cadPlanner.js"></script>
   <script src="/static/js/addVenue.js"></script>
+  <script src="/static/js/i18n.js"></script>
   <script src="/static/js/app.js"></script>
   
   <script>

@@ -27,6 +27,8 @@ from ml.predictor import predictor
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
+import socket
+
 PORT = int(os.getenv("PORT", 5000))
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
@@ -34,7 +36,8 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 SYSTEM_STATE = {
     "emergency_mode": False,
     "emergency_message": "🚨 EMERGENCY EVACUATION ACTIVE - FOLLOW GREEN ILLUMINATED PATHWAYS TO PARKING & EXITS",
-    "active_venue_id": "palani-gathering"
+    "active_venue_id": "palani-gathering",
+    "data_mode": "demo"  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
 }
 
 # ==================== CORE FRONTEND ROUTES ====================
@@ -62,10 +65,100 @@ def admin_login():
             "token": "fn_admin_session_token_authenticated",
             "message": "Authentication successful"
         })
-    return jsonify({
-        "success": False,
-        "message": "Invalid credentials. Use admin / admin123"
-    }), 401
+# In-memory system user registry (synced with db DAO if available)
+SYSTEM_USERS = [
+    {
+        "id": "u-1",
+        "username": "admin",
+        "name": "System Administrator",
+        "email": "admin@flownavigator.org",
+        "role": "Super Admin",
+        "venue_scope": "All Venues & Grounds",
+        "status": "Active Session",
+        "last_active": "Just now",
+        "is_system": True
+    },
+    {
+        "id": "u-2",
+        "username": "dispatcher_palani",
+        "name": "Palani Operations Control",
+        "email": "palani.control@flownavigator.org",
+        "role": "Safety Dispatcher",
+        "venue_scope": "Palani Pilgrimage Grounds",
+        "status": "Active",
+        "last_active": "10 mins ago",
+        "is_system": False
+    },
+    {
+        "id": "u-3",
+        "username": "chennai_gate",
+        "name": "Nehru Stadium Turnstiles",
+        "email": "chennai.gates@flownavigator.org",
+        "role": "Gate Supervisor",
+        "venue_scope": "Jawaharlal Nehru Stadium",
+        "status": "Active",
+        "last_active": "2 hours ago",
+        "is_system": False
+    },
+    {
+        "id": "u-4",
+        "username": "event_coordinator",
+        "name": "College Event Operations",
+        "email": "events@college.edu",
+        "role": "Event Coordinator",
+        "venue_scope": "Custom Grounds & Halls",
+        "status": "Active",
+        "last_active": "1 day ago",
+        "is_system": False
+    }
+]
+
+@app.route("/api/admin/users", methods=["GET"])
+def get_admin_users():
+    return jsonify({"users": SYSTEM_USERS, "total": len(SYSTEM_USERS)})
+
+@app.route("/api/admin/users", methods=["POST"])
+def add_admin_user():
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    username = data.get("username", "").strip().lower()
+    email = data.get("email", "").strip()
+    role = data.get("role", "Safety Dispatcher")
+    venue_scope = data.get("venue_scope", "All Venues")
+    
+    if not name or not username:
+        return jsonify({"success": False, "message": "Name and username are required"}), 400
+        
+    # Check duplicate
+    if any(u["username"] == username for u in SYSTEM_USERS):
+        return jsonify({"success": False, "message": f"Username '{username}' already exists"}), 409
+        
+    new_user = {
+        "id": f"u-{len(SYSTEM_USERS) + 1}",
+        "username": username,
+        "name": name,
+        "email": email or f"{username}@flownavigator.org",
+        "role": role,
+        "venue_scope": venue_scope,
+        "status": "Active",
+        "last_active": "Just created",
+        "is_system": False
+    }
+    
+    SYSTEM_USERS.append(new_user)
+    return jsonify({"success": True, "user": new_user, "message": "User created successfully"})
+
+@app.route("/api/admin/users/<username>", methods=["DELETE"])
+def delete_admin_user(username):
+    global SYSTEM_USERS
+    target = next((u for u in SYSTEM_USERS if u["username"] == username), None)
+    if not target:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    if target.get("is_system"):
+        return jsonify({"success": False, "message": "Cannot delete primary Super Admin user"}), 403
+        
+    SYSTEM_USERS = [u for u in SYSTEM_USERS if u["username"] != username]
+    return jsonify({"success": True, "message": f"User '{username}' removed successfully"})
 
 # ==================== REST API ENDPOINTS ====================
 
@@ -132,11 +225,87 @@ def get_routes():
                 r["explainable_reason"] = "SANCTUM CLOSED DURING EVACUATION. PROCEED TO EXTERIOR."
     return jsonify({"routes": routes})
 
+# ==================== DATA MODE & HARDWARE ENDPOINTS ====================
+
+@app.route("/api/system/mode", methods=["GET", "POST"])
+def system_mode():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        mode = data.get("mode", "demo").lower()
+        if mode in ["demo", "real"]:
+            SYSTEM_STATE["data_mode"] = mode
+            return jsonify({"success": True, "data_mode": SYSTEM_STATE["data_mode"], "message": f"System switched to {mode.upper()} mode"})
+        return jsonify({"error": "Invalid mode. Use 'demo' or 'real'"}), 400
+    return jsonify({"data_mode": SYSTEM_STATE["data_mode"]})
+
+@app.route("/api/system/network_ip", methods=["GET"])
+def get_network_ip():
+    """Returns local network IP address for rendering Mobile Visitor QR code."""
+    local_ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    return jsonify({"local_ip": local_ip, "port": PORT, "visitor_url": f"http://{local_ip}:{PORT}/?role=visitor"})
+
+@app.route("/api/sensors/register", methods=["POST"])
+def register_esp32_sensor():
+    """Manual & automatic registration endpoint for real ESP32 hardware units."""
+    data = request.get_json() or {}
+    sensor_id = data.get("sensor_id", "").strip() or f"ESP32-GATE-{int(datetime.datetime.now().timestamp())}"
+    zone_id = data.get("zone_id", "zone-a")
+    zone_name = data.get("zone_name", "Main Entry Gate")
+    ip_address = data.get("ip_address", request.remote_addr)
+    mac_address = data.get("mac_address", "24:0A:C4:XX:XX:XX")
+    controller = data.get("controller", "ESP32-WROOM-32D")
+    sensor_type = data.get("sensor_type", "VL53L0X Time-of-Flight (ToF)")
+
+    sensor_doc = {
+        "id": sensor_id,
+        "zone_id": zone_id,
+        "zone_name": zone_name,
+        "ip_address": ip_address,
+        "mac_address": mac_address,
+        "controller": controller,
+        "sensor_type": sensor_type,
+        "communication": "Wi-Fi 802.11 b/g/n + REST API",
+        "people_in": 0,
+        "people_out": 0,
+        "current_count": 0,
+        "status": "ONLINE",
+        "battery_pct": 100,
+        "signal_dbm": -50,
+        "tof_distance_mm_a": 1200,
+        "tof_distance_mm_b": 1200,
+        "firmware_version": "v4.0.1-ESP32-ToF-RealHardware",
+        "last_ping": datetime.datetime.now().isoformat()
+    }
+
+    db.db.sensors.update_one({"id": sensor_id}, {"$set": sensor_doc}, upsert=True)
+    return jsonify({"success": True, "sensor": sensor_doc, "message": f"ESP32 unit {sensor_id} registered successfully"})
+
+@app.route("/api/sensors/count", methods=["POST"])
+def esp32_count_telemetry():
+    """Alias ingestion endpoint for ESP32 hardware sending count telemetry."""
+    return sensor_telemetry()
+
+@app.route("/api/sensors/<sensor_id>", methods=["DELETE"])
+def delete_esp32_sensor(sensor_id):
+    db.db.sensors.delete_one({"id": sensor_id})
+    return jsonify({"success": True, "message": f"Sensor {sensor_id} removed"})
+
 # --- Sensors (ESP32 + VL53L0X ToF) ---
 @app.route("/api/sensors", methods=["GET"])
 def get_sensors():
+    mode = SYSTEM_STATE.get("data_mode", "demo")
     sensors = db.get_sensors()
-    return jsonify({"sensors": sensors})
+    if mode == "real":
+        # Revoke all demo synthetic sensors in Real mode
+        sensors = [s for s in sensors if not s.get("is_demo", False) and not s.get("id", "").startswith("SENSOR-ESP32-00")]
+    return jsonify({"sensors": sensors, "data_mode": mode})
 
 @app.route("/api/sensors/telemetry", methods=["POST"])
 def sensor_telemetry():
