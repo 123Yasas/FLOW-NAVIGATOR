@@ -234,9 +234,29 @@ def system_mode():
         mode = data.get("mode", "demo").lower()
         if mode in ["demo", "real"]:
             SYSTEM_STATE["data_mode"] = mode
-            return jsonify({"success": True, "data_mode": SYSTEM_STATE["data_mode"], "message": f"System switched to {mode.upper()} mode"})
+            db.set_mode(mode)
+            if data.get("clear_real", False):
+                db.clear_real_data()
+            return jsonify({
+                "success": True, 
+                "data_mode": SYSTEM_STATE["data_mode"], 
+                "database_name": db.db.name if db.db is not None else "",
+                "message": f"System switched to {mode.upper()} mode using database '{db.db.name}'"
+            })
         return jsonify({"error": "Invalid mode. Use 'demo' or 'real'"}), 400
-    return jsonify({"data_mode": SYSTEM_STATE["data_mode"]})
+    return jsonify({
+        "data_mode": SYSTEM_STATE["data_mode"],
+        "database_name": db.db.name if db.db is not None else "",
+        "database_status": db.get_status()
+    })
+
+@app.route("/api/system/reset_real_db", methods=["POST"])
+def reset_real_db():
+    db.clear_real_data()
+    return jsonify({
+        "success": True,
+        "message": "Real database successfully purged of all demo data. Ready for live hardware integration."
+    })
 
 @app.route("/api/system/network_ip", methods=["GET"])
 def get_network_ip():

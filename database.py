@@ -17,15 +17,19 @@ from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # Environment configuration
 MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017/flownavigator"
-DB_NAME = os.getenv("MONGO_DB_NAME", "flownavigator")
+DEMO_DB_NAME = os.getenv("MONGO_DEMO_DB_NAME") or os.getenv("MONGO_DB_NAME", "flownavigator") + "_demo"
+REAL_DB_NAME = os.getenv("MONGO_REAL_DB_NAME", "flownavigator_real")
 
 class MongoDatabase:
     def __init__(self):
         self.client = None
-        self.db = None
+        self.demo_db = None
+        self.real_db = None
+        self.data_mode = "demo"  # 'demo' or 'real'
         self.is_mock = False
         self.connect()
         self.seed_initial_data()
+        self.clear_real_data()  # Explicitly ensure real database contains no pre-seeded demo data
 
     def connect(self):
         """Attempts real MongoDB connection; falls back to mongomock if unavailable."""
@@ -35,32 +39,58 @@ class MongoDatabase:
             # Test connection
             client.admin.command('ping')
             self.client = client
-            self.db = client[DB_NAME]
+            self.demo_db = client[DEMO_DB_NAME]
+            self.real_db = client[REAL_DB_NAME]
             self.is_mock = False
-            print(f"[MongoDB] Connected to real MongoDB server: {MONGO_URI.split('@')[-1]}")
+            print(f"[MongoDB] Connected to real MongoDB server: Demo DB '{DEMO_DB_NAME}', Real DB '{REAL_DB_NAME}'")
         except (ConnectionFailure, ServerSelectionTimeoutError, Exception) as e:
             print(f"[MongoDB] Real MongoDB connection not available ({e}). Initializing high-fidelity in-memory MongoDB fallback.")
             import mongomock
             self.client = mongomock.MongoClient()
-            self.db = self.client[DB_NAME]
+            self.demo_db = self.client[DEMO_DB_NAME]
+            self.real_db = self.client[REAL_DB_NAME]
             self.is_mock = True
+
+    @property
+    def db(self):
+        """Dynamically returns the database corresponding to active data_mode ('demo' or 'real')."""
+        if self.data_mode == "real":
+            return self.real_db
+        return self.demo_db
+
+    def set_mode(self, mode):
+        """Switches current database mode to 'demo' or 'real'."""
+        if mode in ["demo", "real"]:
+            self.data_mode = mode
+            print(f"[MongoDB] Database mode switched to '{self.data_mode.upper()}' ({self.db.name})")
+
+    def clear_real_data(self):
+        """Purges all demo data from the real database, leaving it clean for live telemetry."""
+        if self.real_db is not None:
+            for col_name in list(self.real_db.list_collection_names()):
+                self.real_db[col_name].delete_many({})
+            print(f"[MongoDB] Real database '{REAL_DB_NAME}' purged of all demo data. Clean slate for live production telemetry.")
 
     def get_status(self):
         return {
             "connected": True,
             "is_mock": self.is_mock,
             "engine": "In-Memory PyMongo (mongomock)" if self.is_mock else "MongoDB Cluster",
-            "database_name": DB_NAME,
-            "collections": list(self.db.list_collection_names()) if self.db is not None else []
+            "active_mode": self.data_mode,
+            "active_database": self.db.name if self.db is not None else None,
+            "demo_database": self.demo_db.name if self.demo_db is not None else None,
+            "real_database": self.real_db.name if self.real_db is not None else None,
+            "demo_collections": list(self.demo_db.list_collection_names()) if self.demo_db is not None else [],
+            "real_collections": list(self.real_db.list_collection_names()) if self.real_db is not None else []
         }
 
     def seed_initial_data(self):
-        """Seeds initial venues, zones, sensors, and routes if collections are empty."""
-        if self.db is None:
+        """Seeds initial venues, zones, sensors, routes, and alerts ONLY into demo_db."""
+        if self.demo_db is None:
             return
 
-        # 1. Venues
-        if self.db.venues.count_documents({}) == 0:
+        # 1. Venues (Demo DB only)
+        if self.demo_db.venues.count_documents({}) == 0:
             initial_venues = [
                 {
                     "id": "palani-gathering",
@@ -107,10 +137,10 @@ class MongoDatabase:
                     "lng": 80.2755
                 }
             ]
-            self.db.venues.insert_many(initial_venues)
+            self.demo_db.venues.insert_many(initial_venues)
 
-        # 2. Zones
-        if self.db.zones.count_documents({}) == 0:
+        # 2. Zones (Demo DB only)
+        if self.demo_db.zones.count_documents({}) == 0:
             initial_zones = [
                 {
                     "id": "zone-a",
@@ -265,10 +295,10 @@ class MongoDatabase:
                     "y": 20
                 }
             ]
-            self.db.zones.insert_many(initial_zones)
+            self.demo_db.zones.insert_many(initial_zones)
 
-        # 3. Sensors: ESP32 with VL53L0X ToF Sensors
-        if self.db.sensors.count_documents({}) == 0:
+        # 3. Sensors (Demo DB only): ESP32 with VL53L0X ToF Sensors
+        if self.demo_db.sensors.count_documents({}) == 0:
             initial_sensors = [
                 {
                     "id": "SENSOR-ESP32-001",
@@ -379,10 +409,10 @@ class MongoDatabase:
                     "last_ping": datetime.datetime.now().isoformat()
                 }
             ]
-            self.db.sensors.insert_many(initial_sensors)
+            self.demo_db.sensors.insert_many(initial_sensors)
 
-        # 4. Routes
-        if self.db.routes.count_documents({}) == 0:
+        # 4. Routes (Demo DB only)
+        if self.demo_db.routes.count_documents({}) == 0:
             initial_routes = [
                 {
                     "id": "route-a",
@@ -453,10 +483,10 @@ class MongoDatabase:
                     "explainable_reason": "Unobstructed outer corridor with dedicated egress lanes directly to parking and shuttles."
                 }
             ]
-            self.db.routes.insert_many(initial_routes)
+            self.demo_db.routes.insert_many(initial_routes)
 
-        # 5. Alerts
-        if self.db.alerts.count_documents({}) == 0:
+        # 5. Alerts (Demo DB only)
+        if self.demo_db.alerts.count_documents({}) == 0:
             initial_alerts = [
                 {
                     "id": "alert-1",
@@ -481,7 +511,7 @@ class MongoDatabase:
                     "recommended_action": "Enable queue staggering turnstiles at Hilltop base."
                 }
             ]
-            self.db.alerts.insert_many(initial_alerts)
+            self.demo_db.alerts.insert_many(initial_alerts)
 
     # Helper query methods
     def get_venues(self):
