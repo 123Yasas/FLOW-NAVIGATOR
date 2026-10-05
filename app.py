@@ -40,6 +40,81 @@ SYSTEM_STATE = {
     "data_mode": "demo"  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
 }
 
+# --- BACKGROUND LIVE DEMO SIMULATION THREAD ---
+import threading
+import time
+import random
+
+def _bg_demo_simulation_worker():
+    while True:
+        try:
+            time.sleep(3.5)
+            if SYSTEM_STATE.get("data_mode") == "demo" and not SYSTEM_STATE.get("emergency_mode"):
+                if db.demo_db is not None:
+                    sensors = list(db.demo_db.sensors.find({}))
+                    for s in sensors:
+                        sid = s.get("id")
+                        if not sid:
+                            continue
+                        delta_in = random.randint(1, 4)
+                        delta_out = random.randint(1, 3)
+                        p_in = s.get("people_in", 500) + delta_in
+                        p_out = s.get("people_out", 250) + delta_out
+                        curr = max(0, p_in - p_out)
+                        tof_a = random.randint(340, 1150)
+                        tof_b = random.randint(340, 1150)
+                        
+                        db.demo_db.sensors.update_one(
+                            {"id": sid},
+                            {"$set": {
+                                "people_in": p_in,
+                                "people_out": p_out,
+                                "current_count": curr,
+                                "tof_distance_mm_a": tof_a,
+                                "tof_distance_mm_b": tof_b,
+                                "last_ping": datetime.datetime.now().isoformat(),
+                                "status": "ONLINE"
+                            }}
+                        )
+                    
+                    zones = list(db.demo_db.zones.find({}))
+                    for z in zones:
+                        zid = z.get("id")
+                        if not zid:
+                            continue
+                        cap = max(1, z.get("capacity", 800))
+                        old_c = z.get("current_count", 300)
+                        if z.get("status") == "CRITICAL" or z.get("access_restricted"):
+                            new_c = old_c
+                        else:
+                            fluc = random.randint(-4, 6)
+                            new_c = max(10, min(cap, old_c + fluc))
+                        
+                        ratio = new_c / cap
+                        if ratio >= 0.9:
+                            st = "CRITICAL"
+                        elif ratio >= 0.75:
+                            st = "HIGH"
+                        elif ratio >= 0.5:
+                            st = "MODERATE"
+                        else:
+                            st = "SAFE"
+                        
+                        db.demo_db.zones.update_one(
+                            {"id": zid},
+                            {"$set": {
+                                "current_count": new_c,
+                                "status": st,
+                                "entry_rate": random.randint(30, 65),
+                                "exit_rate": random.randint(25, 45)
+                            }}
+                        )
+        except Exception as e:
+            pass
+
+_sim_thread = threading.Thread(target=_bg_demo_simulation_worker, daemon=True)
+_sim_thread.start()
+
 # ==================== CORE FRONTEND ROUTES ====================
 
 @app.route("/")

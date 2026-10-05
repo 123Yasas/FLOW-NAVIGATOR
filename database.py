@@ -62,6 +62,9 @@ class MongoDatabase:
         """Switches current database mode to 'demo' or 'real'."""
         if mode in ["demo", "real"]:
             self.data_mode = mode
+            if mode == "demo" and self.demo_db is not None:
+                if self.demo_db.zones.count_documents({}) == 0:
+                    self.seed_initial_data()
             print(f"[MongoDB] Database mode switched to '{self.data_mode.upper()}' ({self.db.name})")
 
     def clear_real_data(self):

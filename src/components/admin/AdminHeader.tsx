@@ -2,6 +2,7 @@ import React from 'react';
 import { useCrowd } from '../../context/CrowdContext';
 import { 
   Flame, 
+  Radio,
   Sparkles, 
   RotateCcw, 
   Wifi, 
@@ -21,6 +22,8 @@ export const AdminHeader: React.FC = () => {
     setSelectedLocation,
     emergencyMode,
     toggleEmergencyMode,
+    dataMode,
+    setDataMode,
     isOfflineMode,
     toggleOfflineMode,
     isSyncingData,
@@ -90,8 +93,33 @@ export const AdminHeader: React.FC = () => {
           </p>
         </div>
 
-        {/* Action CTA: Emergency Protocol */}
+        {/* Action CTA: Data Mode Switcher & Emergency Protocol */}
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Data Mode Switcher */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setDataMode('demo')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                dataMode === 'demo'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Demo Data Mode</span>
+            </button>
+            <button
+              onClick={() => setDataMode('real')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                dataMode === 'real'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>Real ESP32 IoT Mode</span>
+            </button>
+          </div>
 
           <button
             onClick={() => toggleEmergencyMode()}

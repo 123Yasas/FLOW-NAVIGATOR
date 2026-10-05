@@ -395,6 +395,7 @@ const FlowApp = {
         setTimeout(() => toast.remove(), 3500);
 
         this.refreshData();
+        this.fetchEsp32Sensors();
       }
     } catch (e) {
       console.error('[DataMode] Error setting mode:', e);
@@ -423,6 +424,11 @@ const FlowApp = {
     // Toggle simulator
     if (window.SensorSimulator) {
       window.SensorSimulator.isPaused = (mode === 'real');
+      if (mode === 'demo') {
+        window.SensorSimulator.startAutoSimulation();
+      } else {
+        window.SensorSimulator.stopAutoSimulation();
+      }
     }
   },
 

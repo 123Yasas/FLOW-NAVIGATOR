@@ -52,6 +52,8 @@ interface CrowdContextType {
   toggleEmergencyMode: (enabled?: boolean) => void;
   simulationActive: boolean;
   setSimulationActive: (active: boolean) => void;
+  dataMode: 'demo' | 'real';
+  setDataMode: (mode: 'demo' | 'real') => void;
 
   // Offline / Edge Network Resilience
   isOfflineMode: boolean;
@@ -128,6 +130,12 @@ export const CrowdProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [emergencyMode, setEmergencyMode] = useState<boolean>(false);
   const [simulationActive, setSimulationActive] = useState<boolean>(true);
+  const [dataMode, setDataModeState] = useState<'demo' | 'real'>('demo');
+
+  const setDataMode = useCallback((mode: 'demo' | 'real') => {
+    setDataModeState(mode);
+    setSimulationActive(mode === 'demo');
+  }, []);
 
   // Offline resilience states
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
@@ -531,6 +539,8 @@ export const CrowdProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleEmergencyMode,
         simulationActive,
         setSimulationActive,
+        dataMode,
+        setDataMode,
         isOfflineMode,
         toggleOfflineMode,
         isSyncingData,

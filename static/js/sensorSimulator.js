@@ -6,10 +6,29 @@
 
 const SensorSimulator = {
   isSimulating: false,
+  isPaused: false,
+  autoSimTimer: null,
   
   init: function() {
     this.bindEvents();
     this.fetchSensors();
+    this.startAutoSimulation();
+  },
+
+  startAutoSimulation: function() {
+    if (this.autoSimTimer) return;
+    this.autoSimTimer = setInterval(() => {
+      if (!this.isPaused && !this.isSimulating) {
+        this.fetchSensors();
+      }
+    }, 3500);
+  },
+
+  stopAutoSimulation: function() {
+    if (this.autoSimTimer) {
+      clearInterval(this.autoSimTimer);
+      this.autoSimTimer = null;
+    }
   },
 
   bindEvents: function() {
