@@ -1,0 +1,6 @@
+{
+  "name": "FlowNavigator",
+  "description": "AI & IoT-Based Intelligent Crowd Guidance System for public gatherings, venues, transit hubs, and pilgrimage centers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
