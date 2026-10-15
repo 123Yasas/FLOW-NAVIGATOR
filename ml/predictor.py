@@ -33,10 +33,17 @@ class CrowdPredictor:
                 print("Models not found on disk, running initial training...")
                 from ml.train_model import train_and_save_models
                 self.metadata = train_and_save_models()
-                self.classifier = joblib.load(CLASSIFIER_PATH)
-                self.regressor = joblib.load(REGRESSOR_PATH)
+                if os.path.exists(CLASSIFIER_PATH) and os.path.exists(REGRESSOR_PATH):
+                    self.classifier = joblib.load(CLASSIFIER_PATH)
+                    self.regressor = joblib.load(REGRESSOR_PATH)
         except Exception as e:
-            print(f"Warning: Failed to load RF models: {e}")
+            self.classifier = None
+            self.regressor = None
+            print(f"[ML Warning] Could not load RF models ({e}). High-fidelity heuristic crowd predictor active.")
+        except BaseException as e:
+            self.classifier = None
+            self.regressor = None
+            print(f"[ML Warning] Could not load RF models ({e}). High-fidelity heuristic crowd predictor active.")
 
     def prepare_features(self, zone_data, weather_factor=1.0):
         """

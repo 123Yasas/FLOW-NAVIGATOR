@@ -9,9 +9,6 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
 
 # Feature column definitions
 FEATURE_NAMES = [
@@ -122,6 +119,14 @@ def generate_synthetic_crowd_dataset(n_samples=6000, random_state=42):
     return df
 
 def train_and_save_models(model_dir=None):
+    try:
+        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import accuracy_score, r2_score
+    except Exception as e:
+        print(f"[ML Warning] Scikit-Learn import failed: {e}. Models cannot be trained in this environment.")
+        return {}
+
     if model_dir is None:
         model_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(model_dir, exist_ok=True)
