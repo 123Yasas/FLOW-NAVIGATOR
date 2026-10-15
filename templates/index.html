@@ -386,13 +386,13 @@
         </div>
 
         <!-- Venue Map Container -->
-        <div class="card" style="display:flex; flex-direction:column;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+        <div class="card visitor-map-card" style="display:flex; flex-direction:column;">
+          <div class="visitor-map-header">
             <div class="card-title" style="margin-bottom:0;">
               <i data-lucide="map" style="color:var(--accent-cyan);"></i>
               Live Venue Map & Guidance
             </div>
-            <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <div class="visitor-map-actions">
               <!-- Dynamic Route Status Badges (Cleanly located in header without overlapping map canvas) -->
               <div id="mapHeaderRouteBadges" class="map-header-route-badges">
                 <span class="badge badge-safe">● Route C: Fast (6m)</span>
@@ -406,7 +406,7 @@
           </div>
 
           <!-- Map Element -->
-          <div class="map-container-wrap" style="flex:1;">
+          <div class="map-container-wrap visitor-map-wrap">
             <div id="googleMapDiv"></div>
 
             <div class="map-badge-legend">
@@ -415,11 +415,11 @@
             </div>
           </div>
           
-          <div style="font-size:0.75rem; color:var(--text-subtle); margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div class="visitor-map-footer">
             <span>GPS Location: <strong id="mapCoordDisplay">10.4534° N, 77.5186° E</strong></span>
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-              <span id="currentVenueNameBadge" style="font-weight:700; color:var(--accent-cyan);">Palani Pilgrimage Grounds</span>
-              <span class="badge badge-safe" style="font-size:0.7rem;">● Active Monitoring</span>
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <span id="currentVenueNameBadge" class="venue-name-badge-text">Palani Pilgrimage Grounds</span>
+              <span class="badge badge-safe" style="font-size:0.7rem; white-space:nowrap;">● Active Monitoring</span>
             </div>
           </div>
         </div>
@@ -1064,8 +1064,15 @@
                         <input type="number" id="cfInputCrowd" class="cad-input-field" value="12000" min="500" max="150000" step="500">
                       </div>
                       <div>
-                        <label style="font-size:0.72rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.25rem;">BUDGET LIMIT ($)</label>
-                        <input type="number" id="cfBudgetLimit" class="cad-input-field" value="50000" min="5000" step="1000">
+                        <label id="cfBudgetLimitLabel" style="font-size:0.72rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.25rem;">BUDGET LIMIT (USD $)</label>
+                        <div style="display:flex; gap:0.35rem;">
+                          <select id="cfCurrencySelect" class="cad-input-field" style="width:85px; padding:0.45rem 0.25rem; font-weight:700; flex-shrink:0;">
+                            <option value="INR">INR (₹)</option>
+                            <option value="USD" selected>USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                          </select>
+                          <input type="number" id="cfBudgetLimit" class="cad-input-field" value="50000" min="500" step="500" style="flex:1;">
+                        </div>
                       </div>
                     </div>
 
@@ -1174,6 +1181,16 @@
                     <p style="font-size:0.78rem; color:var(--text-muted);">
                       Quantities calculated directly from ground geometry, barricade perimeters, and crowd ratios. Unit prices are editable inline.
                     </p>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:0.5rem; background:#f8fafc; border:1px solid var(--border-subtle); padding:0.35rem 0.75rem; border-radius:var(--radius-sm);">
+                    <label for="cfCurrencySelectHeader" style="font-size:0.72rem; font-weight:800; color:var(--text-muted); text-transform:uppercase; margin:0; display:flex; align-items:center; gap:0.3rem;">
+                      <span>💱</span> CURRENCY:
+                    </label>
+                    <select id="cfCurrencySelectHeader" class="cad-input-field" style="padding:0.25rem 0.5rem; font-size:0.8rem; font-weight:700; width:auto; min-width:130px; cursor:pointer;">
+                      <option value="INR">INR (₹)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                    </select>
                   </div>
                 </div>
 

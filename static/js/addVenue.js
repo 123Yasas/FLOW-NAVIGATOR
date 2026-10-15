@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FlowNavigator - Add Custom Venue Module
  * Allows users to register custom grounds/events (college, sports, festival, etc.)
  * with size-based automatic capacity estimation and live monitoring integration.
@@ -255,6 +255,7 @@ const AddVenueManager = {
 
     window.GoogleMapsManager.venueConfigs[venue.id] = {
       name: venue.name,
+      city: (venue.city && venue.city !== 'undefined') ? venue.city : '',
       lat: venue.lat,
       lng: venue.lng,
       zoom: venue.area > 100000 ? 14 : venue.area > 20000 ? 15 : 16,

@@ -327,6 +327,58 @@ const GoogleMapsManager = {
         <path d="M 230,310 L 230,410 L 540,410 L 540,300" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
         <text x="280" y="430" fill="#047857" font-size="11" font-weight="bold">✔ RECOMMENDED: SOUTH SKYWALK DECK (3m WAIT)</text>
       `;
+    } else if (v.isCustom || String(venueId).startsWith('custom-') || String(v.type).includes('college') || String(v.type).includes('ground') || String(v.type).includes('festival') || (v.name && (v.name.toLowerCase().includes('college') || v.name.toLowerCase().includes('ground') || v.name.toLowerCase().includes('campus') || v.name.toLowerCase().includes('sona')))) {
+      // College Campus / Festival Ground / Open Field Layout (Tailored for College Grounds like Sona College Ground)
+      svgContent = `
+        <!-- Campus & Ground Perimeter Boundary -->
+        <rect x="70" y="45" width="660" height="410" rx="14" fill="#f8fafc" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8,6"/>
+        <text x="90" y="70" fill="#2563eb" font-size="10" font-weight="800" letter-spacing="1">CAMPUS &amp; EVENT GROUNDS PERIMETER</text>
+
+        <!-- Central Open Arena / Lawn (Zone D - Recommended Bypass Artery) -->
+        <rect x="230" y="140" width="340" height="220" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+        <text x="310" y="255" fill="#047857" font-size="13" font-weight="900" letter-spacing="1">CENTRAL QUAD &amp; ARENA</text>
+
+        <!-- West Promenade & Food Stalls (Zone B) -->
+        <rect x="170" y="75" width="230" height="45" rx="6" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="185" y="103" fill="#b45309" font-size="11" font-weight="bold">Food Court &amp; Innovation Stalls (Zone B)</text>
+
+        <!-- Main Stage / Auditorium Pavilion (Zone C - Chokepoint) -->
+        <g transform="translate(580, 150)">
+          <rect x="0" y="0" width="130" height="190" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.5"/>
+          <text x="16" y="85" fill="#b91c1c" font-size="13" font-weight="900">MAIN STAGE</text>
+          <text x="14" y="105" fill="#b91c1c" font-size="11" font-weight="bold">AUDITORIUM</text>
+          <text x="14" y="125" fill="#991b1b" font-size="10" font-weight="700">780 / 800 (97.5%)</text>
+          <circle cx="65" cy="35" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="2"/>
+          <circle cx="65" cy="35" r="5" fill="#ffffff"/>
+        </g>
+
+        <!-- Gate A: Main Campus Entrance (Zone A) -->
+        <g transform="translate(110, 250)">
+          <rect x="-18" y="-35" width="36" height="70" rx="4" fill="#047857" stroke="#ffffff" stroke-width="2"/>
+          <text x="-16" y="5" fill="#ffffff" font-size="9" font-weight="900" transform="rotate(-90 0 0)">MAIN GATE</text>
+          <circle cx="0" cy="0" r="18" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+          <circle cx="0" cy="0" r="7" fill="#10b981"/>
+          <text x="26" y="-5" fill="#0f172a" font-size="12" font-weight="bold">Gate A (Main Entry)</text>
+          <text x="26" y="12" fill="#475569" font-size="10">245 Influx</text>
+        </g>
+
+        <!-- Parking & Shuttle Departure Bay (Zone F) -->
+        <rect x="580" y="370" width="130" height="65" rx="6" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+        <text x="592" y="402" fill="#1e293b" font-size="10" font-weight="bold">VEHICLE PARKING &amp;</text>
+        <text x="600" y="418" fill="#475569" font-size="9" font-weight="bold">TRANSIT SHUTTLES</text>
+
+        <!-- Route A (Direct Central Artery - Heavily Congested) -->
+        <path d="M 110,250 L 230,250 L 580,250" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+        <text x="235" y="235" fill="#b91c1c" font-size="11" font-weight="bold">ROUTE A: DIRECT ARTERY (HEAVY 28m DELAY)</text>
+
+        <!-- Route B (West Promenade via Stalls - Moderate) -->
+        <path d="M 110,250 L 170,95 L 400,95 L 580,180" fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="6,4"/>
+        <text x="250" y="85" fill="#b45309" font-size="10" font-weight="bold">ROUTE B: WEST PROMENADE (15m)</text>
+
+        <!-- Route C (Recommended North Lawn Perimeter Bypass - FAST 6M) -->
+        <path d="M 110,250 L 140,400 L 500,400 L 580,320" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
+        <text x="180" y="425" fill="#047857" font-size="12" font-weight="bold">✔ RECOMMENDED: ROUTE C (EXPRESS BYPASS - 6m WAIT)</text>
+      `;
     } else {
       // Palani Gathering: Hilltop temple steps, ropeway, foothill plaza, bypass ramp
       svgContent = `
@@ -368,8 +420,10 @@ const GoogleMapsManager = {
       `;
     }
 
+    const cityName = (v.city && v.city !== 'undefined' && String(v.city).trim() !== '') ? String(v.city).trim() : '';
+
     el.innerHTML = `
-      <div class="vector-map-canvas" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.5rem; position:relative; background:#f8fafc;">
+      <div class="vector-map-canvas" style="display:flex; flex-direction:column; justify-content:space-between; position:relative; background:#f8fafc; width:100%; height:100%;">
         <svg viewBox="0 0 800 500" style="width:100%; height:100%; position:absolute; inset:0;" preserveAspectRatio="xMidYMid meet">
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -380,13 +434,15 @@ const GoogleMapsManager = {
           ${svgContent}
         </svg>
 
-        <!-- Dynamic Label Overlay -->
-        <div style="position:relative; z-index:5; pointer-events:none; display:flex; justify-content:space-between; align-items:flex-start;">
-          <div style="background:#ffffff; padding:0.5rem 0.85rem; border-radius:8px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(15,23,42,0.06);">
-            <div style="font-size:0.75rem; color:#475569; font-weight:700;">ACTIVE VENUE MAP</div>
-            <div style="font-size:0.95rem; font-weight:800; color:#0f172a;">${v.name} (${v.city})</div>
+        <!-- Responsive Dynamic Label Overlay -->
+        <div class="map-top-overlay" style="position:relative; z-index:5; pointer-events:none; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; padding:0.75rem 1rem; width:100%;">
+          <div class="map-active-venue-chip" style="background:rgba(255,255,255,0.95); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:0.4rem 0.75rem; border-radius:8px; border:1px solid rgba(226,232,240,0.9); box-shadow:0 2px 6px rgba(15,23,42,0.06); max-width:70%;">
+            <div style="font-size:0.65rem; color:#64748b; font-weight:800; letter-spacing:0.04em;">ACTIVE VENUE MAP</div>
+            <div style="font-size:0.88rem; font-weight:800; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${v.name}${cityName ? ` <span style="font-size:0.75rem; color:#64748b; font-weight:600;">(${cityName})</span>` : ''}
+            </div>
           </div>
-          <div style="background:#ecfdf5; padding:0.4rem 0.75rem; border-radius:8px; border:1px solid #a7f3d0; font-size:0.75rem; color:#047857; font-weight:700; box-shadow:0 2px 6px rgba(15,23,42,0.04);">
+          <div class="map-live-status-pill" style="background:rgba(236,253,245,0.95); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:0.35rem 0.65rem; border-radius:9999px; border:1px solid #a7f3d0; font-size:0.72rem; color:#047857; font-weight:700; white-space:nowrap; box-shadow:0 2px 6px rgba(15,23,42,0.04);">
             ● Live Flow Overlay
           </div>
         </div>
@@ -399,7 +455,9 @@ const GoogleMapsManager = {
     const v = this.venueConfigs[venueId];
     if (v) {
       const coordEl = document.getElementById('mapCoordDisplay');
-      if (coordEl) coordEl.textContent = `${v.lat.toFixed(4)}° N, ${v.lng.toFixed(4)}° E`;
+      if (coordEl && v.lat && v.lng) {
+        coordEl.textContent = `${Number(v.lat).toFixed(4)}° N, ${Number(v.lng).toFixed(4)}° E`;
+      }
 
       const titleEl = document.getElementById('adminMapHeaderTitle');
       if (titleEl) titleEl.textContent = `${v.name} - Spatial Flow Layout`;

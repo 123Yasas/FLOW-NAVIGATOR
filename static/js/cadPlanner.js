@@ -137,9 +137,49 @@ const CadPlanner = {
       });
     }
 
+    const currencySelect = document.getElementById('cfCurrencySelect');
+    const currencyHeaderSelect = document.getElementById('cfCurrencySelectHeader');
+
+    const onCurrencyChange = (newCurrency) => {
+      if (this.state.currency === newCurrency) return;
+      const oldCurrency = this.state.currency;
+      this.state.currency = newCurrency;
+      if (currencySelect) currencySelect.value = newCurrency;
+      if (currencyHeaderSelect) currencyHeaderSelect.value = newCurrency;
+
+      // Update Budget Limit label
+      const budgetLabel = document.getElementById('cfBudgetLimitLabel');
+      const symbols = { 'INR': '₹', 'USD': '$', 'EUR': '€' };
+      const curSym = symbols[newCurrency] || newCurrency;
+      if (budgetLabel) {
+        budgetLabel.textContent = `BUDGET LIMIT (${newCurrency} ${curSym})`;
+      }
+
+      // Convert current budget limit appropriately
+      const rates = { 'USD': 1.0, 'INR': 85.0, 'EUR': 0.92 };
+      const fromRate = rates[oldCurrency] || 1.0;
+      const toRate = rates[newCurrency] || 1.0;
+      if (budgetInput && this.state.budget_limit) {
+        const converted = Math.round((this.state.budget_limit / fromRate) * toRate);
+        this.state.budget_limit = converted;
+        budgetInput.value = converted;
+      }
+
+      // Clear custom edited prices when switching currency so engine recalculates in target currency
+      this.state.customUnitPrices = {};
+      this.fetchOrComputePlan();
+    };
+
+    if (currencySelect) {
+      currencySelect.addEventListener('change', (e) => onCurrencyChange(e.target.value));
+    }
+    if (currencyHeaderSelect) {
+      currencyHeaderSelect.addEventListener('change', (e) => onCurrencyChange(e.target.value));
+    }
+
     if (budgetInput) {
       budgetInput.addEventListener('input', (e) => {
-        this.state.budget_limit = Math.max(1000, parseFloat(e.target.value) || 50000);
+        this.state.budget_limit = Math.max(100, parseFloat(e.target.value) || 50000);
         this.fetchOrComputePlan();
       });
     }
@@ -538,7 +578,10 @@ const CadPlanner = {
       statEvac.style.color = parseFloat(c.evacuation_time_mins) <= 15 ? '#047857' : '#b91c1c';
     }
     if (statBudget) {
-      statBudget.textContent = `${b.currency} ${b.grand_total.toLocaleString()}`;
+      const curCode = (b.currency || this.state.currency || 'USD').toUpperCase();
+      const symMap = { 'INR': '₹', 'USD': '$', 'EUR': '€' };
+      const curDisplay = symMap[curCode] ? `${curCode} ${symMap[curCode]}` : curCode;
+      statBudget.textContent = `${curDisplay} ${b.grand_total.toLocaleString()}`;
       statBudget.style.color = b.is_over_budget ? '#b91c1c' : '#047857';
     }
   },
@@ -1192,35 +1235,38 @@ const CadPlanner = {
     if (!this.state.plan || !this.state.plan.budget) return;
 
     const b = this.state.plan.budget;
-    const cur = b.currency || 'USD';
+    const curCode = (b.currency || this.state.currency || 'USD').toUpperCase();
+    const symMap = { 'INR': '₹', 'USD': '$', 'EUR': '€' };
+    const curSym = symMap[curCode] || '';
+    const curDisplay = curSym ? `${curCode} ${curSym}` : curCode;
 
     if (budgetSummary) {
       budgetSummary.innerHTML = `
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; padding:1.25rem; background:#f8fafc; border-bottom:1px solid var(--border-subtle);">
           <div>
             <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">BUDGET LIMIT</span>
-            <div style="font-size:1.3rem; font-weight:900; color:var(--text-main);">${cur} ${b.budget_limit.toLocaleString()}</div>
+            <div style="font-size:1.3rem; font-weight:900; color:var(--text-main);">${curDisplay} ${b.budget_limit.toLocaleString()}</div>
           </div>
           <div>
             <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">ESTIMATED TOTAL</span>
-            <div style="font-size:1.3rem; font-weight:900; color:${b.is_over_budget ? '#b91c1c' : '#047857'};">${cur} ${b.grand_total.toLocaleString()}</div>
+            <div style="font-size:1.3rem; font-weight:900; color:${b.is_over_budget ? '#b91c1c' : '#047857'};">${curDisplay} ${b.grand_total.toLocaleString()}</div>
           </div>
           <div>
             <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">BUDGET BALANCE</span>
             <div style="font-size:1.3rem; font-weight:900; color:${b.is_over_budget ? '#b91c1c' : '#047857'};">
-              ${b.is_over_budget ? `- ${cur} ${Math.abs(b.remaining_budget).toLocaleString()} (DEFICIT)` : `+ ${cur} ${b.remaining_budget.toLocaleString()} (SURPLUS)`}
+              ${b.is_over_budget ? `- ${curDisplay} ${Math.abs(b.remaining_budget).toLocaleString()} (DEFICIT)` : `+ ${curDisplay} ${b.remaining_budget.toLocaleString()} (SURPLUS)`}
             </div>
           </div>
           <div>
             <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">CONTINGENCY RESERVE</span>
-            <div style="font-size:1.1rem; font-weight:800; color:var(--text-muted);">${cur} ${(b.contingency_10pct || 0).toLocaleString()} (10%)</div>
+            <div style="font-size:1.1rem; font-weight:800; color:var(--text-muted);">${curDisplay} ${(b.contingency_10pct || 0).toLocaleString()} (10%)</div>
           </div>
         </div>
 
         ${b.is_over_budget ? `
           <div style="background:#fef2f2; border:1px solid #fca5a5; padding:0.75rem 1.25rem; font-size:0.8rem; color:#b91c1c; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
             <div>
-              <strong>⚠️ Budget Deficit Detected:</strong> Estimated planning costs exceed your budget limit by ${cur} ${Math.abs(b.remaining_budget).toLocaleString()}.
+              <strong>⚠️ Budget Deficit Detected:</strong> Estimated planning costs exceed your budget limit by ${curDisplay} ${Math.abs(b.remaining_budget).toLocaleString()}.
             </div>
             <button id="cfAutoOptimizeBudgetBtn" class="btn btn-sm" style="background:#dc2626; color:#ffffff; font-weight:800;">
               Apply Budget-Optimized Layout Plan
@@ -1250,7 +1296,7 @@ const CadPlanner = {
             <input type="number" class="cf-price-edit-input" data-idx="${idx}" value="${item.unit_price}" style="width:75px; text-align:right; padding:0.25rem 0.4rem; border:1px solid var(--border-subtle); border-radius:4px; font-weight:700;" />
           </td>
           <td style="padding:0.6rem 0.85rem; text-align:right; font-weight:800; color:var(--text-main); font-family:monospace;">
-            ${cur} ${item.total.toLocaleString()}
+            ${curDisplay} ${item.total.toLocaleString()}
           </td>
           <td style="padding:0.6rem 0.85rem; font-size:0.72rem; color:var(--text-muted);">${item.source}</td>
         </tr>
@@ -1292,7 +1338,9 @@ const CadPlanner = {
     if (!wrap || !this.state.plan || !this.state.plan.alternatives) return;
 
     const alts = this.state.plan.alternatives;
-    const cur = this.state.currency || 'USD';
+    const curCode = (this.state.currency || 'USD').toUpperCase();
+    const symMap = { 'INR': '₹', 'USD': '$', 'EUR': '€' };
+    const curDisplay = symMap[curCode] ? `${curCode} ${symMap[curCode]}` : curCode;
 
     wrap.innerHTML = `
       <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem;">
@@ -1327,7 +1375,7 @@ const CadPlanner = {
                 </div>
                 <div>
                   <span style="color:var(--text-muted);">Estimated Total:</span>
-                  <strong style="display:block; color:${badgeCol}; font-weight:800;">${cur} ${a.grand_total.toLocaleString()}</strong>
+                  <strong style="display:block; color:${badgeCol}; font-weight:800;">${curDisplay} ${a.grand_total.toLocaleString()}</strong>
                 </div>
               </div>
             </div>

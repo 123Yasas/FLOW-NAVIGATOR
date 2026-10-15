@@ -372,8 +372,16 @@ class CrowdFlowEngine:
         ]
 
         # 8. Deterministic Equipment Quantities & Itemized Budget
-        # Unit prices (configurable / editable by user)
-        unit_prices = {
+        # Currency rates relative to USD (USD: 1.0, INR: 86.0, EUR: 0.92)
+        currency_multipliers = {
+            "USD": 1.0,
+            "INR": 85.0,
+            "EUR": 0.92
+        }
+        curr_mult = currency_multipliers.get(currency.upper(), 1.0)
+
+        # Base USD unit prices (configurable / editable by user)
+        base_unit_prices_usd = {
             "barricade_panel": 28.0,        # per 2.5m panel (rental/day)
             "queue_stanchion_m": 12.0,      # per linear meter
             "turnstile_counter": 380.0,     # per IoT optical gate unit
@@ -390,6 +398,12 @@ class CrowdFlowEngine:
             "walkie_talkie": 22.0,          # per digital two-way radio
             "waste_bin": 18.0,              # per heavy-duty rolling waste bin
             "logistics_base": 2800.0        # transport, setup & strike crew base
+        }
+
+        # Calculate localized prices
+        unit_prices = {
+            k: round(v * curr_mult, 2 if curr_mult != 85.0 else 0)
+            for k, v in base_unit_prices_usd.items()
         }
 
         # Override with custom prices if provided in params
