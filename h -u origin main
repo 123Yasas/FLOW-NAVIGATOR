@@ -1,0 +1,77 @@
+[33mf17cb88[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;32mbackup-flow-navigator[m[33m)[m Update FLOW-NAVIGATOR project
+ .env.example                                       |    9 [32m+[m
+ .gitignore                                         |    8 [32m+[m
+ README.md                                          |  109 [32m+[m
+ __pycache__/app.cpython-314.pyc                    |  Bin [31m0[m -> [32m32609[m bytes
+ __pycache__/crowdflow_engine.cpython-313.pyc       |  Bin [31m0[m -> [32m25947[m bytes
+ __pycache__/database.cpython-313.pyc               |  Bin [31m0[m -> [32m21819[m bytes
+ __pycache__/database.cpython-314.pyc               |  Bin [31m0[m -> [32m22273[m bytes
+ api/__pycache__/index.cpython-314.pyc              |  Bin [31m0[m -> [32m489[m bytes
+ api/index.py                                       |   10 [32m+[m
+ app.py                                             |  760 [32m++++[m
+ bun.lock                                           |  739 [32m+++[m
+ crowdflow_engine.py                                |  712 [32m+++[m
+ database.py                                        |  590 [32m+++[m
+ firmware/README.md                                 |   68 [32m+[m
+ firmware/esp32_vl53l0x_counter.ino                 |  239 [32m+[m
+ index.html                                         |   17 [32m+[m
+ metadata.json                                      |    6 [32m+[m
+ ml/__pycache__/predictor.cpython-313.pyc           |  Bin [31m0[m -> [32m8652[m bytes
+ ml/__pycache__/predictor.cpython-314.pyc           |  Bin [31m0[m -> [32m8821[m bytes
+ ml/__pycache__/train_model.cpython-313.pyc         |  Bin [31m0[m -> [32m8067[m bytes
+ ml/__pycache__/train_model.cpython-314.pyc         |  Bin [31m0[m -> [32m8367[m bytes
+ ml/model_metadata.joblib                           |  Bin [31m0[m -> [32m631[m bytes
+ ml/predictor.py                                    |  154 [32m+[m
+ ml/rf_congestion_model.joblib                      |  Bin [31m0[m -> [32m7968057[m bytes
+ ml/rf_wait_model.joblib                            |  Bin [31m0[m -> [32m18907313[m bytes
+ ml/train_model.py                                  |  193 [32m+[m
+ package-lock.json                                  | 4764 [32m++++++++++++++++++++[m
+ package.json                                       |   36 [32m+[m
+ requirements.txt                                   |   10 [32m+[m
+ server.ts                                          |  155 [32m+[m
+ src/App.tsx                                        |   39 [32m+[m
+ src/components/LandingPage.tsx                     |  260 [32m++[m
+ src/components/Navbar.tsx                          |  154 [32m+[m
+ src/components/admin/AdminDashboard.tsx            |   44 [32m+[m
+ src/components/admin/AdminHeader.tsx               |  202 [32m+[m
+ src/components/admin/AdminSidebar.tsx              |  147 [32m+[m
+ src/components/admin/tabs/AlertsTab.tsx            |  170 [32m+[m
+ src/components/admin/tabs/AnalyticsTab.tsx         |  204 [32m+[m
+ src/components/admin/tabs/CrowdIntelligenceTab.tsx |  242 [32m+[m
+ src/components/admin/tabs/LiveMonitorTab.tsx       |  337 [32m++[m
+ src/components/admin/tabs/OverviewTab.tsx          |  319 [32m++[m
+ src/components/admin/tabs/RouteManagementTab.tsx   |  194 [32m+[m
+ src/components/admin/tabs/SensorsIoTTab.tsx        |  126 [32m+[m
+ src/components/admin/tabs/SmartPlanTab.tsx         |  592 [32m+++[m
+ src/components/admin/tabs/SystemStatusTab.tsx      |  157 [32m+[m
+ src/components/citizen/CitizenView.tsx             |  390 [32m++[m
+ src/components/demo/HackathonDemoBar.tsx           |    8 [32m+[m
+ src/components/demo/JuryDemoGuideModal.tsx         |  189 [32m+[m
+ .../layout/EventCrowdManagementLayoutPlan.tsx      | 1328 [32m++++++[m
+ src/components/map/SchematicVenueMap.tsx           |  299 [32m++[m
+ src/components/planner/SmartVenuePlanner.tsx       | 1198 [32m+++++[m
+ src/components/public/PublicKioskDisplay.tsx       |  147 [32m+[m
+ src/context/CrowdContext.tsx                       |  597 [32m+++[m
+ src/data/mockData.ts                               |  422 [32m++[m
+ src/index.css                                      |   71 [32m+[m
+ src/main.tsx                                       |   10 [32m+[m
+ src/services/alertService.ts                       |   41 [32m+[m
+ src/services/crowdService.ts                       |  113 [32m+[m
+ src/services/routeService.ts                       |  104 [32m+[m
+ src/services/sensorService.ts                      |   82 [32m+[m
+ src/services/simulationService.ts                  |  135 [32m+[m
+ src/services/venueService.ts                       |  237 [32m+[m
+ src/types.ts                                       |  232 [32m+[m
+ static/css/style.css                               | 1731 [32m+++++++[m
+ static/js/addVenue.js                              |  357 [32m++[m
+ static/js/app.js                                   | 1405 [32m++++++[m
+ static/js/cadPlanner.js                            | 1547 [32m+++++++[m
+ static/js/googleMaps.js                            |  421 [32m++[m
+ static/js/i18n.js                                  |  253 [32m++[m
+ static/js/mlDashboard.js                           |  140 [32m+[m
+ static/js/sensorSimulator.js                       |  200 [32m+[m
+ templates/index.html                               | 2045 [32m+++++++++[m
+ tsconfig.json                                      |   26 [32m+[m
+ vercel.json                                        |   22 [32m+[m
+ vite.config.ts                                     |   22 [32m+[m
+ 75 files changed, 25538 insertions(+)
