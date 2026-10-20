@@ -258,10 +258,10 @@ const FlowApp = {
     const target = document.getElementById(`${role}View`);
     if (target) target.classList.add('active');
 
-    // Add Venue button: ONLY visible in Admin Center when logged in
+    // Add Venue button: always accessible from navbar
     const addVenueBtn = document.getElementById('openAddVenueModalBtn');
     if (addVenueBtn) {
-      addVenueBtn.style.display = (role === 'admin' && this.isAdminLoggedIn) ? 'flex' : 'none';
+      addVenueBtn.style.display = 'inline-flex';
     }
 
     // Trigger icon render
@@ -355,6 +355,10 @@ const FlowApp = {
 
     if (tab === 'esp32-iot') {
       this.fetchEsp32Sensors();
+    }
+
+    if (tab === 'venue-management-tab' && window.VenueCrudManager) {
+      window.VenueCrudManager.loadVenues();
     }
   },
 

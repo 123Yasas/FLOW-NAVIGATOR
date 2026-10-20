@@ -5,9 +5,19 @@ Loads pre-trained Random Forest models and executes low-latency crowd prediction
 
 import os
 import joblib
+import warnings
 import numpy as np
+import pandas as pd
 import datetime
 from ml.train_model import FEATURE_NAMES
+
+# Suppress scikit-learn parallel configuration thread worker warnings & pickle version differences
+warnings.filterwarnings('ignore', category=UserWarning, module=r'sklearn\.utils\.parallel')
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings('ignore', category=InconsistentVersionWarning)
+except Exception:
+    pass
 
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
 CLASSIFIER_PATH = os.path.join(MODEL_DIR, 'rf_congestion_model.joblib')
@@ -26,6 +36,11 @@ class CrowdPredictor:
             if os.path.exists(CLASSIFIER_PATH) and os.path.exists(REGRESSOR_PATH):
                 self.classifier = joblib.load(CLASSIFIER_PATH)
                 self.regressor = joblib.load(REGRESSOR_PATH)
+                # Single-threaded low-latency inference prevents joblib parallel worker warnings in Python 3.12+
+                if hasattr(self.classifier, 'n_jobs'):
+                    self.classifier.n_jobs = 1
+                if hasattr(self.regressor, 'n_jobs'):
+                    self.regressor.n_jobs = 1
                 if os.path.exists(METADATA_PATH):
                     self.metadata = joblib.load(METADATA_PATH)
                 print("FlowNavigator Random Forest models loaded successfully.")
@@ -77,7 +92,7 @@ class CrowdPredictor:
             weather_factor,
             bottleneck_proximity
         ]
-        return np.array([features])
+        return pd.DataFrame([features], columns=FEATURE_NAMES)
 
     def predict_zone(self, zone_data, weather_factor=1.0):
         """

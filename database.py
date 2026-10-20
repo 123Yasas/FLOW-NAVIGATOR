@@ -520,6 +520,31 @@ class MongoDatabase:
     def get_venues(self):
         return list(self.db.venues.find({}, {"_id": 0}))
 
+    def add_venue(self, venue_dict, zones_list=None):
+        """Adds or updates a custom venue and inserts its default zones in the active DB."""
+        if not venue_dict or not venue_dict.get("id"):
+            return False
+        self.db.venues.update_one({"id": venue_dict["id"]}, {"$set": venue_dict}, upsert=True)
+        if zones_list:
+            for z in zones_list:
+                self.db.zones.update_one({"id": z["id"]}, {"$set": z}, upsert=True)
+        return True
+
+    def update_venue(self, venue_id, update_fields):
+        """Updates specific fields of a venue in active DB."""
+        if not venue_id or not update_fields:
+            return False
+        res = self.db.venues.update_one({"id": venue_id}, {"$set": update_fields})
+        return res.modified_count > 0 or res.matched_count > 0
+
+    def delete_venue(self, venue_id):
+        """Deletes a venue and associated zones from active DB."""
+        if not venue_id:
+            return False
+        self.db.venues.delete_one({"id": venue_id})
+        self.db.zones.delete_many({"venue_id": venue_id})
+        return True
+
     def get_zones(self, venue_id=None):
         query = {"venue_id": venue_id} if venue_id else {}
         return list(self.db.zones.find(query, {"_id": 0}))

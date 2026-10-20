@@ -258,10 +258,101 @@ def health():
     })
 
 # --- Venues ---
-@app.route("/api/venues", methods=["GET"])
+@app.route("/api/venues", methods=["GET", "POST"])
 def get_venues():
+    if request.method == "POST":
+        data = request.get_json() or {}
+        venue_id = data.get("id")
+        name = data.get("name")
+        if not venue_id or not name:
+            return jsonify({"success": False, "message": "Venue ID and Name are required"}), 400
+        
+        venue_dict = {
+            "id": venue_id,
+            "name": name,
+            "city": data.get("city", ""),
+            "type": data.get("type", "custom"),
+            "capacity": data.get("capacity", 5000),
+            "area": data.get("area", 0),
+            "gates": data.get("gates", 4),
+            "zones_count": data.get("zones", 5),
+            "lat": data.get("lat", 11.0168),
+            "lng": data.get("lng", 76.9558),
+            "is_custom": True,
+            "created_at": datetime.datetime.now().isoformat()
+        }
+        
+        # Auto-create zones for this custom venue
+        zone_count = max(2, min(20, int(data.get("zones", 5))))
+        cap = int(data.get("capacity", 5000))
+        per_zone_cap = max(50, round(cap / zone_count))
+        
+        default_names = [
+            "Main Entry & Ticket Gate", "Central Field & Promenade", "North Stand & Egress Artery",
+            "South Pavilion & Seating", "East Wing Concourse", "West Court Promenade",
+            "VIP Enclosure & Control", "Food Court & Water Stations", "Media Deck", "Emergency Muster Point"
+        ]
+        
+        custom_zones = []
+        for i in range(zone_count):
+            letter = chr(65 + i)
+            zid = f"zone-{letter.lower()}-{venue_id}"
+            zname = f"Zone {letter}: {default_names[i] if i < len(default_names) else f'Section {letter}'}"
+            cur_count = int(per_zone_cap * (0.35 + (i * 0.08) % 0.45))
+            custom_zones.append({
+                "id": zid,
+                "code": f"ZONE {letter}",
+                "name": zname,
+                "venue_id": venue_id,
+                "capacity": per_zone_cap,
+                "current_count": cur_count,
+                "entry_rate": 30 + (i * 5) % 25,
+                "exit_rate": 25 + (i * 3) % 20,
+                "status": "SAFE" if cur_count < per_zone_cap * 0.65 else ("MODERATE" if cur_count < per_zone_cap * 0.85 else "HIGH"),
+                "access_restricted": False,
+                "is_evacuation_path": (i % 2 == 1),
+                "bottleneck_proximity": 0.2 + (i * 0.12) % 0.6,
+                "description": f"Designated zone {letter} for {name} with monitored crowd flow.",
+                "lat": 11.0168 + (i * 0.001),
+                "lng": 76.9558 + (i * 0.001)
+            })
+            
+        db.add_venue(venue_dict, custom_zones)
+        return jsonify({"success": True, "venue": venue_dict, "zones": custom_zones})
+
     venues = db.get_venues()
     return jsonify({"venues": venues, "active_venue_id": SYSTEM_STATE["active_venue_id"]})
+
+@app.route("/api/venues/<venue_id>", methods=["GET", "PUT", "DELETE"])
+def single_venue(venue_id):
+    if request.method == "DELETE":
+        # Check if default venue
+        if venue_id in ["palani-gathering", "meenakshi-temple"]:
+            return jsonify({"success": False, "message": "Cannot delete core default template venue"}), 400
+        success = db.delete_venue(venue_id)
+        if SYSTEM_STATE["active_venue_id"] == venue_id:
+            SYSTEM_STATE["active_venue_id"] = "palani-gathering"
+        return jsonify({"success": success, "message": f"Venue '{venue_id}' deleted successfully"})
+        
+    elif request.method == "PUT":
+        data = request.get_json() or {}
+        update_fields = {}
+        for k in ["name", "city", "capacity", "category", "type", "area", "gates", "lat", "lng"]:
+            if k in data:
+                update_fields[k] = data[k]
+        if "capacity" in update_fields:
+            update_fields["total_capacity"] = int(update_fields["capacity"])
+            
+        success = db.update_venue(venue_id, update_fields)
+        return jsonify({"success": True, "message": "Venue updated successfully", "fields": update_fields})
+        
+    else:  # GET
+        venues = db.get_venues()
+        v = next((item for item in venues if item.get("id") == venue_id), None)
+        if not v:
+            return jsonify({"success": False, "message": "Venue not found"}), 404
+        zones = db.get_zones(venue_id)
+        return jsonify({"success": True, "venue": v, "zones": zones})
 
 # --- Zones & Live Predictions ---
 @app.route("/api/zones", methods=["GET"])
@@ -269,6 +360,48 @@ def get_zones():
     venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
     zones = db.get_zones(venue_id)
     
+    # If no zones found and venue is a custom venue, create dynamic mock zones on the fly
+    if not zones and str(venue_id).startswith("custom-"):
+        # Check if venue exists in db
+        existing_venues = db.get_venues()
+        v_match = next((v for v in existing_venues if v.get("id") == venue_id), None)
+        cap = v_match.get("capacity", 5000) if v_match else 5000
+        z_count = v_match.get("zones_count", 5) if v_match else 5
+        per_zone_cap = max(50, round(cap / z_count))
+        
+        default_names = [
+            "Main Entry & Ticket Gate", "Central Field & Promenade", "North Stand & Egress Artery",
+            "South Pavilion & Seating", "East Wing Concourse", "West Court Promenade",
+            "VIP Enclosure & Control", "Food Court & Water Stations", "Media Deck", "Emergency Muster Point"
+        ]
+        
+        dynamic_zones = []
+        for i in range(z_count):
+            letter = chr(65 + i)
+            zid = f"zone-{letter.lower()}-{venue_id}"
+            zname = f"Zone {letter}: {default_names[i] if i < len(default_names) else f'Section {letter}'}"
+            cur_count = int(per_zone_cap * (0.35 + (i * 0.08) % 0.45))
+            dynamic_zones.append({
+                "id": zid,
+                "code": f"ZONE {letter}",
+                "name": zname,
+                "venue_id": venue_id,
+                "capacity": per_zone_cap,
+                "current_count": cur_count,
+                "entry_rate": 32 + (i * 4) % 20,
+                "exit_rate": 28 + (i * 3) % 18,
+                "status": "SAFE" if cur_count < per_zone_cap * 0.65 else ("MODERATE" if cur_count < per_zone_cap * 0.85 else "HIGH"),
+                "access_restricted": False,
+                "is_evacuation_path": (i % 2 == 1),
+                "bottleneck_proximity": 0.25 + (i * 0.1) % 0.5,
+                "description": f"Monitored live zone {letter}.",
+                "lat": 11.0168 + (i * 0.001),
+                "lng": 76.9558 + (i * 0.001)
+            })
+        for z in dynamic_zones:
+            db.db.zones.update_one({"id": z["id"]}, {"$set": z}, upsert=True)
+        zones = dynamic_zones
+
     # Enrich each zone with live Random Forest prediction
     enriched_zones = []
     for zone in zones:

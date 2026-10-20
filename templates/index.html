@@ -63,8 +63,8 @@
         <i data-lucide="compass" style="width:15px;height:15px;"></i>
         <span>🧭 CrowdFlow AI Planner</span>
       </button>
-      <!-- Add Custom Venue Button (Admin Only) -->
-      <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:none;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;">
+      <!-- Add Custom Venue Button -->
+      <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;" title="Add Custom Ground or Venue">
         <i data-lucide="plus-circle" style="width:15px;height:15px;"></i>
         <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
       </button>
@@ -458,6 +458,12 @@
           <button class="admin-nav-item active" data-tab="overview">
             <i data-lucide="layout-dashboard" style="width:18px;height:18px;"></i>
             <span>Executive Overview</span>
+          </button>
+
+          <button class="admin-nav-item" data-tab="venue-management-tab">
+            <i data-lucide="map-pin" style="width:18px;height:18px;color:#2563eb;"></i>
+            <span>Venue Directory &amp; CRUD</span>
+            <span class="badge" style="background:#ecfdf5;color:#047857;font-size:0.65rem;padding:0.15rem 0.4rem;margin-left:auto;font-weight:800;">CRUD</span>
           </button>
           
           <button class="admin-nav-item" data-tab="digital-twin">
@@ -1515,6 +1521,83 @@
 
           </div>
 
+          <!-- TAB: VENUE DIRECTORY & GROUND CRUD MANAGEMENT (IN ADMIN CONSOLE) -->
+          <div id="tab-venue-management-tab" class="admin-tab-content">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h2 style="font-size:1.4rem; font-weight:800; color:var(--text-main); margin-bottom:0.25rem;">
+                  Venue Directory &amp; Full CRUD Management
+                </h2>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0;">
+                  Inspect live grounds, edit safe capacities, register new festival sectors, or remove obsolete venues.
+                </p>
+              </div>
+
+              <div style="display:flex; gap:0.6rem;">
+                <button class="btn btn-outline btn-sm" onclick="VenueCrudManager.loadVenues()">
+                  <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh Roster
+                </button>
+                <button class="btn btn-primary btn-sm" style="background:#2563eb;" onclick="AddVenueManager.openModal()">
+                  <i data-lucide="plus-circle" style="width:14px;height:14px;"></i> + Register New Venue
+                </button>
+              </div>
+            </div>
+
+            <!-- In-Console Quick KPI Stats Strip -->
+            <div class="grid-4" style="margin-bottom:1.5rem;">
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Registered Venues</div>
+                <div id="adminVmStatCount" style="font-size:2rem; font-weight:800; color:#2563eb; margin:0.25rem 0;">--</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);">● Active on Live Dispatch</div>
+              </div>
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Combined Safe Capacity</div>
+                <div id="adminVmStatCap" style="font-size:1.8rem; font-weight:800; color:#059669; margin:0.25rem 0;">--</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Persons across sectors</div>
+              </div>
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Monitored Ground</div>
+                <div id="adminVmStatActive" style="font-size:1.15rem; font-weight:800; color:var(--text-main); margin:0.4rem 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">--</div>
+                <div style="font-size:0.75rem; color:#2563eb; font-weight:700;">Live in Maps &amp; Kiosks</div>
+              </div>
+              <div class="card" style="padding:1rem 1.25rem;">
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Database Persistence</div>
+                <div style="font-size:1.6rem; font-weight:800; color:#1d4ed8; margin:0.25rem 0;">MongoDB + Sync</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">Real-time Telemetry Synced</div>
+              </div>
+            </div>
+
+            <!-- In-Console Venue Table Card -->
+            <div class="card" style="margin-bottom:1.5rem;">
+              <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <i data-lucide="layers" style="color:#2563eb;"></i>
+                  <span>Registered Grounds, Pilgrimages &amp; Complexes</span>
+                </div>
+                <input id="adminVmSearchInput" type="text" placeholder="Search venues..." class="av-input" style="width:220px; padding:0.35rem 0.65rem; font-size:0.8rem;" oninput="VenueCrudManager.renderAdminTabTable()">
+              </div>
+
+              <div style="overflow-x:auto;">
+                <table class="analytics-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th>Venue / Ground Name</th>
+                      <th>Category &amp; Type</th>
+                      <th>City / Location</th>
+                      <th>Safe Capacity</th>
+                      <th>Active Zones</th>
+                      <th>Monitoring Status</th>
+                      <th style="text-align:right;">CRUD Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminVenueTableBody">
+                    <!-- Populated dynamically by VenueCrudManager -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- TAB 9: ESP32 TOF IOT GATEWAY & HARDWARE FLEET -->
           <div id="tab-esp32-iot" class="admin-tab-content">
             
@@ -1832,6 +1915,75 @@ void sendTelemetry(int d1, int d2) {
     </div>
   </section>
 
+  <!-- ==================== EDIT VENUE MODAL (CRUD MODAL) ==================== -->
+  <div id="vmEditVenueModal" class="modal-backdrop" style="align-items:flex-start; padding-top:3rem;">
+    <div class="modal-card" style="max-width:580px; width:100%;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+        <div style="display:flex; align-items:center; gap:0.65rem;">
+          <div style="width:38px;height:38px;background:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="edit" style="width:20px;height:20px;color:#fff;"></i>
+          </div>
+          <div>
+            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main); margin:0;">Edit Venue Details</h3>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Update venue name, capacity, and city location</p>
+          </div>
+        </div>
+        <button id="vmCloseEditModalBtn" style="color:var(--text-muted); font-size:1.3rem; line-height:1;">✕</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border-subtle);margin:1rem 0;">
+
+      <form id="vmEditForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:1rem;">
+        <input type="hidden" id="vmEditVenueId">
+
+        <div>
+          <label class="av-label">Venue / Ground Name <span style="color:#b91c1c;">*</span></label>
+          <input id="vmEditName" type="text" class="av-input" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div>
+            <label class="av-label">City / Location</label>
+            <input id="vmEditCity" type="text" class="av-input">
+          </div>
+          <div>
+            <label class="av-label">Venue Type</label>
+            <select id="vmEditType" class="av-input">
+              <option value="college-event">🎓 College Event</option>
+              <option value="sports-ground">⚽ Sports Ground</option>
+              <option value="outdoor-festival">🎪 Outdoor Festival</option>
+              <option value="concert-hall">🎵 Concert Hall</option>
+              <option value="exhibition">🏛️ Exhibition</option>
+              <option value="pilgrimage">🙏 Pilgrimage</option>
+              <option value="transit">🚉 Transit Hub</option>
+              <option value="custom">📍 Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div>
+            <label class="av-label">Safe Crowd Capacity <span style="color:#b91c1c;">*</span></label>
+            <input id="vmEditCapacity" type="number" class="av-input" min="50" required>
+          </div>
+          <div>
+            <label class="av-label">Number of Gates</label>
+            <input id="vmEditGates" type="number" class="av-input" min="1" max="50">
+          </div>
+        </div>
+
+        <div id="vmEditFeedback" style="display:none; padding:0.6rem; border-radius:8px; font-size:0.8rem; font-weight:700;"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.6rem; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border-subtle);">
+          <button type="button" id="vmCloseEditModalBtn2" class="btn btn-outline btn-sm">Cancel</button>
+          <button type="submit" id="vmSaveEditBtn" class="btn btn-primary btn-sm" style="background:#2563eb;">
+            <i data-lucide="check" style="width:14px;height:14px;"></i> Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ==================== ADMIN LOGIN MODAL ==================== -->
   <div id="adminLoginModal" class="modal-backdrop">
     <div class="modal-card" style="max-width:440px; width:100%;">
@@ -2051,6 +2203,7 @@ void sendTelemetry(int d1, int d2) {
   <script src="/static/js/mlDashboard.js"></script>
   <script src="/static/js/cadPlanner.js"></script>
   <script src="/static/js/addVenue.js"></script>
+  <script src="/static/js/venueCrudManager.js"></script>
   <script src="/static/js/i18n.js"></script>
   <script src="/static/js/app.js"></script>
   

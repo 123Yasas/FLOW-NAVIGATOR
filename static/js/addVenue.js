@@ -164,12 +164,21 @@ const AddVenueManager = {
 
   bindSubmit: function () {
     const btn = document.getElementById('addVenueSubmitBtn');
-    if (btn) btn.addEventListener('click', () => this.submitVenue());
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        this.submitVenue();
+      });
+    }
   },
 
-  submitVenue: function () {
-    const name     = document.getElementById('avName')?.value.trim();
-    const type     = document.getElementById('avType')?.value;
+  submitVenue: async function () {
+    const nameInput = document.getElementById('avName');
+    const name     = nameInput?.value.trim();
+    const type     = document.getElementById('avType')?.value || 'college-event';
     const capacity = parseInt(document.getElementById('avCapacity')?.value || 0);
     const length   = parseFloat(document.getElementById('avLength')?.value || 0);
     const width    = parseFloat(document.getElementById('avWidth')?.value  || 0);
@@ -179,8 +188,14 @@ const AddVenueManager = {
     const city     = document.getElementById('avCity')?.value.trim() || '';
     const date     = document.getElementById('avDate')?.value || '';
 
-    if (!name)              { this.flashError('avName', 'Please enter a venue name'); return; }
-    if (!capacity || capacity < 50) { this.flashError('avCapacity', 'Please enter a valid capacity (min 50)'); return; }
+    if (!name) { 
+      this.flashError('avName', 'Please enter a venue name'); 
+      return; 
+    }
+    if (!capacity || capacity < 50) { 
+      this.flashError('avCapacity', 'Please enter a valid capacity (min 50)'); 
+      return; 
+    }
 
     const typeEmoji = {
       'college-event': 'Grad', 'sports-ground': 'Sport', 'outdoor-festival': 'Festival',
@@ -193,25 +208,68 @@ const AddVenueManager = {
     const dropLabel = name + (city ? ' - ' + city : '');
 
     const venue = {
-      id: venueId, name, type, capacity, area, gates, zones, city, date, label,
-      lat: 11.0168 + (Math.random() - 0.5) * 2,
-      lng: 76.9558 + (Math.random() - 0.5) * 2,
+      id: venueId, 
+      name, 
+      type, 
+      capacity, 
+      area, 
+      gates, 
+      zones, 
+      city, 
+      date, 
+      label,
+      lat: 11.0168 + (Math.random() - 0.5) * 0.05,
+      lng: 76.9558 + (Math.random() - 0.5) * 0.05,
       addedAt: new Date().toISOString()
     };
 
+    // Store in localStorage
     this.customVenues.push(venue);
     this.saveToStorage();
 
+    // Add to dropdown and spatial map config
     this.addDropdownOption(venueId, dropLabel);
     this.registerWithMapsManager(venue);
 
-    if (window.FlowApp) window.FlowApp.setVenue(venueId);
+    // Persist to backend server so /api/zones and /api/venues sync seamlessly
+    try {
+      await fetch('/api/venues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(venue)
+      });
+    } catch (err) {
+      console.warn('[AddVenue] Backend sync note:', err);
+    }
 
+    // Switch active venue in FlowApp
+    if (window.FlowApp) {
+      window.FlowApp.setVenue(venueId);
+    }
+
+    // Refresh added list preview
     this.renderAddedList();
     this.showSuccessToast(name, capacity);
-    this.clearForm();
 
-    setTimeout(() => this.closeModal(), 1200);
+    // Refresh Venue Management CRUD page if loaded
+    if (window.VenueCrudManager) {
+      window.VenueCrudManager.loadVenues();
+    }
+
+    // Keep user comfortably informed without sudden jarring exit
+    const submitBtn = document.getElementById('addVenueSubmitBtn');
+    if (submitBtn) {
+      const origHtml = submitBtn.innerHTML;
+      submitBtn.innerHTML = '✔ Venue Added & Monitoring!';
+      submitBtn.style.background = '#059669';
+      setTimeout(() => {
+        submitBtn.innerHTML = origHtml;
+        submitBtn.style.background = '';
+        this.closeModal();
+      }, 1600);
+    } else {
+      setTimeout(() => this.closeModal(), 1600);
+    }
   },
 
   flashError: function (inputId, msg) {
