@@ -2015,14 +2015,49 @@ void loop() {
           </div>
         </div>
 
+        <!-- Ground Size inputs (Length, Width, or Total Area m²) -->
+        <div>
+          <label class="av-label">Ground / Venue Area Size</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.85rem;">
+            <div>
+              <label class="av-sublabel">Length (meters)</label>
+              <input id="vmEditLength" type="number" class="av-input" placeholder="e.g. 120" min="5" max="5000">
+            </div>
+            <div>
+              <label class="av-sublabel">Width (meters)</label>
+              <input id="vmEditWidth" type="number" class="av-input" placeholder="e.g. 80" min="5" max="5000">
+            </div>
+            <div>
+              <label class="av-sublabel">OR Total Area (m²)</label>
+              <input id="vmEditArea" type="number" class="av-input" placeholder="e.g. 9600" min="10">
+            </div>
+          </div>
+          <!-- Auto-calculated capacity hint in Edit modal -->
+          <div id="vmEditCapacityHint" style="margin-top:0.6rem; padding:0.65rem 0.85rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; font-size:0.8rem; color:#1d4ed8; display:none;">
+            <strong>📊 Estimated Safe Capacity:</strong> <span id="vmEditCapacityHintValue"></span>
+            <button type="button" id="vmApplyEstimatedCapBtn" style="margin-left:0.5rem; font-size:0.75rem; background:#2563eb; color:#fff; border:none; padding:0.2rem 0.5rem; border-radius:4px; cursor:pointer; font-weight:700;">Apply to Capacity</button>
+          </div>
+        </div>
+
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
           <div>
-            <label class="av-label">Safe Crowd Capacity <span style="color:#b91c1c;">*</span></label>
-            <input id="vmEditCapacity" type="number" class="av-input" min="50" required>
+            <label class="av-label">Safe Crowd Capacity (People Count) <span style="color:#b91c1c;">*</span></label>
+            <input id="vmEditCapacity" type="number" class="av-input" min="1" required placeholder="e.g. 10 or 2000">
           </div>
           <div>
             <label class="av-label">Number of Gates</label>
             <input id="vmEditGates" type="number" class="av-input" min="1" max="50">
+          </div>
+        </div>
+
+        <!-- Quick Area Size Presets for Editing -->
+        <div>
+          <label class="av-label">Quick Ground Presets</label>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <button type="button" class="vm-edit-preset-btn av-preset-btn" data-length="60" data-width="40" data-cap="500">Small Hall (60×40m · 500 ppl)</button>
+            <button type="button" class="vm-edit-preset-btn av-preset-btn" data-length="120" data-width="80" data-cap="2000">College Ground (120×80m · 2K)</button>
+            <button type="button" class="vm-edit-preset-btn av-preset-btn" data-length="200" data-width="150" data-cap="8000">Sports Complex (200×150m · 8K)</button>
+            <button type="button" class="vm-edit-preset-btn av-preset-btn" data-length="40" data-width="25" data-cap="10">ESP32 Lab / Prototype (10 ppl)</button>
           </div>
         </div>
 

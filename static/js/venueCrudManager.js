@@ -55,6 +55,72 @@ const VenueCrudManager = {
       });
     }
 
+    // Dynamic Area Size and People Count Calculation in Edit Modal
+    const lenInput = document.getElementById('vmEditLength');
+    const widInput = document.getElementById('vmEditWidth');
+    const areaInput = document.getElementById('vmEditArea');
+    const applyCapBtn = document.getElementById('vmApplyEstimatedCapBtn');
+
+    const updateEditAreaCalc = () => {
+      const l = parseFloat(lenInput?.value) || 0;
+      const w = parseFloat(widInput?.value) || 0;
+      let area = parseFloat(areaInput?.value) || 0;
+
+      if (l > 0 && w > 0) {
+        area = Math.round(l * w);
+        if (areaInput) areaInput.value = area;
+      }
+
+      const hintBox = document.getElementById('vmEditCapacityHint');
+      const hintVal = document.getElementById('vmEditCapacityHintValue');
+
+      if (area > 0) {
+        // Industry safety standard: 1.5 - 2.5 m² per person for moving crowd
+        const estCap = Math.max(10, Math.round(area / 2.0));
+        if (hintVal) hintVal.textContent = `${estCap.toLocaleString()} people (${area.toLocaleString()} m² at 2.0 m²/person)`;
+        if (hintBox) {
+          hintBox.style.display = 'block';
+          hintBox.dataset.estimatedCap = estCap;
+        }
+      } else {
+        if (hintBox) hintBox.style.display = 'none';
+      }
+    };
+
+    if (lenInput) lenInput.addEventListener('input', updateEditAreaCalc);
+    if (widInput) widInput.addEventListener('input', updateEditAreaCalc);
+    if (areaInput) areaInput.addEventListener('input', () => {
+      if (lenInput) lenInput.value = '';
+      if (widInput) widInput.value = '';
+      updateEditAreaCalc();
+    });
+
+    if (applyCapBtn) {
+      applyCapBtn.addEventListener('click', () => {
+        const hintBox = document.getElementById('vmEditCapacityHint');
+        const est = hintBox?.dataset.estimatedCap;
+        const capInput = document.getElementById('vmEditCapacity');
+        if (est && capInput) {
+          capInput.value = est;
+        }
+      });
+    }
+
+    // Presets for Edit Modal
+    document.querySelectorAll('.vm-edit-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const l = btn.dataset.length;
+        const w = btn.dataset.width;
+        const cap = btn.dataset.cap;
+        if (lenInput) lenInput.value = l;
+        if (widInput) widInput.value = w;
+        if (areaInput) areaInput.value = Math.round(l * w);
+        const capInput = document.getElementById('vmEditCapacity');
+        if (capInput) capInput.value = cap;
+        updateEditAreaCalc();
+      });
+    });
+
     // Save Edit Form
     const saveEditBtn = document.getElementById('vmSaveEditBtn');
     if (saveEditBtn) {
@@ -347,6 +413,9 @@ const VenueCrudManager = {
     const typeSelect = document.getElementById('vmEditType');
     const capInput = document.getElementById('vmEditCapacity');
     const gatesInput = document.getElementById('vmEditGates');
+    const lenInput = document.getElementById('vmEditLength');
+    const widInput = document.getElementById('vmEditWidth');
+    const areaInput = document.getElementById('vmEditArea');
     const feedback = document.getElementById('vmEditFeedback');
 
     if (idInput) idInput.value = venue.id;
@@ -355,6 +424,26 @@ const VenueCrudManager = {
     if (typeSelect) typeSelect.value = venue.type || 'college-event';
     if (capInput) capInput.value = venue.capacity || venue.total_capacity || 5000;
     if (gatesInput) gatesInput.value = venue.gates || 4;
+
+    const areaVal = venue.area || (venue.length && venue.width ? venue.length * venue.width : 0);
+    if (lenInput) lenInput.value = venue.length || '';
+    if (widInput) widInput.value = venue.width || '';
+    if (areaInput) areaInput.value = areaVal || '';
+
+    // Trigger capacity hint calculation
+    const hintBox = document.getElementById('vmEditCapacityHint');
+    const hintVal = document.getElementById('vmEditCapacityHintValue');
+    if (areaVal > 0) {
+      const estCap = Math.max(10, Math.round(areaVal / 2.0));
+      if (hintVal) hintVal.textContent = `${estCap.toLocaleString()} people (${areaVal.toLocaleString()} m² at 2.0 m²/person)`;
+      if (hintBox) {
+        hintBox.style.display = 'block';
+        hintBox.dataset.estimatedCap = estCap;
+      }
+    } else if (hintBox) {
+      hintBox.style.display = 'none';
+    }
+
     if (feedback) feedback.style.display = 'none';
 
     const modal = document.getElementById('vmEditVenueModal');
@@ -373,6 +462,9 @@ const VenueCrudManager = {
     const type = document.getElementById('vmEditType')?.value;
     const capacity = parseInt(document.getElementById('vmEditCapacity')?.value || 0);
     const gates = parseInt(document.getElementById('vmEditGates')?.value || 4);
+    const length = parseFloat(document.getElementById('vmEditLength')?.value || 0);
+    const width = parseFloat(document.getElementById('vmEditWidth')?.value || 0);
+    const area = parseFloat(document.getElementById('vmEditArea')?.value || 0);
     const feedback = document.getElementById('vmEditFeedback');
 
     if (!name) {
@@ -389,7 +481,7 @@ const VenueCrudManager = {
       const resp = await fetch(`/api/venues/${venueId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, city, type, capacity, gates })
+        body: JSON.stringify({ name, city, type, capacity, gates, length, width, area })
       });
       const data = await resp.json();
 
@@ -403,6 +495,9 @@ const VenueCrudManager = {
           target.capacity = capacity;
           target.total_capacity = capacity;
           target.gates = gates;
+          target.length = length;
+          target.width = width;
+          target.area = area;
         }
 
         // Also update AddVenueManager if in custom venues

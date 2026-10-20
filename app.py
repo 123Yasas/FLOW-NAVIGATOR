@@ -337,7 +337,7 @@ def single_venue(venue_id):
     elif request.method == "PUT":
         data = request.get_json() or {}
         update_fields = {}
-        for k in ["name", "city", "capacity", "category", "type", "area", "gates", "lat", "lng"]:
+        for k in ["name", "city", "capacity", "category", "type", "area", "length", "width", "gates", "lat", "lng"]:
             if k in data:
                 update_fields[k] = data[k]
         if "capacity" in update_fields:
