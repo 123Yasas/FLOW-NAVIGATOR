@@ -421,19 +421,20 @@ def get_zones():
 # --- Routes & Google Maps Paths ---
 @app.route("/api/routes", methods=["GET"])
 def get_routes():
-    routes = db.get_routes()
+    venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
+    routes = db.get_routes(venue_id)
     # In emergency mode, highlight evacuation routes
     if SYSTEM_STATE["emergency_mode"]:
         for r in routes:
-            if "Bypass" in r["name"] or "Parking" in r["name"]:
+            if "Bypass" in r["name"] or "Parking" in r["name"] or "Exit" in r["name"]:
                 r["tag"] = "EVACUATION_ROUTE"
                 r["color"] = "#10b981"
                 r["explainable_reason"] = "DESIGNATED RAPID EVACUATION CORRIDOR TO OPEN SAFETY GROUNDS."
             else:
                 r["tag"] = "AVOID"
                 r["color"] = "#ef4444"
-                r["explainable_reason"] = "SANCTUM CLOSED DURING EVACUATION. PROCEED TO EXTERIOR."
-    return jsonify({"routes": routes})
+                r["explainable_reason"] = "RESTRICTED DURING EVACUATION. PROCEED TO EXTERIOR."
+    return jsonify({"routes": routes, "venue_id": venue_id})
 
 # ==================== DATA MODE & HARDWARE ENDPOINTS ====================
 
@@ -531,31 +532,54 @@ def delete_esp32_sensor(sensor_id):
 @app.route("/api/sensors", methods=["GET"])
 def get_sensors():
     mode = SYSTEM_STATE.get("data_mode", "demo")
-    sensors = db.get_sensors()
+    venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
+    sensors = db.get_sensors(venue_id)
     if mode == "real":
         # Revoke all demo synthetic sensors in Real mode
         sensors = [s for s in sensors if not s.get("is_demo", False) and not s.get("id", "").startswith("SENSOR-ESP32-00")]
-    return jsonify({"sensors": sensors, "data_mode": mode})
+    return jsonify({"sensors": sensors, "data_mode": mode, "venue_id": venue_id})
 
-@app.route("/api/sensors/telemetry", methods=["POST"])
-def sensor_telemetry():
+@app.route("/api/crowd", methods=["POST"])
+def receive_crowd():
     """
-    Primary ingestion endpoint for ESP32 edge microcontrollers.
-    Receives JSON with VL53L0X distance readings and headcount delta.
+    Dedicated endpoint for the ESP32-S3 Dual VL53L0X prototype.
+    Receives JSON with entryCount, exitCount, currentCrowd, capacity, etc.
     """
-    data = request.get_json() or {}
-    sensor_id = data.get("sensor_id")
-    if not sensor_id:
-        return jsonify({"error": "sensor_id is required"}), 400
+    data = request.get_json(silent=True) or {}
+    print(f"[FlowNavigator ESP32-S3] Telemetry received from prototype: {data}")
 
+    # Map prototype payload to standard telemetry fields
+    mapped_data = {
+        "sensor_id": data.get("sensor_id") or "ESP32-S3-VL53L0X-GATE",
+        "zone_id": data.get("zone_id") or "zone-a-sona-college",
+        "venue_id": data.get("venue_id") or "sona-college",
+        "people_in": int(data.get("entryCount") if "entryCount" in data else data.get("people_in", 0)),
+        "people_out": int(data.get("exitCount") if "exitCount" in data else data.get("people_out", 0)),
+        "current_count": int(data.get("currentCrowd") if "currentCrowd" in data else data.get("current_count", 0)),
+        "tof_distance_mm_a": int(float(data.get("entryDistanceCm", 50)) * 10) if data.get("entryDistanceCm") is not None else 500,
+        "tof_distance_mm_b": int(float(data.get("exitDistanceCm", 50)) * 10) if data.get("exitDistanceCm") is not None else 500,
+        "battery_pct": 100,
+        "signal_dbm": -42,
+        "status": "ONLINE",
+        "hardware_status": data.get("status", "ENTRY_ALLOWED"),
+        "last_event": data.get("lastEvent", "STARTED"),
+        "capacity_limit": int(data.get("capacity", 10))
+    }
+
+    # Pass through to standard sensor_telemetry processing
+    return process_sensor_telemetry(mapped_data)
+
+def process_sensor_telemetry(data):
+    sensor_id = data.get("sensor_id", "ESP32-S3-VL53L0X-GATE")
     people_in = int(data.get("people_in", 0))
     people_out = int(data.get("people_out", 0))
     current_count = int(data.get("current_count", max(0, people_in - people_out)))
-    tof_a = data.get("tof_distance_mm_a")
-    tof_b = data.get("tof_distance_mm_b")
-    battery_pct = data.get("battery_pct", 95)
-    signal_dbm = data.get("signal_dbm", -55)
-    zone_id = data.get("zone_id", "zone-a")
+    tof_a = data.get("tof_distance_mm_a", 450)
+    tof_b = data.get("tof_distance_mm_b", 450)
+    battery_pct = data.get("battery_pct", 98)
+    signal_dbm = data.get("signal_dbm", -42)
+    zone_id = data.get("zone_id", "zone-a-sona-college")
+    venue_id = data.get("venue_id", "sona-college")
 
     # Update sensor in MongoDB
     db.update_sensor_telemetry(
@@ -569,33 +593,83 @@ def sensor_telemetry():
         signal_dbm=signal_dbm
     )
 
-    # Calculate real-time entry and exit rates
-    zone = db.get_zone(zone_id)
-    if zone:
-        old_count = zone.get("current_count", 0)
-        entry_rate = zone.get("entry_rate", 35)
-        exit_rate = zone.get("exit_rate", 30)
-        
-        # Recalculate zone status based on capacity
-        capacity = max(1, zone.get("capacity", 800))
-        ratio = current_count / capacity
-        if ratio >= 0.9:
-            status = "CRITICAL"
-        elif ratio >= 0.75:
-            status = "HIGH"
-        elif ratio >= 0.5:
-            status = "MODERATE"
-        else:
-            status = "SAFE"
+    # Attach hardware and venue metadata to the sensor
+    db.db.sensors.update_one(
+        {"id": sensor_id},
+        {"$set": {
+            "venue_id": venue_id,
+            "zone_id": zone_id,
+            "controller": "ESP32-S3 DevKit",
+            "sensor_type": "Dual VL53L0X ToF (TwoWire 0 & 1)",
+            "hardware_status": data.get("hardware_status", "ENTRY_ALLOWED"),
+            "last_event": data.get("last_event", "ACTIVE"),
+            "capacity_limit": data.get("capacity_limit", 10),
+            "zone_name": "Sona Main Entrance Gate"
+        }},
+        upsert=True
+    )
 
-        db.update_zone_count(zone_id, current_count, entry_rate, exit_rate, status)
+    # Update matching zone in MongoDB
+    zone = db.get_zone(zone_id)
+    if not zone and zone_id == "zone-a-sona-college":
+        zone = {
+            "id": "zone-a-sona-college",
+            "code": "ZONE A",
+            "name": "Sona College Main Gate",
+            "venue_id": "sona-college",
+            "capacity": data.get("capacity_limit", 10),
+            "current_count": current_count,
+            "entry_rate": 35,
+            "exit_rate": 30,
+            "status": "SAFE"
+        }
+        db.db.zones.update_one({"id": zone["id"]}, {"$set": zone}, upsert=True)
+
+    if zone:
+        capacity = max(1, int(zone.get("capacity", data.get("capacity_limit", 10))))
+        ratio = current_count / capacity
+        if ratio >= 1.0 or current_count >= 10:
+            st = "CRITICAL"
+        elif ratio >= 0.8:
+            st = "HIGH"
+        elif ratio >= 0.5:
+            st = "MODERATE"
+        else:
+            st = "SAFE"
+
+        db.update_zone_count(zone_id, current_count, status=st)
 
     return jsonify({
+        "success": True,
         "status": "success",
-        "message": f"Telemetry processed for {sensor_id}",
+        "message": "Crowd data received",
+        "sensor_id": sensor_id,
         "current_count": current_count,
+        "people_in": people_in,
+        "people_out": people_out,
         "timestamp": datetime.datetime.now().isoformat()
-    })
+    }), 200
+
+@app.route("/api/sensors/telemetry", methods=["POST"])
+def sensor_telemetry():
+    """
+    Primary ingestion endpoint for ESP32 edge microcontrollers.
+    Receives JSON with VL53L0X distance readings and headcount delta.
+    """
+    data = request.get_json(silent=True) or {}
+    if not data.get("sensor_id") and not data.get("entryCount"):
+        return jsonify({"error": "sensor_id is required"}), 400
+
+    # If payload comes from ESP32 prototype with entryCount/currentCrowd
+    if "entryCount" in data or "currentCrowd" in data:
+        data["people_in"] = int(data.get("entryCount", 0))
+        data["people_out"] = int(data.get("exitCount", 0))
+        data["current_count"] = int(data.get("currentCrowd", 0))
+        data["sensor_id"] = data.get("sensor_id", "ESP32-S3-VL53L0X-GATE")
+        data["zone_id"] = data.get("zone_id", "zone-a-sona-college")
+        data["venue_id"] = data.get("venue_id", "sona-college")
+
+    return process_sensor_telemetry(data)
 
 @app.route("/api/sensors/simulate", methods=["POST"])
 def simulate_sensor_tick():

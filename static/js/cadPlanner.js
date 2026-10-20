@@ -1570,6 +1570,35 @@ const CadPlanner = {
   },
 
   // -------------------------------------------------------------
+  // VENUE SYNCHRONISATION
+  // -------------------------------------------------------------
+  setVenue: function(venue) {
+    if (!venue) return;
+    const name = venue.name || 'Ground Event';
+    const cap = parseInt(venue.capacity || venue.total_capacity || 12000);
+    const gates = parseInt(venue.gates || 4);
+
+    this.state.event_name = `${name} - Operational Event Layout`;
+    this.state.expected_crowd = cap;
+    this.state.entry_gates_count = Math.max(2, gates);
+    this.state.exit_gates_count = Math.max(2, gates);
+
+    // Sync input fields
+    const nameEl = document.getElementById('cfEventName');
+    const crowdEl = document.getElementById('cfInputCrowd');
+    const entryEl = document.getElementById('cfEntryGatesInput');
+    const exitEl = document.getElementById('cfExitGatesInput');
+
+    if (nameEl) nameEl.value = this.state.event_name;
+    if (crowdEl) crowdEl.value = this.state.expected_crowd;
+    if (entryEl) entryEl.value = this.state.entry_gates_count;
+    if (exitEl) exitEl.value = this.state.exit_gates_count;
+
+    // Recalculate plan based on new venue capacity
+    this.fetchOrComputePlan();
+  },
+
+  // -------------------------------------------------------------
   // TOAST NOTIFICATIONS
   // -------------------------------------------------------------
   showToast: function(msg, type = 'info') {

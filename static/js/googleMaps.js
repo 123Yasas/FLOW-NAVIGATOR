@@ -14,7 +14,7 @@ const GoogleMapsManager = {
   apiKey: '',
   isLoaded: false,
   mapInstances: {},
-  currentVenueId: 'palani-gathering',
+  currentVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
 
   venueConfigs: {
     'palani-gathering': {
@@ -72,6 +72,22 @@ const GoogleMapsManager = {
         { id: 'zone-c', name: 'Escalator Interchange Tube', lat: 13.0842, lng: 80.2760, color: '#ef4444', count: 890 },
         { id: 'zone-d', name: 'Suburban Line Skywalk', lat: 13.0838, lng: 80.2756, color: '#10b981', count: 290 },
         { id: 'zone-f', name: 'Bus Terminal Egress Bay', lat: 13.0825, lng: 80.2740, color: '#10b981', count: 540 }
+      ]
+    },
+    'sona-college': {
+      name: 'Sona College of Technology (Campus Ground)',
+      city: 'Salem, Tamil Nadu',
+      lat: 11.6811,
+      lng: 78.1368,
+      zoom: 17,
+      capacity: 10,
+      venue_b_limit: 8,
+      isCustom: true,
+      zones: [
+        { id: 'zone-a-sona-college', name: 'Zone A: Sona Main Gate (ESP32-S3)', lat: 11.6811, lng: 78.1365, color: '#10b981', count: 0 },
+        { id: 'zone-b-sona-college', name: 'Zone B: Innovation & Food Promenade', lat: 11.6815, lng: 78.1370, color: '#10b981', count: 0 },
+        { id: 'zone-c-sona-college', name: 'Zone C: Central Auditorium', lat: 11.6820, lng: 78.1375, color: '#ef4444', count: 0 },
+        { id: 'zone-d-sona-college', name: 'Zone D: Campus Sports Ground', lat: 11.6805, lng: 78.1360, color: '#10b981', count: 0 }
       ]
     }
   },
@@ -452,7 +468,32 @@ const GoogleMapsManager = {
 
   switchVenue: function(venueId) {
     this.currentVenueId = venueId;
-    const v = this.venueConfigs[venueId];
+    let v = this.venueConfigs[venueId];
+
+    if (!v) {
+      // Check if venue exists in select dropdown
+      const sel = document.getElementById('venueSelect');
+      const opt = sel?.querySelector(`option[value="${venueId}"]`);
+      const vName = opt ? opt.text.split('(')[0].trim() : venueId;
+      this.venueConfigs[venueId] = {
+        name: vName,
+        city: 'Active Ground Area',
+        lat: 11.0168,
+        lng: 76.9558,
+        zoom: 16,
+        capacity: 5000,
+        isCustom: true,
+        zones: [
+          { id: 'zone-a', name: 'Main Entry Gate', lat: 11.0165, lng: 76.9550, color: '#10b981', count: 320 },
+          { id: 'zone-b', name: 'West Concourse Promenade', lat: 11.0170, lng: 76.9555, color: '#f59e0b', count: 620 },
+          { id: 'zone-c', name: 'Central Arena Hub', lat: 11.0175, lng: 76.9562, color: '#ef4444', count: 850 },
+          { id: 'zone-d', name: 'South Express Bypass', lat: 11.0168, lng: 76.9560, color: '#10b981', count: 290 },
+          { id: 'zone-f', name: 'Outer Parking & Transit', lat: 11.0160, lng: 76.9545, color: '#10b981', count: 540 }
+        ]
+      };
+      v = this.venueConfigs[venueId];
+    }
+
     if (v) {
       const coordEl = document.getElementById('mapCoordDisplay');
       if (coordEl && v.lat && v.lng) {

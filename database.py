@@ -138,6 +138,17 @@ class MongoDatabase:
                     "active_zones_count": 6,
                     "lat": 13.0837,
                     "lng": 80.2755
+                },
+                {
+                    "id": "sona-college",
+                    "name": "Sona College of Technology (Campus Ground)",
+                    "category": "College Campus & Grounds",
+                    "city": "Salem, Tamil Nadu",
+                    "total_capacity": 10,
+                    "current_total_crowd": 0,
+                    "active_zones_count": 4,
+                    "lat": 11.6811,
+                    "lng": 78.1368
                 }
             ]
             self.demo_db.venues.insert_many(initial_venues)
@@ -296,6 +307,74 @@ class MongoDatabase:
                     "lng": 77.5195,
                     "x": 85,
                     "y": 20
+                },
+                {
+                    "id": "zone-a-sona-college",
+                    "code": "ZONE A",
+                    "name": "Sona Main Entrance Gate (ESP32-S3 Live)",
+                    "venue_id": "sona-college",
+                    "capacity": 10,
+                    "current_count": 0,
+                    "entry_rate": 0,
+                    "exit_rate": 0,
+                    "status": "SAFE",
+                    "access_restricted": False,
+                    "is_evacuation_path": True,
+                    "bottleneck_proximity": 0.1,
+                    "description": "Active ESP32-S3 Dual VL53L0X ToF laser counter station (Capacity: 10 max).",
+                    "lat": 11.6811,
+                    "lng": 78.1365
+                },
+                {
+                    "id": "zone-b-sona-college",
+                    "code": "ZONE B",
+                    "name": "Innovation & Food Court Walkway",
+                    "venue_id": "sona-college",
+                    "capacity": 8,
+                    "current_count": 0,
+                    "entry_rate": 0,
+                    "exit_rate": 0,
+                    "status": "SAFE",
+                    "access_restricted": False,
+                    "is_evacuation_path": True,
+                    "bottleneck_proximity": 0.2,
+                    "description": "Recommended alternative pathway (Venue B recommended threshold: 8 people).",
+                    "lat": 11.6815,
+                    "lng": 78.1370
+                },
+                {
+                    "id": "zone-c-sona-college",
+                    "code": "ZONE C",
+                    "name": "Central Auditorium Concourse",
+                    "venue_id": "sona-college",
+                    "capacity": 10,
+                    "current_count": 0,
+                    "entry_rate": 0,
+                    "exit_rate": 0,
+                    "status": "SAFE",
+                    "access_restricted": False,
+                    "is_evacuation_path": False,
+                    "bottleneck_proximity": 0.5,
+                    "description": "Main indoor auditorium entrance lobby.",
+                    "lat": 11.6820,
+                    "lng": 78.1375
+                },
+                {
+                    "id": "zone-d-sona-college",
+                    "code": "ZONE D",
+                    "name": "Campus Open Sports Quad",
+                    "venue_id": "sona-college",
+                    "capacity": 25,
+                    "current_count": 0,
+                    "entry_rate": 0,
+                    "exit_rate": 0,
+                    "status": "SAFE",
+                    "access_restricted": False,
+                    "is_evacuation_path": True,
+                    "bottleneck_proximity": 0.1,
+                    "description": "Open grass quad and emergency assembly ground.",
+                    "lat": 11.6805,
+                    "lng": 78.1360
                 }
             ]
             self.demo_db.zones.insert_many(initial_zones)
@@ -410,6 +489,26 @@ class MongoDatabase:
                     "tof_distance_mm_b": 355,
                     "firmware_version": "v3.2.0-ESP32-VL53L0X",
                     "last_ping": datetime.datetime.now().isoformat()
+                },
+                {
+                    "id": "ESP32-S3-VL53L0X-GATE",
+                    "zone_id": "zone-a-sona-college",
+                    "zone_name": "Sona College Main Gate",
+                    "venue_id": "sona-college",
+                    "controller": "ESP32-S3 DevKit",
+                    "sensor_type": "Dual VL53L0X Time-of-Flight (ToF)",
+                    "communication": "Wi-Fi 802.11 b/g/n + REST API",
+                    "ip_address": "192.168.31.168",
+                    "people_in": 0,
+                    "people_out": 0,
+                    "current_count": 0,
+                    "status": "ONLINE",
+                    "battery_pct": 100,
+                    "signal_dbm": -42,
+                    "tof_distance_mm_a": 450,
+                    "tof_distance_mm_b": 450,
+                    "firmware_version": "v4.2.0-ESP32-S3-DualI2C",
+                    "last_ping": datetime.datetime.now().isoformat()
                 }
             ]
             self.demo_db.sensors.insert_many(initial_sensors)
@@ -484,6 +583,42 @@ class MongoDatabase:
                     "description": "Spacious south bypass corridor directly connecting to parking and transport.",
                     "path_zones": ["zone-a", "zone-d", "zone-f"],
                     "explainable_reason": "Unobstructed outer corridor with dedicated egress lanes directly to parking and shuttles."
+                },
+                {
+                    "id": "route-sona-direct",
+                    "name": "Route 1 - Direct Central Concourse",
+                    "venue_id": "sona-college",
+                    "start_zone_id": "zone-a-sona-college",
+                    "destination_zone_id": "zone-c-sona-college",
+                    "destination_name": "Main Auditorium",
+                    "distance_meters": 180,
+                    "occupancy_percentage": 20,
+                    "estimated_wait_minutes": 1,
+                    "estimated_walk_minutes": 2,
+                    "status": "SAFE",
+                    "tag": "PRIMARY",
+                    "color": "#3b82f6",
+                    "description": "Direct walkway from Main Gate to Central Auditorium.",
+                    "path_zones": ["zone-a-sona-college", "zone-c-sona-college"],
+                    "explainable_reason": "Standard direct pathway monitored by ESP32 laser sensors."
+                },
+                {
+                    "id": "route-sona-venue-b",
+                    "name": "Route 2 - Venue B (Innovation Walkway)",
+                    "venue_id": "sona-college",
+                    "start_zone_id": "zone-a-sona-college",
+                    "destination_zone_id": "zone-b-sona-college",
+                    "destination_name": "Venue B / Food Court Promenade",
+                    "distance_meters": 220,
+                    "occupancy_percentage": 10,
+                    "estimated_wait_minutes": 1,
+                    "estimated_walk_minutes": 3,
+                    "status": "SAFE",
+                    "tag": "RECOMMENDED",
+                    "color": "#10b981",
+                    "description": "Recommended diversion route when crowd reaches 8 people (VENUE_B_LIMIT = 8).",
+                    "path_zones": ["zone-a-sona-college", "zone-b-sona-college"],
+                    "explainable_reason": "Automated diversion corridor active when main area reaches threshold."
                 }
             ]
             self.demo_db.routes.insert_many(initial_routes)
@@ -562,8 +697,21 @@ class MongoDatabase:
             update_fields["status"] = status
         self.db.zones.update_one({"id": zone_id}, {"$set": update_fields})
 
-    def get_sensors(self):
-        return list(self.db.sensors.find({}, {"_id": 0}))
+    def get_sensors(self, venue_id=None):
+        if not venue_id:
+            return list(self.db.sensors.find({}, {"_id": 0}))
+        # Find sensors matching this venue_id directly or through its zones
+        zones = self.get_zones(venue_id)
+        zone_ids = [z.get("id") for z in zones if z.get("id")]
+        query = {
+            "$or": [
+                {"venue_id": venue_id},
+                {"zone_id": {"$in": zone_ids}}
+            ]
+        }
+        matching = list(self.db.sensors.find(query, {"_id": 0}))
+        # Fallback to all sensors if venue has no dedicated sensors assigned yet
+        return matching if matching else list(self.db.sensors.find({}, {"_id": 0}))
 
     def get_sensor(self, sensor_id):
         return self.db.sensors.find_one({"id": sensor_id}, {"_id": 0})
@@ -599,8 +747,11 @@ class MongoDatabase:
         }
         self.db.sensor_telemetry_logs.insert_one(log_entry)
 
-    def get_routes(self):
-        return list(self.db.routes.find({}, {"_id": 0}))
+    def get_routes(self, venue_id=None):
+        if not venue_id:
+            return list(self.db.routes.find({}, {"_id": 0}))
+        matching = list(self.db.routes.find({"venue_id": venue_id}, {"_id": 0}))
+        return matching if matching else list(self.db.routes.find({}, {"_id": 0}))
 
     def get_alerts(self):
         return list(self.db.alerts.find({}, {"_id": 0}))

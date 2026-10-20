@@ -158,7 +158,8 @@ const SensorSimulator = {
 
   fetchSensors: async function() {
     try {
-      const resp = await fetch('/api/sensors');
+      const venueId = window.FlowApp ? window.FlowApp.activeVenueId : 'sona-college';
+      const resp = await fetch(`/api/sensors?venue_id=${venueId}`);
       const data = await resp.json();
       this.renderSensorTable(data.sensors || []);
     } catch (e) {

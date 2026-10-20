@@ -81,6 +81,8 @@ const VenueCrudManager = {
         });
       }
 
+      this.syncSelectDropdown();
+      this.syncAdminVenuePills();
       this.updateStats();
       this.renderVenueTable();
       this.renderAdminTabTable();
@@ -89,6 +91,45 @@ const VenueCrudManager = {
     } finally {
       this.isLoading = false;
     }
+  },
+
+  syncSelectDropdown: function() {
+    const select = document.getElementById('venueSelect');
+    if (!select || !this.venues.length) return;
+    const currentVal = window.FlowApp ? window.FlowApp.activeVenueId : select.value;
+
+    select.innerHTML = this.venues.map(v => {
+      const city = v.city ? ` (${v.city})` : '';
+      return `<option value="${v.id}">${v.name}${city}</option>`;
+    }).join('');
+
+    if (this.venues.some(v => v.id === currentVal)) {
+      select.value = currentVal;
+    } else if (this.venues.length) {
+      select.value = this.venues[0].id;
+    }
+  },
+
+  syncAdminVenuePills: function() {
+    const container = document.getElementById('adminVenuePillsContainer');
+    if (!container || !this.venues.length) return;
+    const activeId = window.FlowApp ? window.FlowApp.activeVenueId : 'palani-gathering';
+
+    container.innerHTML = this.venues.map(v => {
+      const shortName = (v.name || v.id).split(' ')[0] || v.id;
+      const isActive = v.id === activeId;
+      return `<button class="btn btn-outline btn-sm venue-pill ${isActive ? 'active' : ''}" data-vid="${v.id}">${shortName}</button>`;
+    }).join('');
+
+    // Re-bind click events on pill buttons
+    container.querySelectorAll('.venue-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const vid = pill.dataset.vid;
+        container.querySelectorAll('.venue-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        if (window.FlowApp) window.FlowApp.setVenue(vid);
+      });
+    });
   },
 
   updateStats: function() {

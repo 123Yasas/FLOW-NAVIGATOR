@@ -134,6 +134,32 @@ const MlDashboard = {
         </div>
       `;
     }).join('');
+  },
+  setVenue: function(venue, zones) {
+    if (!venue) return;
+    const cap = parseInt(venue.capacity || venue.total_capacity || 5000);
+    const zCount = Array.isArray(zones) && zones.length ? zones.length : 5;
+    const perZoneCap = Math.max(50, Math.round(cap / zCount));
+    const sampleCount = Math.round(perZoneCap * 0.65);
+
+    const slideCap = document.getElementById('mlSlideCapacity');
+    const valCap = document.getElementById('mlValCapacity');
+    const slideHead = document.getElementById('mlSlideHeadcount');
+    const valHead = document.getElementById('mlValHeadcount');
+
+    if (slideCap) {
+      slideCap.max = Math.max(2000, perZoneCap * 2);
+      slideCap.value = perZoneCap;
+    }
+    if (valCap) valCap.textContent = perZoneCap;
+
+    if (slideHead) {
+      slideHead.max = Math.max(2000, perZoneCap * 2);
+      slideHead.value = sampleCount;
+    }
+    if (valHead) valHead.textContent = sampleCount;
+
+    this.runInference();
   }
 };
 

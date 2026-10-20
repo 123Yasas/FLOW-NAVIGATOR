@@ -56,6 +56,7 @@
           <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
           <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
           <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
+          <option value="sona-college">Sona College of Technology (Salem)</option>
         </select>
       </div>
       <!-- CrowdFlow AI Direct Launcher Button -->
@@ -636,11 +637,12 @@
                   <p style="font-size:0.85rem; color:var(--text-muted);">Real-time crowd heat density overlays and directional routes for selected venue.</p>
                 </div>
                 <!-- Quick venue switch buttons -->
-                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <div id="adminVenuePillsContainer" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
                   <button class="btn btn-outline btn-sm venue-pill active" data-vid="palani-gathering">Palani</button>
                   <button class="btn btn-outline btn-sm venue-pill" data-vid="meenakshi-temple">Meenakshi Temple</button>
                   <button class="btn btn-outline btn-sm venue-pill" data-vid="chennai-stadium">Nehru Stadium</button>
                   <button class="btn btn-outline btn-sm venue-pill" data-vid="central-transit-hub">Central Transit</button>
+                  <button class="btn btn-outline btn-sm venue-pill" data-vid="sona-college">Sona College</button>
                 </div>
               </div>
               
@@ -1769,75 +1771,105 @@
 
               <pre id="esp32CodeBlock" style="background:#0f172a; color:#38bdf8; padding:1.25rem; border-radius:8px; font-family:monospace; font-size:0.78rem; max-height:280px; overflow-y:auto; border:1px solid #1e293b; line-height:1.5;">
 // =========================================================================
-// FlowNavigator ESP32 Dual VL53L0X ToF Pedestrian Counter Firmware
-// Target: ESP32-WROOM-32D | Framework: Arduino IDE
+// FlowNavigator ESP32-S3 Dual VL53L0X ToF Counter (Sona College Ground)
+// Target: ESP32-S3 | Dual TwoWire(0) & TwoWire(1) | Endpoint: /api/crowd
 // =========================================================================
 #include &lt;WiFi.h&gt;
 #include &lt;HTTPClient.h&gt;
 #include &lt;Wire.h&gt;
-#include &lt;Adafruit_VL53L0X.h&gt;
+#include &lt;VL53L0X.h&gt;
 
-const char* ssid     = "YOUR_WIFI_SSID";
+const char* ssid = "SVVT AirFiber";
 const char* password = "YOUR_WIFI_PASSWORD";
-const char* serverUrl = "http://192.168.31.10:5000/api/sensors/count";
+const char* SERVER_URL = "http://192.168.31.10:5000/api/crowd";
 
-#define SENSOR1_XSHUT 16
-#define SENSOR2_XSHUT 17
+TwoWire I2C_Entry = TwoWire(0);
+TwoWire I2C_Exit = TwoWire(1);
+VL53L0X entrySensor;
+VL53L0X exitSensor;
 
-Adafruit_VL53L0X lox1 = Adafruit_VL53L0X();
-Adafruit_VL53L0X lox2 = Adafruit_VL53L0X();
+int startingPeople = 0;
+int crowd = startingPeople;
+int entryCount = 0;
+int exitCount = 0;
+const int CAPACITY = 10;
+const int VENUE_B_LIMIT = 8;
+const int DETECTION_LIMIT_MM = 50;
 
-int peopleIn = 0;
-int peopleOut = 0;
-String sensorId = "ESP32-GATE-001";
-String zoneId   = "zone-a";
+bool entryDetected = false;
+bool exitDetected = false;
+String lastEvent = "STARTED";
+unsigned long lastUpload = 0;
+const unsigned long UPLOAD_INTERVAL = 2000;
 
 void setup() {
   Serial.begin(115200);
-  pinMode(SENSOR1_XSHUT, OUTPUT);
-  pinMode(SENSOR2_XSHUT, OUTPUT);
-  digitalWrite(SENSOR1_XSHUT, LOW);
-  digitalWrite(SENSOR2_XSHUT, LOW);
-  
+  delay(2000);
+  Serial.println("FlowNavigator Starting");
+  I2C_Entry.begin(8, 9);
+  I2C_Entry.setClock(100000);
+  I2C_Exit.begin(10, 11);
+  I2C_Exit.setClock(100000);
+  entrySensor.setBus(&I2C_Entry);
+  exitSensor.setBus(&I2C_Exit);
+  entrySensor.setTimeout(1000);
+  exitSensor.setTimeout(1000);
+  if (!entrySensor.init()) { Serial.println("Entry sensor failed"); while (1) { delay(1000); } }
+  if (!exitSensor.init()) { Serial.println("Exit sensor failed"); while (1) { delay(1000); } }
+  entrySensor.setMeasurementTimingBudget(50000);
+  exitSensor.setMeasurementTimingBudget(50000);
+  entrySensor.startContinuous(100);
+  exitSensor.startContinuous(100);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.println("\nWiFi Connected! IP: " + WiFi.localIP().toString());
-  
-  // Reset and set distinct I2C addresses (0x30, 0x31)
-  digitalWrite(SENSOR1_XSHUT, HIGH); delay(10);
-  lox1.begin(0x30);
-  digitalWrite(SENSOR2_XSHUT, HIGH); delay(10);
-  lox2.begin(0x31);
+  Serial.println("\nWiFi Connected! ESP32 IP: " + WiFi.localIP().toString());
 }
 
 void loop() {
-  VL53L0X_RangingMeasurementData_t measure1, measure2;
-  lox1.rangingTest(&measure1, false);
-  lox2.rangingTest(&measure2, false);
+  uint16_t entryDistance = entrySensor.readRangeContinuousMillimeters();
+  bool entryTimeout = entrySensor.timeoutOccurred();
+  uint16_t exitDistance = exitSensor.readRangeContinuousMillimeters();
+  bool exitTimeout = exitSensor.timeoutOccurred();
 
-  int d1 = (measure1.RangeStatus != 4) ? measure1.RangeMilliMeter : 2000;
-  int d2 = (measure2.RangeStatus != 4) ? measure2.RangeMilliMeter : 2000;
-
-  // Directional Vector Logic: Sensor 1 hit before Sensor 2 = IN; Sensor 2 before 1 = OUT
-  if (d1 &lt; 800 &amp;&amp; d2 &gt; 1200) { peopleIn++;  sendTelemetry(d1, d2); delay(600); }
-  if (d2 &lt; 800 &amp;&amp; d1 &gt; 1200) { peopleOut++; sendTelemetry(d1, d2); delay(600); }
-  delay(50);
-}
-
-void sendTelemetry(int d1, int d2) {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(serverUrl);
-    http.addHeader("Content-Type", "application/json");
-    
-    String json = "{\"sensor_id\":\"" + sensorId + "\",\"zone_id\":\"" + zoneId + 
-                  "\",\"people_in\":" + String(peopleIn) + ",\"people_out\":" + String(peopleOut) + 
-                  ",\"tof_distance_mm_a\":" + String(d1) + ",\"tof_distance_mm_b\":" + String(d2) + "}";
-    
-    int httpCode = http.POST(json);
-    Serial.println("Telemetry HTTP POST: " + String(httpCode));
-    http.end();
+  if (!entryTimeout &amp;&amp; entryDistance != 65535) {
+    if (entryDistance &lt; DETECTION_LIMIT_MM &amp;&amp; !entryDetected) {
+      entryDetected = true;
+      if (crowd &lt; CAPACITY) { crowd++; entryCount++; lastEvent = "PERSON_ENTERED"; }
+      else { lastEvent = "ENTRY_BLOCKED"; }
+    }
+    if (entryDistance &gt;= DETECTION_LIMIT_MM) { entryDetected = false; }
   }
+
+  if (!exitTimeout &amp;&amp; exitDistance != 65535) {
+    if (exitDistance &lt; DETECTION_LIMIT_MM &amp;&amp; !exitDetected) {
+      exitDetected = true;
+      if (crowd &gt; 0) { crowd--; exitCount++; lastEvent = "PERSON_EXITED"; }
+      else { lastEvent = "EXIT_IGNORED"; }
+    }
+    if (exitDistance &gt;= DETECTION_LIMIT_MM) { exitDetected = false; }
+  }
+
+  String status = (crowd &gt;= CAPACITY) ? "NO_ENTRY_ALLOWED" : (crowd &gt;= VENUE_B_LIMIT ? "RECOMMEND_VENUE_B" : "ENTRY_ALLOWED");
+
+  if (millis() - lastUpload &gt;= UPLOAD_INTERVAL) {
+    lastUpload = millis();
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      if (http.begin(SERVER_URL)) {
+        http.setTimeout(1500);
+        http.addHeader("Content-Type", "application/json");
+        float entryCM = (!entryTimeout &amp;&amp; entryDistance != 65535) ? entryDistance / 10.0 : -1.0;
+        float exitCM = (!exitTimeout &amp;&amp; exitDistance != 65535) ? exitDistance / 10.0 : -1.0;
+        String payload = "{\"sensor_id\":\"ESP32-S3-VL53L0X-GATE\",\"zone_id\":\"zone-a-sona-college\",\"venue_id\":\"sona-college\",\"entryCount\":" + String(entryCount) + ",\"exitCount\":" + String(exitCount) + ",\"currentCrowd\":" + String(crowd) + ",\"capacity\":" + String(CAPACITY) + ",\"entryDistanceCm\":" + String(entryCM, 1) + ",\"exitDistanceCm\":" + String(exitCM, 1) + ",\"status\":\"" + status + "\",\"lastEvent\":\"" + lastEvent + "\"}";
+        int responseCode = http.POST(payload);
+        Serial.print("Backend HTTP: "); Serial.println(responseCode);
+        http.end();
+      }
+    }
+  }
+  delay(100);
 }</pre>
             </div>
 
@@ -1868,40 +1900,62 @@ void sendTelemetry(int d1, int d2) {
         </div>
       </div>
 
-      <div class="kiosk-gate-board">
-        <!-- Recommended Gate -->
-        <div class="kiosk-gate-card go">
-          <div style="display:inline-block; padding:0.4rem 1rem; border-radius:9999px; background:rgba(16,185,129,0.2); color:var(--color-safe); font-weight:800; margin-bottom:1rem;">
-            RECOMMENDED GATE
+      <!-- Live Dynamic Gate Guidance Board -->
+      <div id="kioskGateBoard" class="kiosk-gate-board">
+        <!-- Recommended Gate Card -->
+        <div id="kioskCardGo" class="kiosk-gate-card go">
+          <div style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.4rem 1rem; border-radius:9999px; background:rgba(16,185,129,0.2); color:var(--color-safe); font-weight:800; margin-bottom:1rem;">
+            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+            <span id="kioskGoBadge">RECOMMENDED GATE</span>
           </div>
-          <div class="kiosk-gate-title" style="color:var(--color-safe);">GATE C (NORTH EXPRESS)</div>
-          <div class="kiosk-gate-status" style="color:#fff;">EST. WAIT: 6 MINUTES</div>
-          <p style="font-size:1.1rem; color:var(--text-muted); margin-top:1rem;">
-            Smooth continuous moving queue. Sub-35% occupancy.
+          <div id="kioskGoTitle" class="kiosk-gate-title" style="color:var(--color-safe);">GATE A (MAIN ENTRANCE)</div>
+          <div id="kioskGoStatus" class="kiosk-gate-status" style="color:#047857;">ENTRY ALLOWED (1/10 CROWD)</div>
+          <p id="kioskGoDesc" style="font-size:1.15rem; color:#334155; margin-top:1rem; font-weight:500;">
+            Smooth continuous moving queue. Sub-10% capacity.
           </p>
         </div>
 
-        <!-- Avoid Gate -->
-        <div class="kiosk-gate-card stop">
-          <div style="display:inline-block; padding:0.4rem 1rem; border-radius:9999px; background:rgba(239,68,68,0.2); color:var(--color-critical); font-weight:800; margin-bottom:1rem;">
-            CHOKED - DO NOT ENTER
+        <!-- Avoid / Alternate Gate Card -->
+        <div id="kioskCardStop" class="kiosk-gate-card stop">
+          <div style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.4rem 1rem; border-radius:9999px; background:rgba(239,68,68,0.2); color:var(--color-critical); font-weight:800; margin-bottom:1rem;">
+            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px #ef4444;"></span>
+            <span id="kioskStopBadge">ALTERNATIVE ROUTE</span>
           </div>
-          <div class="kiosk-gate-title" style="color:var(--color-critical);">GATE A (MAIN DIRECT)</div>
-          <div class="kiosk-gate-status" style="color:#fff;">EST. WAIT: 28+ MINUTES</div>
-          <p style="font-size:1.1rem; color:var(--text-muted); margin-top:1rem;">
-            Bottlenecked inner corridor (92% occupancy). Use Gate C bypass.
+          <div id="kioskStopTitle" class="kiosk-gate-title" style="color:var(--color-critical);">ZONE B (INNOVATION WALKWAY)</div>
+          <div id="kioskStopStatus" class="kiosk-gate-status" style="color:#b91c1c;">EST. WAIT: 2 MINUTES</div>
+          <p id="kioskStopDesc" style="font-size:1.15rem; color:#334155; margin-top:1rem; font-weight:500;">
+            Secondary path ready if main gate reaches capacity limit (8/10).
           </p>
         </div>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; border-top:2px solid #1e293b; padding-top:1.5rem;">
+      <!-- Live Campus Ground Metrics Ribbon for Kiosk -->
+      <div id="kioskMetricsRibbon" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1.5rem; margin-bottom:2rem; padding:1.25rem 2rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+        <div style="text-align:center;">
+          <div style="font-size:0.85rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Live Venue Occupancy</div>
+          <div id="kioskLiveCrowdCount" style="font-size:2.4rem; font-weight:900; color:#0f172a; margin-top:0.25rem;">1 / 10</div>
+          <div id="kioskLiveOccupancyPct" style="font-size:0.85rem; color:#10b981; font-weight:700;">10% Capacity</div>
+        </div>
+        <div style="text-align:center; border-left:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+          <div style="font-size:0.85rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Access Control Status</div>
+          <div id="kioskAccessStatus" style="font-size:2.2rem; font-weight:900; color:#10b981; margin-top:0.25rem;">ENTRY ALLOWED</div>
+          <div id="kioskGateAdvisory" style="font-size:0.85rem; color:#64748b; font-weight:600;">Hardware Sensor Gate: Active</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:0.85rem; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Hardware Sensors</div>
+          <div id="kioskSensorTelemetry" style="font-size:2.2rem; font-weight:900; color:#0f172a; margin-top:0.25rem;">ONLINE</div>
+          <div id="kioskHardwareStats" style="font-size:0.85rem; color:#64748b; font-weight:600;">In: 1 | Out: 0</div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:2px solid #e2e8f0; padding-top:1.5rem;">
         <div style="display:flex; align-items:center; gap:1.5rem;">
           <!-- DYNAMIC QR CODE CONTAINER -->
-          <div id="kioskQrCodeContainer" style="width:110px; height:110px; background:#fff; padding:6px; border-radius:10px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+          <div id="kioskQrCodeContainer" style="width:110px; height:110px; background:#fff; padding:6px; border-radius:10px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.15); border:1px solid #cbd5e1;">
             <!-- QR SVG code rendered dynamically by JS -->
           </div>
           <div>
-            <div style="font-size:1.15rem; font-weight:800; color:#ffffff;">Scan QR Code to open Mobile Live Route Navigator</div>
+            <div style="font-size:1.15rem; font-weight:800; color:#0f172a;">Scan QR Code to open Mobile Live Route Navigator</div>
             <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem;">
               Direct Link: <strong id="kioskDirectUrl" style="color:var(--accent-cyan); font-family:monospace;">http://127.0.0.1:5000/?role=visitor</strong>
             </div>

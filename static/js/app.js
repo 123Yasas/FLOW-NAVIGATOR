@@ -7,7 +7,7 @@
 const FlowApp = {
   currentRole: 'landing',
   currentAdminTab: 'overview',
-  activeVenueId: 'palani-gathering',
+  activeVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
   isSeniorMode: false,
   emergencyActive: false,
   dataMode: 'demo', // 'demo' or 'real'
@@ -29,14 +29,36 @@ const FlowApp = {
     this.bindMapsKeyModal();
     this.startClock();
 
-    // Default entry: Landing view
-    this.switchRole('landing');
+    // Check URL parameters for direct role or venue deep links (e.g. ?role=kiosk)
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialRole = urlParams.get('role');
+    const initialVenue = urlParams.get('venue');
+
+    if (initialVenue) {
+      this.activeVenueId = initialVenue;
+      localStorage.setItem('flow_active_venue_id', initialVenue);
+    }
+
+    if (initialRole && ['landing', 'visitor', 'admin', 'kiosk'].includes(initialRole)) {
+      if (initialRole === 'admin' && !this.isAdminLoggedIn) {
+        this.switchRole('landing');
+        this.openAdminLoginModal();
+      } else {
+        this.switchRole(initialRole);
+      }
+    } else {
+      // Default entry: Landing view
+      this.switchRole('landing');
+    }
 
     // Initialize sub-modules
     if (window.GoogleMapsManager) window.GoogleMapsManager.init();
     if (window.SensorSimulator) window.SensorSimulator.init();
     if (window.MlDashboard) window.MlDashboard.init();
     if (window.CadPlanner) window.CadPlanner.init();
+
+    // Ensure active venue is applied across UI labels, dropdown, sidebar, and map
+    this.setVenue(this.activeVenueId);
 
     // Initial data fetch and start background polling
     this.refreshData();
@@ -275,6 +297,9 @@ const FlowApp = {
 
     if (role === 'kiosk') {
       this.generateKioskQrCode();
+      if (this.cachedZones) {
+        this.updateKioskView(this.cachedZones, []);
+      }
     }
   },
 
@@ -481,10 +506,11 @@ const FlowApp = {
     if (!tbody) return;
 
     try {
-      const resp = await fetch('/api/sensors');
+      const resp = await fetch(`/api/sensors?venue_id=${this.activeVenueId}`);
       const data = await resp.json();
       const sensors = data.sensors || [];
       const mode = data.data_mode || this.dataMode;
+      this.cachedSensors = sensors;
 
       if (statCount) statCount.textContent = `${sensors.length} Units`;
 
@@ -935,8 +961,9 @@ const FlowApp = {
     }
   },
 
-  setVenue: function(venueId) {
+  setVenue: async function(venueId) {
     this.activeVenueId = venueId;
+    localStorage.setItem('flow_active_venue_id', venueId);
     const select = document.getElementById('venueSelect');
     if (select) select.value = venueId;
 
@@ -949,14 +976,87 @@ const FlowApp = {
     const sidebarVenue = document.getElementById('adminSidebarVenue');
     if (sidebarVenue) sidebarVenue.textContent = text;
 
-    // Sync pill buttons
+    // Update active badges in Citizen and Map views
+    const currentBadge = document.getElementById('currentVenueNameBadge');
+    if (currentBadge) currentBadge.textContent = text;
+
+    // Sync pill buttons in Admin Google Maps tab
     document.querySelectorAll('.venue-pill').forEach(p => {
       p.classList.toggle('active', p.dataset.vid === venueId);
     });
 
+    // Notify GoogleMapsManager
     if (window.GoogleMapsManager) window.GoogleMapsManager.switchVenue(venueId);
-    this.refreshData();
+
+    // Refresh live zones, routes, citizen and admin view
+    await this.refreshData();
+
+    // Re-generate analytics records for this venue's active zones
     this.generateAnalyticsData();
+
+    // Sync ESP32 sensor fleet view
+    this.fetchEsp32Sensors();
+    if (window.SensorSimulator) window.SensorSimulator.fetchSensors();
+
+    // Fetch full venue details to synchronize CAD Planner, ML Studio, and Forms
+    try {
+      const resp = await fetch(`/api/venues/${venueId}`);
+      if (resp.ok) {
+        const vData = await resp.json();
+        const venue = vData.venue || { id: venueId, name: text };
+        const zones = vData.zones || this.cachedZones || [];
+
+        // Synchronize Smart Event CAD Planner
+        if (window.CadPlanner && typeof window.CadPlanner.setVenue === 'function') {
+          window.CadPlanner.setVenue(venue);
+        }
+
+        // Synchronize ML Studio Sliders
+        if (window.MlDashboard && typeof window.MlDashboard.setVenue === 'function') {
+          window.MlDashboard.setVenue(venue, zones);
+        }
+
+        // Synchronize ESP32 Registration Form Target Zone select
+        this.syncEsp32ZoneDropdown(zones);
+
+        // Synchronize User Management Venue Scope select
+        this.syncUserVenueScopeDropdown(venue);
+      }
+    } catch (e) {
+      console.warn('[FlowApp] setVenue enrichment error:', e);
+    }
+
+    // Refresh Venue CRUD Manager table highlight
+    if (window.VenueCrudManager && typeof window.VenueCrudManager.updateStats === 'function') {
+      window.VenueCrudManager.updateStats();
+      if (typeof window.VenueCrudManager.renderVenueTable === 'function') window.VenueCrudManager.renderVenueTable();
+      if (typeof window.VenueCrudManager.renderAdminTabTable === 'function') window.VenueCrudManager.renderAdminTabTable();
+    }
+  },
+
+  syncEsp32ZoneDropdown: function(zones) {
+    const sel = document.getElementById('esp32ZoneSelect');
+    if (!sel || !zones || !zones.length) return;
+    sel.innerHTML = zones.map(z => `
+      <option value="${z.id}">${z.code ? z.code + ': ' : ''}${z.name}</option>
+    `).join('');
+  },
+
+  syncUserVenueScopeDropdown: function(venue) {
+    const sel = document.getElementById('newUserVenueScope');
+    if (!sel || !venue) return;
+    const vName = venue.name || this.activeVenueId;
+    let exists = false;
+    Array.from(sel.options).forEach(opt => {
+      if (opt.value === vName) exists = true;
+    });
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = vName;
+      opt.textContent = vName;
+      sel.appendChild(opt);
+    }
+    sel.value = vName;
   },
 
   // -------------------- DETAILED ANALYTICS TABLE --------------------
@@ -971,15 +1071,39 @@ const FlowApp = {
   },
 
   generateAnalyticsData: function() {
-    const zones = [
-      { id: 'zone-a', name: 'Zone A: Main Entrance', cap: 800 },
-      { id: 'zone-b', name: 'Zone B: West Courtyard', cap: 800 },
-      { id: 'zone-c', name: 'Zone C: North Shrine Sanctum', cap: 800 },
-      { id: 'zone-d', name: 'Zone D: South Bypass', cap: 800 },
-      { id: 'zone-e', name: 'Zone E: Dining Hall', cap: 1200 },
-      { id: 'zone-f', name: 'Zone F: Parking Grounds', cap: 1500 },
-      { id: 'zone-h', name: 'Zone H: Hilltop Staircase', cap: 1000 }
-    ];
+    // Dynamically derive analytics rows from active venue zones
+    let zones = [];
+    if (Array.isArray(this.cachedZones) && this.cachedZones.length > 0) {
+      zones = this.cachedZones.map(z => ({
+        id: z.id,
+        name: z.name,
+        cap: z.capacity || 800,
+        status: z.status || 'SAFE'
+      }));
+    } else {
+      zones = [
+        { id: 'zone-a', name: 'Zone A: Main Entrance', cap: 800, status: 'SAFE' },
+        { id: 'zone-b', name: 'Zone B: West Courtyard', cap: 800, status: 'HIGH' },
+        { id: 'zone-c', name: 'Zone C: North Shrine Sanctum', cap: 800, status: 'CRITICAL' },
+        { id: 'zone-d', name: 'Zone D: South Bypass', cap: 800, status: 'SAFE' },
+        { id: 'zone-e', name: 'Zone E: Dining Hall', cap: 1200, status: 'MODERATE' },
+        { id: 'zone-f', name: 'Zone F: Parking Grounds', cap: 1500, status: 'SAFE' }
+      ];
+    }
+
+    // Synchronize analytics filter dropdown with venue zones
+    const zoneFilter = document.getElementById('analyticsZoneFilter');
+    if (zoneFilter) {
+      const prevVal = zoneFilter.value;
+      zoneFilter.innerHTML = `<option value="ALL">All Zones & Gates</option>` + zones.map(z => `
+        <option value="${z.id}">${z.name}</option>
+      `).join('');
+      if (zones.some(z => z.id === prevVal)) {
+        zoneFilter.value = prevVal;
+      } else {
+        zoneFilter.value = 'ALL';
+      }
+    }
 
     const records = [];
     const timeSlots = [
@@ -991,8 +1115,8 @@ const FlowApp = {
     timeSlots.forEach((slot, slotIdx) => {
       const decay = 1.0 - (slotIdx * 0.03);
       zones.forEach(z => {
-        let isChoke = (z.id === 'zone-c' || z.id === 'zone-h');
-        let count = Math.min(z.cap, Math.round((isChoke ? 750 : 320) * decay + (Math.random() * 40)));
+        let isChoke = (z.status === 'CRITICAL' || z.id.includes('zone-c') || z.id.includes('zone-h'));
+        let count = Math.min(z.cap, Math.round((isChoke ? z.cap * 0.92 : z.cap * 0.42) * decay + (Math.random() * 25)));
         let occPct = Math.round((count / z.cap) * 100);
         let influx = Math.round((isChoke ? 65 : 35) * decay);
         let egress = Math.round((isChoke ? 25 : 32) * decay);
@@ -1003,7 +1127,7 @@ const FlowApp = {
         let directive = 'Normal circulation flowing smoothly';
         if (occPct >= 90) {
           status = 'CRITICAL';
-          directive = 'Divert traffic to Route C; choke risk';
+          directive = 'Divert traffic to recommended bypass; choke risk';
         } else if (occPct >= 75) {
           status = 'HIGH';
           directive = 'Monitor doorway velocity closely';
@@ -1212,7 +1336,7 @@ const FlowApp = {
     try {
       const [zonesResp, routesResp, healthResp, alertsResp] = await Promise.all([
         fetch(`/api/zones?venue_id=${this.activeVenueId}`),
-        fetch('/api/routes'),
+        fetch(`/api/routes?venue_id=${this.activeVenueId}`),
         fetch('/api/health'),
         fetch('/api/alerts')
       ]);
@@ -1222,6 +1346,8 @@ const FlowApp = {
       const healthData = await healthResp.json();
       const alertsData = await alertsResp.json();
 
+      this.cachedZones = zonesData.zones || [];
+
       // Check emergency mode sync
       if (healthData.system && healthData.system.emergency_mode !== this.emergencyActive) {
         this.emergencyActive = healthData.system.emergency_mode;
@@ -1230,6 +1356,7 @@ const FlowApp = {
 
       this.updateCitizenView(zonesData.zones || [], routesData.routes || []);
       this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData);
+      this.updateKioskView(zonesData.zones || [], routesData.routes || []);
       this.updateAlerts(alertsData.alerts || []);
     } catch (e) {
       console.warn('[FlowApp] Polling error:', e);
@@ -1330,6 +1457,22 @@ const FlowApp = {
       capPctEl.textContent = `${pct}% of ${totalCap.toLocaleString()} Capacity`;
     }
 
+    // Dynamic Active Counting Gates
+    const statSensors = document.getElementById('adminStatSensors');
+    if (statSensors) {
+      const gateCount = (this.cachedSensors && this.cachedSensors.length) ? this.cachedSensors.length : zones.length;
+      statSensors.textContent = `${gateCount} Gate${gateCount !== 1 ? 's' : ''}`;
+    }
+
+    // Dynamic Peak Chokepoint Warning
+    const statSurge = document.getElementById('adminStatSurge');
+    if (statSurge && zones.length) {
+      const maxZone = [...zones].sort((a, b) => ((b.current_count || 0) / (b.capacity || 1)) - ((a.current_count || 0) / (a.capacity || 1)))[0];
+      const maxOcc = Math.round(((maxZone.current_count || 0) / (maxZone.capacity || 1)) * 100);
+      statSurge.textContent = `${maxZone.code || maxZone.name} (${maxOcc}%)`;
+      statSurge.style.color = maxOcc >= 80 ? 'var(--color-critical)' : maxOcc >= 50 ? 'var(--color-moderate)' : 'var(--color-safe)';
+    }
+
     // Render human-friendly zone occupancy cards
     const grid = document.getElementById('adminZoneGrid');
     if (grid && zones.length) {
@@ -1369,15 +1512,31 @@ const FlowApp = {
       }).join('');
     }
 
-    // Render Trend Bars
+    // Render Dynamic Hourly Venue Footfall & Movement Velocity Chart
     const trendsBar = document.getElementById('trendsBarChart');
-    if (trendsBar && !trendsBar.hasChildNodes()) {
-      const heights = [45, 60, 85, 95, 70, 80, 92];
-      trendsBar.innerHTML = heights.map(h => `
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
-          <div style="width:100%; height:${h}%; background:linear-gradient(to top, #2563eb, #06b6d4); border-radius:4px 4px 0 0; opacity:0.85;"></div>
-        </div>
-      `).join('');
+    if (trendsBar) {
+      // Calculate scaled hourly series based on current total occupancy
+      const baseRatio = Math.max(1, totalCount);
+      const hourFactors = [0.25, 0.45, 0.70, 0.95, 0.65, 0.85, 1.0];
+      const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Now'];
+
+      trendsBar.innerHTML = hourFactors.map((f, i) => {
+        const barHeight = Math.min(100, Math.max(15, Math.round(f * 85)));
+        const countVal = Math.round(baseRatio * f);
+        const isCurrent = i === hourFactors.length - 1;
+        const grad = isCurrent
+          ? 'linear-gradient(to top, #10b981, #06b6d4)'
+          : 'linear-gradient(to top, #2563eb, #38bdf8)';
+
+        return `
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; position:relative;" title="${hours[i]}: ${countVal} people (${barHeight}% velocity)">
+            <span style="font-size:0.68rem; font-weight:800; color:${isCurrent ? '#047857' : '#2563eb'}; margin-bottom:0.35rem;">
+              ${countVal}
+            </span>
+            <div style="width:100%; height:${barHeight}%; background:${grad}; border-radius:6px 6px 0 0; box-shadow:0 2px 6px rgba(37,99,235,0.2); transition:height 0.4s ease;"></div>
+          </div>
+        `;
+      }).join('');
     }
   },
 
@@ -1399,6 +1558,156 @@ const FlowApp = {
         <div style="font-size:0.82rem; color:var(--text-muted); margin-top:0.25rem;">${a.message}</div>
       </div>
     `).join('');
+  },
+
+  updateKioskView: function(zones, routes) {
+    // 0. Synchronize Venue Title
+    const select = document.getElementById('venueSelect');
+    const opt = select ? select.querySelector(`option[value="${this.activeVenueId}"]`) : null;
+    const venueName = opt ? opt.textContent.split('(')[0].trim() : (this.activeVenueId === 'sona-college' ? 'Sona College of Technology' : 'Palani Gathering Grounds');
+    const kioskTitle = document.getElementById('kioskVenueTitle');
+    if (kioskTitle) kioskTitle.textContent = venueName;
+
+    // 1. Calculate live totals
+    let totalCount = 0;
+    let totalCap = 0;
+    zones.forEach(z => {
+      totalCount += (z.current_count || 0);
+      totalCap += (z.capacity || (this.activeVenueId === 'sona-college' ? 10 : 800));
+    });
+
+    const occPct = totalCap > 0 ? Math.round((totalCount / totalCap) * 100) : 0;
+
+    // Update live metrics ribbon
+    const crowdCountEl = document.getElementById('kioskLiveCrowdCount');
+    if (crowdCountEl) crowdCountEl.textContent = `${totalCount} / ${totalCap}`;
+
+    const occPctEl = document.getElementById('kioskLiveOccupancyPct');
+    if (occPctEl) {
+      occPctEl.textContent = `${occPct}% Capacity`;
+      occPctEl.style.color = occPct >= 100 ? '#ef4444' : occPct >= 80 ? '#f59e0b' : '#10b981';
+    }
+
+    // Zone A (Main Gate) check
+    const zoneA = zones.find(z => z.id === 'zone-a-sona-college' || z.id.endsWith('gate-a') || z.id.includes('zone-a')) || zones[0];
+    const gateCount = zoneA ? (zoneA.current_count || 0) : totalCount;
+    const gateCap = zoneA ? (zoneA.capacity || 10) : 10;
+
+    // 2. Hardware Access Control Status (Aligned with ESP32-S3 firmware)
+    const accessStatusEl = document.getElementById('kioskAccessStatus');
+    const gateAdvisoryEl = document.getElementById('kioskGateAdvisory');
+    const cardGo = document.getElementById('kioskCardGo');
+    const cardStop = document.getElementById('kioskCardStop');
+
+    const goTitle = document.getElementById('kioskGoTitle');
+    const goStatus = document.getElementById('kioskGoStatus');
+    const goDesc = document.getElementById('kioskGoDesc');
+    const goBadge = document.getElementById('kioskGoBadge');
+
+    const stopTitle = document.getElementById('kioskStopTitle');
+    const stopStatus = document.getElementById('kioskStopStatus');
+    const stopDesc = document.getElementById('kioskStopDesc');
+    const stopBadge = document.getElementById('kioskStopBadge');
+
+    if (gateCount >= gateCap) {
+      // OVER CAPACITY / NO ENTRY
+      if (accessStatusEl) {
+        accessStatusEl.textContent = 'NO ENTRY ALLOWED';
+        accessStatusEl.style.color = '#ef4444';
+      }
+      if (gateAdvisoryEl) gateAdvisoryEl.textContent = `Zone Capacity Reached (${gateCount}/${gateCap}). Turnstile paused.`;
+
+      if (goBadge) goBadge.textContent = 'MAIN GATE BLOCKED';
+      if (goTitle) goTitle.textContent = (zoneA ? zoneA.name : 'GATE A') + ' (CAPACITY FULL)';
+      if (goStatus) {
+        goStatus.textContent = '⛔ ACCESS BLOCKED (10/10)';
+        goStatus.style.color = '#ef4444';
+      }
+      if (goDesc) goDesc.textContent = 'Crowd limit reached. Please wait for exiting patrons or proceed to Zone B Innovation Walkway.';
+      if (cardGo) {
+        cardGo.className = 'kiosk-gate-card stop';
+      }
+
+      if (stopBadge) stopBadge.textContent = 'RECOMMENDED DETOUR';
+      if (stopTitle) stopTitle.textContent = 'ZONE B (INNOVATION WALKWAY)';
+      if (stopStatus) {
+        stopStatus.textContent = '🟢 ALTERNATE PATH OPEN';
+        stopStatus.style.color = '#047857';
+      }
+      if (stopDesc) stopDesc.textContent = 'Bypass main entrance bottleneck. Free flow pathway.';
+      if (cardStop) {
+        cardStop.className = 'kiosk-gate-card go';
+      }
+
+    } else if (gateCount >= 8) {
+      // RECOMMEND VENUE B (Limit: 8)
+      if (accessStatusEl) {
+        accessStatusEl.textContent = 'RECOMMEND VENUE B';
+        accessStatusEl.style.color = '#f59e0b';
+      }
+      if (gateAdvisoryEl) gateAdvisoryEl.textContent = `High Traffic Warning: ${gateCount}/${gateCap} people at Gate A.`;
+
+      if (goBadge) goBadge.textContent = 'CONGESTION WARNING';
+      if (goTitle) goTitle.textContent = (zoneA ? zoneA.name : 'GATE A') + ' (NEAR CAPACITY)';
+      if (goStatus) {
+        goStatus.textContent = `⚠️ HEAVY QUEUE (${gateCount}/${gateCap})`;
+        goStatus.style.color = '#b45309';
+      }
+      if (goDesc) goDesc.textContent = 'Approaching maximum limit. Consider redirecting to Innovation & Food Walkway.';
+      if (cardGo) {
+        cardGo.className = 'kiosk-gate-card stop';
+      }
+
+      if (stopBadge) stopBadge.textContent = 'RECOMMENDED BYPASS';
+      if (stopTitle) stopTitle.textContent = 'ZONE B (INNOVATION WALKWAY)';
+      if (stopStatus) {
+        stopStatus.textContent = '🟢 RECOMMENDED (EST. WAIT: 1 MIN)';
+        stopStatus.style.color = '#047857';
+      }
+      if (stopDesc) stopDesc.textContent = 'Fast flowing bypass route actively recommended by crowd AI.';
+      if (cardStop) {
+        cardStop.className = 'kiosk-gate-card go';
+      }
+
+    } else {
+      // ENTRY ALLOWED (Green Normal State)
+      if (accessStatusEl) {
+        accessStatusEl.textContent = 'ENTRY ALLOWED';
+        accessStatusEl.style.color = '#10b981';
+      }
+      if (gateAdvisoryEl) gateAdvisoryEl.textContent = `Hardware Sensor Gate: Active (${gateCount}/${gateCap} Present)`;
+
+      if (goBadge) goBadge.textContent = 'RECOMMENDED GATE';
+      if (goTitle) goTitle.textContent = (zoneA ? zoneA.name : 'GATE A (MAIN ENTRANCE)');
+      if (goStatus) {
+        goStatus.textContent = `ENTRY ALLOWED (${gateCount}/${gateCap} CROWD)`;
+        goStatus.style.color = '#047857';
+      }
+      if (goDesc) goDesc.textContent = 'Smooth continuous moving queue. Free flowing entry.';
+      if (cardGo) {
+        cardGo.className = 'kiosk-gate-card go';
+      }
+
+      if (stopBadge) stopBadge.textContent = 'ALTERNATIVE ROUTE';
+      if (stopTitle) stopTitle.textContent = 'ZONE B (INNOVATION WALKWAY)';
+      if (stopStatus) {
+        stopStatus.textContent = 'EST. WAIT: 2 MINUTES';
+        stopStatus.style.color = '#334155';
+      }
+      if (stopDesc) stopDesc.textContent = 'Secondary corridor ready if main gate approaches capacity limit.';
+      if (cardStop) {
+        cardStop.className = 'kiosk-gate-card';
+      }
+    }
+
+    // Update sensor stats if sensor exists
+    const sensorStatsEl = document.getElementById('kioskHardwareStats');
+    if (sensorStatsEl && this.cachedSensors && this.cachedSensors.length) {
+      const s = this.cachedSensors.find(x => x.id === 'ESP32-S3-VL53L0X-GATE') || this.cachedSensors[0];
+      if (s) {
+        sensorStatsEl.textContent = `In: ${s.people_in || 0} | Out: ${s.people_out || 0} | Batt: ${s.battery_pct || 100}%`;
+      }
+    }
   }
 };
 
