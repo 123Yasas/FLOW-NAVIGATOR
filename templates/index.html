@@ -297,6 +297,46 @@
         </p>
       </div>
 
+      <!-- LIVE AUTOMATIC GATE CLOSURE & SERVO DIVERSION BANNER -->
+      <div id="visitorGateStatusCard" class="card" style="margin-bottom:1.5rem; border-left:6px solid #10b981; background:rgba(16,185,129,0.06); transition:all 0.35s ease; padding:1.25rem 1.5rem;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1.25rem;">
+          
+          <div style="display:flex; align-items:center; gap:1rem; flex:1; min-width:280px;">
+            <div id="visitorGateIconWrap" style="width:52px; height:52px; border-radius:12px; background:rgba(16,185,129,0.2); display:flex; align-items:center; justify-content:center; color:#10b981; flex-shrink:0;">
+              <i id="visitorGateIcon" data-lucide="door-open" style="width:26px; height:26px;"></i>
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.25rem; flex-wrap:wrap;">
+                <span id="visitorGateBadgeA" class="badge badge-safe" style="font-weight:800; letter-spacing:0.03em;">● GATE A: OPEN</span>
+                <span id="visitorGateBadgeB" class="badge" style="background:rgba(255,255,255,0.08); font-weight:700; color:var(--text-muted);">● GATE B: STANDBY</span>
+                <span id="visitorGateServoBadge" class="badge" style="background:#0f172a; color:#38bdf8; font-family:monospace; font-size:0.75rem; border:1px solid #1e293b;">SERVO: 0°</span>
+              </div>
+              <h3 id="visitorGateTitle" style="font-size:1.15rem; font-weight:800; margin:0 0 0.2rem 0; color:var(--text-main);">
+                Venue A Entrance Open — Direct Entry Permitted
+              </h3>
+              <p id="visitorGateDesc" style="font-size:0.83rem; color:var(--text-muted); margin:0; line-height:1.4;">
+                Turnstile servo barrier is open. Real-time gate occupancy: <strong id="visitorGateCountDisplay" style="color:var(--text-main);">0 / 10</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <!-- Gate A Card -->
+            <div id="visitorGateBoxA" style="text-align:center; padding:0.6rem 1.1rem; background:rgba(16,185,129,0.1); border-radius:8px; border:1px solid rgba(16,185,129,0.3); min-width:115px; transition:all 0.3s ease;">
+              <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Venue A Gate</div>
+              <div id="visitorGateAIndicator" style="font-size:0.95rem; font-weight:800; color:#10b981; margin-top:2px;">OPEN</div>
+            </div>
+
+            <!-- Gate B Card -->
+            <div id="visitorGateBoxB" style="text-align:center; padding:0.6rem 1.1rem; background:rgba(255,255,255,0.03); border-radius:8px; border:1px solid var(--border-subtle); min-width:115px; transition:all 0.3s ease;">
+              <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Venue B Gate</div>
+              <div id="visitorGateBIndicator" style="font-size:0.95rem; font-weight:800; color:var(--text-muted); margin-top:2px;">CLOSED</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- Crowd Gauge & Quick Stats -->
       <div class="crowd-meter-card">
         <div class="grid-3" style="align-items:center;">

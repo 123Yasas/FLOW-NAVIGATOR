@@ -39,7 +39,12 @@ SYSTEM_STATE = {
     "emergency_mode": False,
     "emergency_message": "🚨 EMERGENCY EVACUATION ACTIVE - FOLLOW GREEN ILLUMINATED PATHWAYS TO PARKING & EXITS",
     "active_venue_id": "palani-gathering",
-    "data_mode": "demo"  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
+    "data_mode": "demo",  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
+    "gate_status": "GATE_A_OPEN_GATE_B_CLOSED",
+    "gate_a": "OPEN",
+    "gate_b": "CLOSED",
+    "gate_crowd": 0,
+    "gate_capacity": 10
 }
 
 # --- BACKGROUND LIVE DEMO SIMULATION THREAD ---
@@ -548,6 +553,12 @@ def receive_crowd():
     data = request.get_json(silent=True) or {}
     print(f"[FlowNavigator ESP32-S3] Telemetry received from prototype: {data}")
 
+    current_cnt = int(data.get("currentCrowd") if "currentCrowd" in data else data.get("current_count", 0))
+    cap_limit = int(data.get("capacity", 10))
+    gate_st = data.get("gateStatus") or data.get("gate_status") or (
+        "GATE_A_CLOSED_GATE_B_OPEN" if current_cnt >= cap_limit else "GATE_A_OPEN_GATE_B_CLOSED"
+    )
+
     # Map prototype payload to standard telemetry fields
     mapped_data = {
         "sensor_id": data.get("sensor_id") or "ESP32-S3-VL53L0X-GATE",
@@ -555,15 +566,16 @@ def receive_crowd():
         "venue_id": data.get("venue_id") or "sona-college",
         "people_in": int(data.get("entryCount") if "entryCount" in data else data.get("people_in", 0)),
         "people_out": int(data.get("exitCount") if "exitCount" in data else data.get("people_out", 0)),
-        "current_count": int(data.get("currentCrowd") if "currentCrowd" in data else data.get("current_count", 0)),
+        "current_count": current_cnt,
         "tof_distance_mm_a": int(float(data.get("entryDistanceCm", 50)) * 10) if data.get("entryDistanceCm") is not None else 500,
         "tof_distance_mm_b": int(float(data.get("exitDistanceCm", 50)) * 10) if data.get("exitDistanceCm") is not None else 500,
         "battery_pct": 100,
         "signal_dbm": -42,
         "status": "ONLINE",
         "hardware_status": data.get("status", "ENTRY_ALLOWED"),
+        "gate_status": gate_st,
         "last_event": data.get("lastEvent", "STARTED"),
-        "capacity_limit": int(data.get("capacity", 10))
+        "capacity_limit": cap_limit
     }
 
     # Pass through to standard sensor_telemetry processing
@@ -580,6 +592,18 @@ def process_sensor_telemetry(data):
     signal_dbm = data.get("signal_dbm", -42)
     zone_id = data.get("zone_id", "zone-a-sona-college")
     venue_id = data.get("venue_id", "sona-college")
+    capacity_limit = int(data.get("capacity_limit", 10))
+    gate_status = data.get("gate_status") or (
+        "GATE_A_CLOSED_GATE_B_OPEN" if current_count >= capacity_limit else "GATE_A_OPEN_GATE_B_CLOSED"
+    )
+
+    # Sync to global system state
+    is_closed = ("GATE_A_CLOSED" in gate_status) or (current_count >= capacity_limit)
+    SYSTEM_STATE["gate_status"] = gate_status
+    SYSTEM_STATE["gate_a"] = "CLOSED" if is_closed else "OPEN"
+    SYSTEM_STATE["gate_b"] = "OPEN" if is_closed else "CLOSED"
+    SYSTEM_STATE["gate_crowd"] = current_count
+    SYSTEM_STATE["gate_capacity"] = capacity_limit
 
     # Update sensor in MongoDB
     db.update_sensor_telemetry(
@@ -602,8 +626,9 @@ def process_sensor_telemetry(data):
             "controller": "ESP32-S3 DevKit",
             "sensor_type": "Dual VL53L0X ToF (TwoWire 0 & 1)",
             "hardware_status": data.get("hardware_status", "ENTRY_ALLOWED"),
+            "gate_status": gate_status,
             "last_event": data.get("last_event", "ACTIVE"),
-            "capacity_limit": data.get("capacity_limit", 10),
+            "capacity_limit": capacity_limit,
             "zone_name": "Sona Main Entrance Gate"
         }},
         upsert=True
@@ -617,7 +642,7 @@ def process_sensor_telemetry(data):
             "code": "ZONE A",
             "name": "Sona College Main Gate",
             "venue_id": "sona-college",
-            "capacity": data.get("capacity_limit", 10),
+            "capacity": capacity_limit,
             "current_count": current_count,
             "entry_rate": 35,
             "exit_rate": 30,
@@ -626,7 +651,7 @@ def process_sensor_telemetry(data):
         db.db.zones.update_one({"id": zone["id"]}, {"$set": zone}, upsert=True)
 
     if zone:
-        capacity = max(1, int(zone.get("capacity", data.get("capacity_limit", 10))))
+        capacity = max(1, int(zone.get("capacity", capacity_limit)))
         ratio = current_count / capacity
         if ratio >= 1.0 or current_count >= 10:
             st = "CRITICAL"
@@ -638,6 +663,48 @@ def process_sensor_telemetry(data):
             st = "SAFE"
 
         db.update_zone_count(zone_id, current_count, status=st)
+
+    # Update dynamic routing for Sona College based on gate closure
+    if is_closed:
+        db.db.routes.update_one(
+            {"id": "route-sona-direct"},
+            {"$set": {
+                "status": "CRITICAL",
+                "tag": "CLOSED",
+                "color": "#ef4444",
+                "occupancy_percentage": 100,
+                "explainable_reason": "Gate A CLOSED: Venue A capacity reached (10/10). Automatic servo barrier locked. Divert to Gate B."
+            }}
+        )
+        db.db.routes.update_one(
+            {"id": "route-sona-venue-b"},
+            {"$set": {
+                "status": "SAFE",
+                "tag": "RECOMMENDED",
+                "color": "#10b981",
+                "explainable_reason": "Gate B OPEN: Automated diversion corridor active. Proceed to Venue B."
+            }}
+        )
+    else:
+        db.db.routes.update_one(
+            {"id": "route-sona-direct"},
+            {"$set": {
+                "status": "SAFE",
+                "tag": "RECOMMENDED",
+                "color": "#3b82f6",
+                "occupancy_percentage": min(95, int((current_count / max(1, capacity_limit)) * 100)),
+                "explainable_reason": "Gate A OPEN: Normal entry permitted. Monitored by ESP32 VL53L0X sensors."
+            }}
+        )
+        db.db.routes.update_one(
+            {"id": "route-sona-venue-b"},
+            {"$set": {
+                "status": "SAFE",
+                "tag": "ALTERNATIVE",
+                "color": "#10b981",
+                "explainable_reason": "Gate B in standby. Ready for automatic diversion when Gate A reaches capacity."
+            }}
+        )
 
     return jsonify({
         "success": True,

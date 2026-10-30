@@ -893,7 +893,17 @@ const FlowApp = {
       speakBtn.addEventListener('click', () => {
         const v = window.GoogleMapsManager ? window.GoogleMapsManager.venueConfigs[this.activeVenueId] : null;
         const vName = v ? v.name : 'this venue';
-        const msg = `Welcome to ${vName}. Crowd flow is currently safe at 48 percent capacity. We recommend taking Route C North Express Lane, which has an estimated wait time of only 6 minutes. Please avoid Direct Route A due to heavy queue bottlenecking at the inner corridor.`;
+        const cardTitle = document.getElementById('visitorGateTitle');
+        const isClosed = cardTitle && (cardTitle.textContent.includes('Closed') || cardTitle.textContent.includes('Full'));
+        const countDisplay = document.getElementById('visitorGateCountDisplay');
+        const countText = countDisplay ? countDisplay.textContent : '0 / 10';
+
+        let msg = '';
+        if (isClosed) {
+          msg = `Attention visitors: Venue A gate has reached maximum capacity of ${countText} and the automatic servo gate is closed. Please proceed immediately to Gate B Innovation Walkway which is open for entry.`;
+        } else {
+          msg = `Welcome to ${vName}. Venue A entrance gate is currently open with normal admission at ${countText}. Please proceed through Gate A.`;
+        }
         this.speakText(msg);
       });
     }
@@ -1334,17 +1344,22 @@ const FlowApp = {
   // -------------------- MAIN DATA REFRESH & POLLING --------------------
   refreshData: async function() {
     try {
-      const [zonesResp, routesResp, healthResp, alertsResp] = await Promise.all([
+      const [zonesResp, routesResp, healthResp, alertsResp, sensorsResp] = await Promise.all([
         fetch(`/api/zones?venue_id=${this.activeVenueId}`),
         fetch(`/api/routes?venue_id=${this.activeVenueId}`),
         fetch('/api/health'),
-        fetch('/api/alerts')
+        fetch('/api/alerts'),
+        fetch(`/api/sensors?venue_id=${this.activeVenueId}`).catch(() => null)
       ]);
 
       const zonesData = await zonesResp.json();
       const routesData = await routesResp.json();
       const healthData = await healthResp.json();
       const alertsData = await alertsResp.json();
+      if (sensorsResp && sensorsResp.ok) {
+        const sensorsData = await sensorsResp.json();
+        this.cachedSensors = sensorsData.sensors || [];
+      }
 
       this.cachedZones = zonesData.zones || [];
 
@@ -1354,7 +1369,7 @@ const FlowApp = {
         this.updateEmergencyUI(this.emergencyActive);
       }
 
-      this.updateCitizenView(zonesData.zones || [], routesData.routes || []);
+      this.updateCitizenView(zonesData.zones || [], routesData.routes || [], healthData.system || {});
       this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData);
       this.updateKioskView(zonesData.zones || [], routesData.routes || []);
       this.updateAlerts(alertsData.alerts || []);
@@ -1363,7 +1378,9 @@ const FlowApp = {
     }
   },
 
-  updateCitizenView: function(zones, routes) {
+  updateCitizenView: function(zones, routes, systemState = {}) {
+    this.updateVisitorGateStatus(zones, systemState);
+
     let totalCount = 0;
     let totalCap = 0;
     zones.forEach(z => {
@@ -1437,6 +1454,157 @@ const FlowApp = {
         const tagText = r.tag === 'RECOMMENDED' ? `Fast (${r.estimated_wait_minutes}m)` : (r.tag === 'MODERATE' ? `Moderate (${r.estimated_wait_minutes}m)` : `Heavy (${r.estimated_wait_minutes}m)`);
         return `<span class="badge ${cls}">● ${shortName}: ${tagText}</span>`;
       }).join('');
+    }
+  },
+
+  updateVisitorGateStatus: function(zones, systemState = {}) {
+    const card = document.getElementById('visitorGateStatusCard');
+    if (!card) return;
+
+    // Detect if Gate A is closed based on hardware telemetry or capacity
+    const gateAState = systemState.gate_a || 'OPEN';
+    const gateStatus = systemState.gate_status || '';
+
+    // Check matching gate zone or ESP32 sensor
+    const espSensor = (this.cachedSensors || []).find(s => s.id && (s.id.includes('GATE') || s.id.includes('ESP32')));
+    const gateZone = zones.find(z => z.id === 'zone-a-sona-college' || z.id === 'zone-a' || (z.name && z.name.toLowerCase().includes('gate'))) || zones[0];
+
+    let liveCrowd = (systemState.gate_crowd !== undefined) ? systemState.gate_crowd : (espSensor ? (espSensor.current_count || 0) : (gateZone ? (gateZone.current_count || 0) : 0));
+    let capacityLimit = (systemState.gate_capacity !== undefined) ? systemState.gate_capacity : (espSensor ? (espSensor.capacity_limit || 10) : (gateZone ? (gateZone.capacity || 10) : 10));
+
+    const isGateAClosed = (gateAState === 'CLOSED') || 
+                          (gateStatus.includes('GATE_A_CLOSED')) || 
+                          (espSensor && espSensor.gate_status && espSensor.gate_status.includes('GATE_A_CLOSED')) ||
+                          (liveCrowd >= capacityLimit);
+
+    // DOM Elements
+    const iconWrap = document.getElementById('visitorGateIconWrap');
+    const badgeA = document.getElementById('visitorGateBadgeA');
+    const badgeB = document.getElementById('visitorGateBadgeB');
+    const servoBadge = document.getElementById('visitorGateServoBadge');
+    const title = document.getElementById('visitorGateTitle');
+    const desc = document.getElementById('visitorGateDesc');
+    const countDisplay = document.getElementById('visitorGateCountDisplay');
+    const boxA = document.getElementById('visitorGateBoxA');
+    const boxB = document.getElementById('visitorGateBoxB');
+    const indicatorA = document.getElementById('visitorGateAIndicator');
+    const indicatorB = document.getElementById('visitorGateBIndicator');
+
+    if (countDisplay) {
+      countDisplay.textContent = `${liveCrowd} / ${capacityLimit}`;
+    }
+
+    if (isGateAClosed) {
+      // --- VENUE A GATE IS CLOSED (CAPACITY FULL -> DIVERSION TO B) ---
+      card.style.borderLeft = '6px solid #ef4444';
+      card.style.background = 'rgba(239, 68, 68, 0.08)';
+      card.style.boxShadow = '0 4px 20px rgba(239, 68, 68, 0.15)';
+
+      if (iconWrap) {
+        iconWrap.style.background = 'rgba(239, 68, 68, 0.2)';
+        iconWrap.style.color = '#ef4444';
+        iconWrap.innerHTML = '<i data-lucide="shield-alert" style="width:26px; height:26px;"></i>';
+      }
+
+      if (badgeA) {
+        badgeA.className = 'badge badge-critical';
+        badgeA.textContent = '⛔ GATE A: CLOSED (CAPACITY FULL)';
+      }
+      if (badgeB) {
+        badgeB.className = 'badge badge-safe';
+        badgeB.style.background = 'rgba(16,185,129,0.2)';
+        badgeB.style.color = '#10b981';
+        badgeB.textContent = '✅ GATE B: OPEN (DIVERT HERE)';
+      }
+      if (servoBadge) {
+        servoBadge.textContent = 'SERVO: 90° (DIVERTING)';
+        servoBadge.style.color = '#f87171';
+        servoBadge.style.background = '#1e1b4b';
+      }
+
+      if (title) {
+        title.textContent = `⛔ Gate A Closed — Venue A is Full (${liveCrowd}/${capacityLimit})`;
+        title.style.color = '#ef4444';
+      }
+      if (desc) {
+        desc.innerHTML = `Automated servo barrier has closed Gate A. Please proceed through <strong>Gate B (Innovation Walkway)</strong> which is now open for entry.`;
+      }
+
+      if (boxA) {
+        boxA.style.background = 'rgba(239, 68, 68, 0.15)';
+        boxA.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      }
+      if (indicatorA) {
+        indicatorA.textContent = 'CLOSED';
+        indicatorA.style.color = '#ef4444';
+      }
+
+      if (boxB) {
+        boxB.style.background = 'rgba(16, 185, 129, 0.15)';
+        boxB.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      }
+      if (indicatorB) {
+        indicatorB.textContent = 'OPEN (DIVERT)';
+        indicatorB.style.color = '#10b981';
+      }
+
+    } else {
+      // --- VENUE A GATE IS OPEN ---
+      card.style.borderLeft = '6px solid #10b981';
+      card.style.background = 'rgba(16, 185, 129, 0.06)';
+      card.style.boxShadow = 'none';
+
+      if (iconWrap) {
+        iconWrap.style.background = 'rgba(16, 185, 129, 0.2)';
+        iconWrap.style.color = '#10b981';
+        iconWrap.innerHTML = '<i data-lucide="door-open" style="width:26px; height:26px;"></i>';
+      }
+
+      if (badgeA) {
+        badgeA.className = 'badge badge-safe';
+        badgeA.textContent = '● GATE A: OPEN';
+      }
+      if (badgeB) {
+        badgeB.className = 'badge';
+        badgeB.style.background = 'rgba(255,255,255,0.08)';
+        badgeB.style.color = 'var(--text-muted)';
+        badgeB.textContent = '● GATE B: STANDBY (CLOSED)';
+      }
+      if (servoBadge) {
+        servoBadge.textContent = 'SERVO: 0° (DIRECT A)';
+        servoBadge.style.color = '#38bdf8';
+        servoBadge.style.background = '#0f172a';
+      }
+
+      if (title) {
+        title.textContent = 'Venue A Entrance Open — Direct Entry Permitted';
+        title.style.color = 'var(--text-main)';
+      }
+      if (desc) {
+        desc.innerHTML = `Turnstile servo barrier is open. Real-time gate occupancy: <strong style="color:var(--text-main);">${liveCrowd} / ${capacityLimit}</strong>.`;
+      }
+
+      if (boxA) {
+        boxA.style.background = 'rgba(16, 185, 129, 0.1)';
+        boxA.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+      }
+      if (indicatorA) {
+        indicatorA.textContent = 'OPEN';
+        indicatorA.style.color = '#10b981';
+      }
+
+      if (boxB) {
+        boxB.style.background = 'rgba(255, 255, 255, 0.03)';
+        boxB.style.border = '1px solid var(--border-subtle)';
+      }
+      if (indicatorB) {
+        indicatorB.textContent = 'CLOSED';
+        indicatorB.style.color = 'var(--text-muted)';
+      }
+    }
+
+    if (window.lucide) {
+      lucide.createIcons();
     }
   },
 
