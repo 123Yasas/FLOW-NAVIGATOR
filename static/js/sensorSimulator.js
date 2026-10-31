@@ -12,16 +12,13 @@ const SensorSimulator = {
   init: function() {
     this.bindEvents();
     this.fetchSensors();
-    this.startAutoSimulation();
+    // Auto-simulation disabled - real IoT hardware mode only
+    this.stopAutoSimulation();
   },
 
   startAutoSimulation: function() {
-    if (this.autoSimTimer) return;
-    this.autoSimTimer = setInterval(() => {
-      if (!this.isPaused && !this.isSimulating) {
-        this.fetchSensors();
-      }
-    }, 3500);
+    // Disabled - system runs exclusively on real IoT hardware telemetry
+    return;
   },
 
   stopAutoSimulation: function() {

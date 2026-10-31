@@ -38,89 +38,14 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 SYSTEM_STATE = {
     "emergency_mode": False,
     "emergency_message": "🚨 EMERGENCY EVACUATION ACTIVE - FOLLOW GREEN ILLUMINATED PATHWAYS TO PARKING & EXITS",
-    "active_venue_id": "palani-gathering",
-    "data_mode": "demo",  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
+    "active_venue_id": "sona-college",
+    "data_mode": "real",  # Live ESP32 ToF hardware mode
     "gate_status": "GATE_A_OPEN_GATE_B_CLOSED",
     "gate_a": "OPEN",
     "gate_b": "CLOSED",
     "gate_crowd": 0,
     "gate_capacity": 10
 }
-
-# --- BACKGROUND LIVE DEMO SIMULATION THREAD ---
-import threading
-import time
-import random
-
-def _bg_demo_simulation_worker():
-    while True:
-        try:
-            time.sleep(3.5)
-            if SYSTEM_STATE.get("data_mode") == "demo" and not SYSTEM_STATE.get("emergency_mode"):
-                if db.demo_db is not None:
-                    sensors = list(db.demo_db.sensors.find({}))
-                    for s in sensors:
-                        sid = s.get("id")
-                        if not sid:
-                            continue
-                        delta_in = random.randint(1, 4)
-                        delta_out = random.randint(1, 3)
-                        p_in = s.get("people_in", 500) + delta_in
-                        p_out = s.get("people_out", 250) + delta_out
-                        curr = max(0, p_in - p_out)
-                        tof_a = random.randint(340, 1150)
-                        tof_b = random.randint(340, 1150)
-                        
-                        db.demo_db.sensors.update_one(
-                            {"id": sid},
-                            {"$set": {
-                                "people_in": p_in,
-                                "people_out": p_out,
-                                "current_count": curr,
-                                "tof_distance_mm_a": tof_a,
-                                "tof_distance_mm_b": tof_b,
-                                "last_ping": datetime.datetime.now().isoformat(),
-                                "status": "ONLINE"
-                            }}
-                        )
-                    
-                    zones = list(db.demo_db.zones.find({}))
-                    for z in zones:
-                        zid = z.get("id")
-                        if not zid:
-                            continue
-                        cap = max(1, z.get("capacity", 800))
-                        old_c = z.get("current_count", 300)
-                        if z.get("status") == "CRITICAL" or z.get("access_restricted"):
-                            new_c = old_c
-                        else:
-                            fluc = random.randint(-4, 6)
-                            new_c = max(10, min(cap, old_c + fluc))
-                        
-                        ratio = new_c / cap
-                        if ratio >= 0.9:
-                            st = "CRITICAL"
-                        elif ratio >= 0.75:
-                            st = "HIGH"
-                        elif ratio >= 0.5:
-                            st = "MODERATE"
-                        else:
-                            st = "SAFE"
-                        
-                        db.demo_db.zones.update_one(
-                            {"id": zid},
-                            {"$set": {
-                                "current_count": new_c,
-                                "status": st,
-                                "entry_rate": random.randint(30, 65),
-                                "exit_rate": random.randint(25, 45)
-                            }}
-                        )
-        except Exception as e:
-            pass
-
-_sim_thread = threading.Thread(target=_bg_demo_simulation_worker, daemon=True)
-_sim_thread.start()
 
 # ==================== CORE FRONTEND ROUTES ====================
 
@@ -445,35 +370,11 @@ def get_routes():
 
 @app.route("/api/system/mode", methods=["GET", "POST"])
 def system_mode():
-    if request.method == "POST":
-        data = request.get_json() or {}
-        mode = data.get("mode", "demo").lower()
-        if mode in ["demo", "real"]:
-            SYSTEM_STATE["data_mode"] = mode
-            db.set_mode(mode)
-            if data.get("clear_real", False):
-                db.clear_real_data()
-            return jsonify({
-                "success": True, 
-                "data_mode": SYSTEM_STATE["data_mode"], 
-                "database_name": db.db.name if db.db is not None else "",
-                "message": f"System switched to {mode.upper()} mode using database '{db.db.name}'"
-            })
-        return jsonify({"error": "Invalid mode. Use 'demo' or 'real'"}), 400
     return jsonify({
-        "data_mode": SYSTEM_STATE["data_mode"],
+        "data_mode": "real",
         "database_name": db.db.name if db.db is not None else "",
         "database_status": db.get_status()
     })
-
-@app.route("/api/system/reset_real_db", methods=["POST"])
-def reset_real_db():
-    db.clear_real_data()
-    return jsonify({
-        "success": True,
-        "message": "Real database successfully purged of all demo data. Ready for live hardware integration."
-    })
-
 @app.route("/api/system/network_ip", methods=["GET"])
 def get_network_ip():
     """Returns local network IP address for rendering Mobile Visitor QR code."""
@@ -536,13 +437,9 @@ def delete_esp32_sensor(sensor_id):
 # --- Sensors (ESP32 + VL53L0X ToF) ---
 @app.route("/api/sensors", methods=["GET"])
 def get_sensors():
-    mode = SYSTEM_STATE.get("data_mode", "demo")
     venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
     sensors = db.get_sensors(venue_id)
-    if mode == "real":
-        # Revoke all demo synthetic sensors in Real mode
-        sensors = [s for s in sensors if not s.get("is_demo", False) and not s.get("id", "").startswith("SENSOR-ESP32-00")]
-    return jsonify({"sensors": sensors, "data_mode": mode, "venue_id": venue_id})
+    return jsonify({"sensors": sensors, "data_mode": "real", "venue_id": venue_id})
 
 @app.route("/api/crowd", methods=["POST"])
 def receive_crowd():
@@ -934,8 +831,8 @@ def crowdflow_save_project():
         project["saved_at"] = datetime.datetime.now().isoformat()
         
         # Save to database
-        if db.demo_db is not None:
-            db.demo_db.crowdflow_projects.update_one(
+        if db.db is not None:
+            db.db.crowdflow_projects.update_one(
                 {"project_id": project_id},
                 {"$set": project},
                 upsert=True
@@ -948,8 +845,8 @@ def crowdflow_save_project():
 def crowdflow_get_projects():
     try:
         projects = []
-        if db.demo_db is not None:
-            for p in db.demo_db.crowdflow_projects.find({}, {"_id": 0}):
+        if db.db is not None:
+            for p in db.db.crowdflow_projects.find({}, {"_id": 0}):
                 projects.append(p)
         return jsonify({"success": True, "projects": projects, "total": len(projects)})
     except Exception as e:
@@ -958,8 +855,8 @@ def crowdflow_get_projects():
 @app.route("/api/crowdflow/projects/<project_id>", methods=["GET"])
 def crowdflow_get_project(project_id):
     try:
-        if db.demo_db is not None:
-            project = db.demo_db.crowdflow_projects.find_one({"project_id": project_id}, {"_id": 0})
+        if db.db is not None:
+            project = db.db.crowdflow_projects.find_one({"project_id": project_id}, {"_id": 0})
             if project:
                 return jsonify({"success": True, "project": project})
         return jsonify({"success": False, "error": "Project not found"}), 404
@@ -969,8 +866,8 @@ def crowdflow_get_project(project_id):
 @app.route("/api/crowdflow/projects/<project_id>", methods=["DELETE"])
 def crowdflow_delete_project(project_id):
     try:
-        if db.demo_db is not None:
-            res = db.demo_db.crowdflow_projects.delete_one({"project_id": project_id})
+        if db.db is not None:
+            res = db.db.crowdflow_projects.delete_one({"project_id": project_id})
             if res.deleted_count > 0:
                 return jsonify({"success": True, "message": "Project deleted successfully"})
         return jsonify({"success": False, "error": "Project not found"}), 404

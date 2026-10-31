@@ -1657,49 +1657,20 @@ button {
   transform: translateY(-2px);
 }
 
-/* ==================== DATA MODE TOGGLE PILL ==================== */
-.data-mode-toggle {
-  display: flex;
+/* ==================== LIVE HARDWARE STATUS BADGE ==================== */
+.live-hardware-badge {
+  display: inline-flex;
   align-items: center;
-  background: #f1f5f9;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
-  padding: 0.25rem;
-  gap: 0.2rem;
-}
-
-.data-mode-toggle .mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius-full);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  transition: var(--transition-fast);
-  font-family: var(--font-body);
-}
-
-.data-mode-toggle .mode-btn:hover {
-  color: var(--text-main);
-}
-
-.data-mode-toggle .mode-btn.active[data-mode="demo"] {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.data-mode-toggle .mode-btn.active[data-mode="real"] {
+  gap: 0.4rem;
   background: #ecfdf5;
-  color: #047857;
   border: 1px solid #a7f3d0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #047857;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 

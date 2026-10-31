@@ -10,7 +10,7 @@ const FlowApp = {
   activeVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
   isSeniorMode: false,
   emergencyActive: false,
-  dataMode: 'demo', // 'demo' or 'real'
+  dataMode: 'real',
   isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
   pollTimer: null,
   cachedAnalyticsData: [],
@@ -387,15 +387,8 @@ const FlowApp = {
     }
   },
 
-  // -------------------- DATA MODE SWITCHER (DEMO VS REAL ESP32) --------------------
+  // -------------------- HARDWARE DATA MODE --------------------
   bindDataModeToggle: function() {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
-
-    if (demoBtn) demoBtn.addEventListener('click', () => this.setDataMode('demo'));
-    if (realBtn) realBtn.addEventListener('click', () => this.setDataMode('real'));
-
-    // Check backend current mode
     this.fetchDataMode();
   },
 
@@ -403,70 +396,36 @@ const FlowApp = {
     try {
       const resp = await fetch('/api/system/mode');
       const data = await resp.json();
-      if (data.data_mode) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-      }
+      this.dataMode = data.data_mode || 'real';
+      this.updateDataModeUI(this.dataMode);
     } catch (e) {
       console.warn('[DataMode] Error fetching mode:', e);
+      this.updateDataModeUI('real');
     }
   },
 
-  setDataMode: async function(mode) {
-    try {
-      const resp = await fetch('/api/system/mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode })
-      });
-      const data = await resp.json();
-      if (resp.ok && data.success) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-        
-        // Show toast
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed;bottom:2rem;right:2rem;z-index:99999;background:${mode === 'real' ? '#047857' : '#1d4ed8'};color:#fff;padding:0.85rem 1.25rem;border-radius:10px;font-size:0.85rem;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:flex;align-items:center;gap:0.5rem;`;
-        toast.innerHTML = `<i data-lucide="${mode === 'real' ? 'radio' : 'sparkles'}"></i> System switched to ${mode === 'real' ? 'Real ESP32 IoT Live Mode' : 'Demo Simulation Mode'}`;
-        document.body.appendChild(toast);
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => toast.remove(), 3500);
-
-        this.refreshData();
-        this.fetchEsp32Sensors();
-      }
-    } catch (e) {
-      console.error('[DataMode] Error setting mode:', e);
-    }
+  setDataMode: async function(mode = 'real') {
+    this.dataMode = 'real';
+    this.updateDataModeUI('real');
   },
 
-  updateDataModeUI: function(mode) {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
+  updateDataModeUI: function(mode = 'real') {
     const modeBadge = document.getElementById('esp32ModeBadge');
     const modeDisplay = document.getElementById('esp32CurrentModeDisplay');
 
-    if (demoBtn) demoBtn.classList.toggle('active', mode === 'demo');
-    if (realBtn) realBtn.classList.toggle('active', mode === 'real');
-
     if (modeBadge) {
-      modeBadge.textContent = mode === 'real' ? '● LIVE ESP32 HARDWARE ACTIVE' : '● DEMO SIMULATION MODE';
-      modeBadge.className = `badge ${mode === 'real' ? 'badge-safe' : 'badge-moderate'}`;
+      modeBadge.textContent = '● LIVE ESP32 HARDWARE ACTIVE';
+      modeBadge.className = 'badge badge-safe';
     }
 
     if (modeDisplay) {
-      modeDisplay.textContent = mode === 'real' ? 'REAL IOT MODE' : 'DEMO MODE';
-      modeDisplay.style.color = mode === 'real' ? '#059669' : '#2563eb';
+      modeDisplay.textContent = 'REAL IOT MODE';
+      modeDisplay.style.color = '#059669';
     }
 
-    // Toggle simulator
     if (window.SensorSimulator) {
-      window.SensorSimulator.isPaused = (mode === 'real');
-      if (mode === 'demo') {
-        window.SensorSimulator.startAutoSimulation();
-      } else {
-        window.SensorSimulator.stopAutoSimulation();
-      }
+      window.SensorSimulator.isPaused = true;
+      window.SensorSimulator.stopAutoSimulation();
     }
   },
 
@@ -520,10 +479,10 @@ const FlowApp = {
             <td colspan="6" style="text-align:center; padding:2.5rem 1.5rem; background:#f8fafc;">
               <div style="font-size:1.15rem; font-weight:800; color:#047857; margin-bottom:0.35rem; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
                 <i data-lucide="radio" style="width:18px;height:18px;color:#059669;"></i>
-                Real ESP32 IoT Mode Active (Demo Sensors Revoked)
+                Real ESP32 IoT Mode Active
               </div>
               <p style="font-size:0.85rem; color:var(--text-muted); max-width:480px; margin:0 auto 1rem auto; line-height:1.5;">
-                Synthetic demo sensors are revoked in Real mode. Register your physical ESP32 board using the form on the right or flash the C++ firmware snippet below.
+                No physical sensors registered for this venue yet. Register your ESP32 board using the form on the right or flash the C++ firmware snippet below.
               </p>
               <div style="font-size:0.78rem; font-family:monospace; background:#ecfdf5; color:#047857; display:inline-block; padding:0.4rem 0.85rem; border-radius:6px; border:1px solid #a7f3d0; font-weight:700;">
                 Listening for POST payloads at /api/sensors/count
@@ -1116,50 +1075,33 @@ const FlowApp = {
     }
 
     const records = [];
-    const timeSlots = [
-      '19:45 - 20:00', '19:30 - 19:45', '19:15 - 19:30', '19:00 - 19:15',
-      '18:45 - 19:00', '18:30 - 18:45', '18:15 - 18:30', '18:00 - 18:15',
-      '17:45 - 18:00', '17:30 - 17:45', '17:15 - 17:30', '17:00 - 17:15'
-    ];
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    timeSlots.forEach((slot, slotIdx) => {
-      const decay = 1.0 - (slotIdx * 0.03);
-      zones.forEach(z => {
-        let isChoke = (z.status === 'CRITICAL' || z.id.includes('zone-c') || z.id.includes('zone-h'));
-        let count = Math.min(z.cap, Math.round((isChoke ? z.cap * 0.92 : z.cap * 0.42) * decay + (Math.random() * 25)));
-        let occPct = Math.round((count / z.cap) * 100);
-        let influx = Math.round((isChoke ? 65 : 35) * decay);
-        let egress = Math.round((isChoke ? 25 : 32) * decay);
-        let netFlow = influx - egress;
-        let wait = isChoke ? Math.round(28 * decay) : Math.round(5 * decay);
+    zones.forEach(z => {
+      let count = z.current_count || 0;
+      let cap = z.cap || 10;
+      let occPct = cap > 0 ? Math.round((count / cap) * 100) : 0;
+      let influx = z.entry_rate || 0;
+      let egress = z.exit_rate || 0;
+      let netFlow = influx - egress;
+      let wait = occPct >= 90 ? 15 : (occPct >= 50 ? 5 : 0);
+      let status = z.status || (occPct >= 90 ? 'CRITICAL' : occPct >= 75 ? 'HIGH' : occPct >= 50 ? 'MODERATE' : 'SAFE');
+      let directive = occPct >= 90 ? 'Divert traffic to recommended bypass; choke risk' : 'Normal circulation flowing smoothly';
 
-        let status = 'SAFE';
-        let directive = 'Normal circulation flowing smoothly';
-        if (occPct >= 90) {
-          status = 'CRITICAL';
-          directive = 'Divert traffic to recommended bypass; choke risk';
-        } else if (occPct >= 75) {
-          status = 'HIGH';
-          directive = 'Monitor doorway velocity closely';
-        } else if (occPct >= 50) {
-          status = 'MODERATE';
-          directive = 'Steady moving queue';
-        }
-
-        records.push({
-          time: slot,
-          zoneId: z.id,
-          zoneName: z.name,
-          influx: influx,
-          egress: egress,
-          count: count,
-          capacity: z.cap,
-          occPct: occPct,
-          netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
-          wait: `${wait} mins`,
-          status: status,
-          directive: directive
-        });
+      records.push({
+        time: timeStr,
+        zoneId: z.id,
+        zoneName: z.name,
+        influx: influx,
+        egress: egress,
+        count: count,
+        capacity: cap,
+        occPct: occPct,
+        netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
+        wait: `${wait} mins`,
+        status: status,
+        directive: directive
       });
     });
 
