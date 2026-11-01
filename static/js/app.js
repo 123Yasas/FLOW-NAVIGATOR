@@ -10,7 +10,7 @@ const FlowApp = {
   activeVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
   isSeniorMode: false,
   emergencyActive: false,
-  dataMode: 'demo', // 'demo' or 'real'
+  dataMode: 'real', // 'demo' or 'real'
   isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
   pollTimer: null,
   cachedAnalyticsData: [],
@@ -292,7 +292,9 @@ const FlowApp = {
     // Trigger map resize if switching to admin or visitor
     if (window.GoogleMapsManager) {
       if (role === 'visitor') {
-        window.GoogleMapsManager.mountSingleMap('googleMapDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+        const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+        window.GoogleMapsManager.mountSingleMap('googleMapDiv', v);
+        window.GoogleMapsManager.renderVisitorPathways(v);
         setTimeout(() => {
           try { window.GoogleMapsManager.mapInstances['googleMapDiv']?.invalidateSize(); } catch(e) {}
         }, 150);
@@ -311,10 +313,43 @@ const FlowApp = {
         this.updateKioskView(this.cachedZones, []);
       }
     }
+
+    // Update admin floating sidebar button visibility
+    const floatingSidebarBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    const adminLayout = document.getElementById('adminVerticalLayout');
+    if (floatingSidebarBtn) {
+      const isCollapsed = adminLayout && adminLayout.classList.contains('sidebar-collapsed');
+      floatingSidebarBtn.style.display = (role === 'admin' && isCollapsed) ? 'inline-flex' : 'none';
+    }
   },
 
-  // -------------------- VERTICAL ADMIN SIDEBAR --------------------
+  // -------------------- VERTICAL ADMIN SIDEBAR & TOGGLE --------------------
   bindAdminSidebar: function() {
+    // Hide/Show Sidebar Toggle Controls
+    const hideBtn = document.getElementById('adminSidebarHideBtn');
+    if (hideBtn) hideBtn.addEventListener('click', () => this.toggleAdminSidebar(true));
+
+    const collapseBottomBtn = document.getElementById('adminSidebarCollapseBottomBtn');
+    if (collapseBottomBtn) collapseBottomBtn.addEventListener('click', () => this.toggleAdminSidebar(true));
+
+    const floatingShowBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    if (floatingShowBtn) floatingShowBtn.addEventListener('click', () => this.toggleAdminSidebar(false));
+
+    // Keyboard shortcut (Alt+S) to quickly toggle sidebar
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (this.currentRole === 'admin' && e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        this.toggleAdminSidebar();
+      }
+    });
+
+    // Restore saved sidebar collapsed state
+    const savedSidebarState = localStorage.getItem('adminSidebarCollapsed');
+    if (savedSidebarState === 'true') {
+      this.toggleAdminSidebar(true, true);
+    }
+
     document.querySelectorAll('.admin-nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -365,6 +400,40 @@ const FlowApp = {
     if (refreshZonesBtn) refreshZonesBtn.addEventListener('click', () => this.refreshData());
   },
 
+  toggleAdminSidebar: function(collapse, silent = false) {
+    const layout = document.getElementById('adminVerticalLayout') || document.querySelector('.admin-vertical-layout');
+    if (!layout) return;
+
+    const isCollapsed = collapse !== undefined ? collapse : !layout.classList.contains('sidebar-collapsed');
+    layout.classList.toggle('sidebar-collapsed', isCollapsed);
+    localStorage.setItem('adminSidebarCollapsed', isCollapsed ? 'true' : 'false');
+
+    const floatingBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    if (floatingBtn) {
+      floatingBtn.style.display = (this.currentRole === 'admin' && isCollapsed) ? 'inline-flex' : 'none';
+      const activeNav = document.querySelector('.admin-nav-item.active span');
+      const badge = document.getElementById('sidebarCollapsedTabName');
+      if (badge && activeNav) {
+        badge.textContent = activeNav.textContent.trim().replace('CrowdFlow AI — ', '').slice(0, 15);
+      }
+    }
+
+    if (!silent && window.lucide) {
+      lucide.createIcons();
+    }
+
+    // Trigger map & CAD canvas re-layout to take 100% full expanded width
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      if (window.GoogleMapsManager && window.GoogleMapsManager.cadGoogleMap) {
+        window.GoogleMapsManager.cadGoogleMap.invalidateSize();
+      }
+      if (window.CadPlanner && typeof window.CadPlanner.updateSvgTransform === 'function') {
+        window.CadPlanner.updateSvgTransform();
+      }
+    }, 280);
+  },
+
   switchAdminTab: function(tab) {
     this.currentAdminTab = tab;
     document.querySelectorAll('.admin-nav-item').forEach(b => {
@@ -373,6 +442,13 @@ const FlowApp = {
     document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
     const target = document.getElementById(`tab-${tab}`);
     if (target) target.classList.add('active');
+
+    // Update tab badge on floating sidebar show button
+    const activeNav = document.querySelector('.admin-nav-item.active span');
+    const badge = document.getElementById('sidebarCollapsedTabName');
+    if (badge && activeNav) {
+      badge.textContent = activeNav.textContent.trim().replace('CrowdFlow AI — ', '').slice(0, 15);
+    }
 
     if (window.lucide) lucide.createIcons();
 
@@ -387,8 +463,33 @@ const FlowApp = {
       }, 150);
     }
 
-    if (tab === 'event-planner' && window.CadPlanner) {
-      window.CadPlanner.render();
+    if (tab === 'event-planner') {
+      if (window.CadPlanner) {
+        window.CadPlanner.render();
+      }
+      if (window.GoogleMapsManager) {
+        window.GoogleMapsManager.mountCadGoogleMap();
+      }
+      setTimeout(() => {
+        try {
+          if (window.CadPlanner) {
+            window.CadPlanner.setMapRotation(window.CadPlanner.state.mapRotationDeg || 0);
+          }
+          if (window.GoogleMapsManager && window.GoogleMapsManager.mapInstances['cadGoogleMapDiv']) {
+            window.GoogleMapsManager.mapInstances['cadGoogleMapDiv'].invalidateSize();
+          }
+        } catch(e) {}
+      }, 100);
+      setTimeout(() => {
+        try {
+          if (window.CadPlanner) {
+            window.CadPlanner.setMapRotation(window.CadPlanner.state.mapRotationDeg || 0);
+          }
+          if (window.GoogleMapsManager && window.GoogleMapsManager.mapInstances['cadGoogleMapDiv']) {
+            window.GoogleMapsManager.mapInstances['cadGoogleMapDiv'].invalidateSize();
+          }
+        } catch(e) {}
+      }, 350);
     }
 
     if (tab === 'user-management') {
@@ -404,15 +505,8 @@ const FlowApp = {
     }
   },
 
-  // -------------------- DATA MODE SWITCHER (DEMO VS REAL ESP32) --------------------
+  // -------------------- HARDWARE DATA MODE --------------------
   bindDataModeToggle: function() {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
-
-    if (demoBtn) demoBtn.addEventListener('click', () => this.setDataMode('demo'));
-    if (realBtn) realBtn.addEventListener('click', () => this.setDataMode('real'));
-
-    // Check backend current mode
     this.fetchDataMode();
   },
 
@@ -420,70 +514,36 @@ const FlowApp = {
     try {
       const resp = await fetch('/api/system/mode');
       const data = await resp.json();
-      if (data.data_mode) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-      }
+      this.dataMode = data.data_mode || 'real';
+      this.updateDataModeUI(this.dataMode);
     } catch (e) {
       console.warn('[DataMode] Error fetching mode:', e);
+      this.updateDataModeUI('real');
     }
   },
 
-  setDataMode: async function(mode) {
-    try {
-      const resp = await fetch('/api/system/mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode })
-      });
-      const data = await resp.json();
-      if (resp.ok && data.success) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-        
-        // Show toast
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed;bottom:2rem;right:2rem;z-index:99999;background:${mode === 'real' ? '#047857' : '#1d4ed8'};color:#fff;padding:0.85rem 1.25rem;border-radius:10px;font-size:0.85rem;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:flex;align-items:center;gap:0.5rem;`;
-        toast.innerHTML = `<i data-lucide="${mode === 'real' ? 'radio' : 'sparkles'}"></i> System switched to ${mode === 'real' ? 'Real ESP32 IoT Live Mode' : 'Demo Simulation Mode'}`;
-        document.body.appendChild(toast);
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => toast.remove(), 3500);
-
-        this.refreshData();
-        this.fetchEsp32Sensors();
-      }
-    } catch (e) {
-      console.error('[DataMode] Error setting mode:', e);
-    }
+  setDataMode: async function(mode = 'real') {
+    this.dataMode = 'real';
+    this.updateDataModeUI('real');
   },
 
-  updateDataModeUI: function(mode) {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
+  updateDataModeUI: function(mode = 'real') {
     const modeBadge = document.getElementById('esp32ModeBadge');
     const modeDisplay = document.getElementById('esp32CurrentModeDisplay');
 
-    if (demoBtn) demoBtn.classList.toggle('active', mode === 'demo');
-    if (realBtn) realBtn.classList.toggle('active', mode === 'real');
-
     if (modeBadge) {
-      modeBadge.textContent = mode === 'real' ? '● LIVE ESP32 HARDWARE ACTIVE' : '● DEMO SIMULATION MODE';
-      modeBadge.className = `badge ${mode === 'real' ? 'badge-safe' : 'badge-moderate'}`;
+      modeBadge.textContent = '● LIVE ESP32 HARDWARE ACTIVE';
+      modeBadge.className = 'badge badge-safe';
     }
 
     if (modeDisplay) {
-      modeDisplay.textContent = mode === 'real' ? 'REAL IOT MODE' : 'DEMO MODE';
-      modeDisplay.style.color = mode === 'real' ? '#059669' : '#2563eb';
+      modeDisplay.textContent = 'REAL IOT MODE';
+      modeDisplay.style.color = '#059669';
     }
 
-    // Toggle simulator
     if (window.SensorSimulator) {
-      window.SensorSimulator.isPaused = (mode === 'real');
-      if (mode === 'demo') {
-        window.SensorSimulator.startAutoSimulation();
-      } else {
-        window.SensorSimulator.stopAutoSimulation();
-      }
+      window.SensorSimulator.isPaused = true;
+      window.SensorSimulator.stopAutoSimulation();
     }
   },
 
@@ -940,7 +1000,7 @@ const FlowApp = {
 
   // -------------------- EMERGENCY EVACUATION --------------------
   bindEmergencyProtocol: function() {
-    const sosBtn = document.getElementById('sosBtn');
+    const sosBtn = document.getElementById('sosBtn') || document.getElementById('emergencyBtn');
     if (sosBtn) sosBtn.addEventListener('click', () => this.triggerEmergency(true));
 
     const clearBtn = document.getElementById('clearEmergencyBtn');
@@ -1133,50 +1193,33 @@ const FlowApp = {
     }
 
     const records = [];
-    const timeSlots = [
-      '19:45 - 20:00', '19:30 - 19:45', '19:15 - 19:30', '19:00 - 19:15',
-      '18:45 - 19:00', '18:30 - 18:45', '18:15 - 18:30', '18:00 - 18:15',
-      '17:45 - 18:00', '17:30 - 17:45', '17:15 - 17:30', '17:00 - 17:15'
-    ];
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    timeSlots.forEach((slot, slotIdx) => {
-      const decay = 1.0 - (slotIdx * 0.03);
-      zones.forEach(z => {
-        let isChoke = (z.status === 'CRITICAL' || z.id.includes('zone-c') || z.id.includes('zone-h'));
-        let count = Math.min(z.cap, Math.round((isChoke ? z.cap * 0.92 : z.cap * 0.42) * decay + (Math.random() * 25)));
-        let occPct = Math.round((count / z.cap) * 100);
-        let influx = Math.round((isChoke ? 65 : 35) * decay);
-        let egress = Math.round((isChoke ? 25 : 32) * decay);
-        let netFlow = influx - egress;
-        let wait = isChoke ? Math.round(28 * decay) : Math.round(5 * decay);
+    zones.forEach(z => {
+      let count = z.current_count || 0;
+      let cap = z.cap || 10;
+      let occPct = cap > 0 ? Math.round((count / cap) * 100) : 0;
+      let influx = z.entry_rate || 0;
+      let egress = z.exit_rate || 0;
+      let netFlow = influx - egress;
+      let wait = occPct >= 90 ? 15 : (occPct >= 50 ? 5 : 0);
+      let status = z.status || (occPct >= 90 ? 'CRITICAL' : occPct >= 75 ? 'HIGH' : occPct >= 50 ? 'MODERATE' : 'SAFE');
+      let directive = occPct >= 90 ? 'Divert traffic to recommended bypass; choke risk' : 'Normal circulation flowing smoothly';
 
-        let status = 'SAFE';
-        let directive = 'Normal circulation flowing smoothly';
-        if (occPct >= 90) {
-          status = 'CRITICAL';
-          directive = 'Divert traffic to recommended bypass; choke risk';
-        } else if (occPct >= 75) {
-          status = 'HIGH';
-          directive = 'Monitor doorway velocity closely';
-        } else if (occPct >= 50) {
-          status = 'MODERATE';
-          directive = 'Steady moving queue';
-        }
-
-        records.push({
-          time: slot,
-          zoneId: z.id,
-          zoneName: z.name,
-          influx: influx,
-          egress: egress,
-          count: count,
-          capacity: z.cap,
-          occPct: occPct,
-          netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
-          wait: `${wait} mins`,
-          status: status,
-          directive: directive
-        });
+      records.push({
+        time: timeStr,
+        zoneId: z.id,
+        zoneName: z.name,
+        influx: influx,
+        egress: egress,
+        count: count,
+        capacity: cap,
+        occPct: occPct,
+        netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
+        wait: `${wait} mins`,
+        status: status,
+        directive: directive
       });
     });
 
@@ -1400,12 +1443,30 @@ const FlowApp = {
 
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || 800);
-    });
 
-    const pct = totalCap > 0 ? Math.min(100, Math.round((totalCount / totalCap) * 100)) : 48;
+    if (this.activeVenueId === 'sona-college') {
+      // In live ESP32 hardware mode, venue ground capacity matches prototype hardware limit (10 max)
+      totalCap = (systemState.gate_capacity !== undefined && systemState.gate_capacity > 0)
+        ? systemState.gate_capacity
+        : (this.currentVenue && this.currentVenue.total_capacity ? this.currentVenue.total_capacity : 10);
+
+      const espSensor = (this.cachedSensors || []).find(s => s.id && (s.id.includes('GATE') || s.id.includes('ESP32')));
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college' || (z.name && z.name.toLowerCase().includes('gate')));
+
+      totalCount = (systemState.gate_crowd !== undefined)
+        ? systemState.gate_crowd
+        : (espSensor ? (espSensor.current_count || 0) : (gateZone ? (gateZone.current_count || 0) : 0));
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
+
+    const pct = totalCap > 0 ? Math.min(100, Math.round((totalCount / totalCap) * 100)) : 0;
     const meterVal = document.getElementById('citizenMeterValue');
     const meterCircle = document.getElementById('citizenMeterCircle');
     const meterStatus = document.getElementById('citizenMeterStatus');
@@ -1427,7 +1488,7 @@ const FlowApp = {
         meterStatus.textContent = 'Heavy Congestion';
       } else {
         meterCircle.classList.add('critical');
-        meterStatus.textContent = 'Critical Density';
+        meterStatus.textContent = (pct >= 100) ? 'Maximum Capacity' : 'Critical Density';
       }
     }
 
@@ -1474,6 +1535,11 @@ const FlowApp = {
     }
 
     // Keep header route status badges synced with active venue routes
+    // Synchronize pathway popups and metrics on visitor Google Map
+    if (window.GoogleMapsManager && typeof window.GoogleMapsManager.updateVisitorPathwayMetrics === 'function') {
+      window.GoogleMapsManager.updateVisitorPathwayMetrics(routes);
+    }
+
     const mapBadgesEl = document.getElementById('mapHeaderRouteBadges');
     if (mapBadgesEl && routes.length) {
       mapBadgesEl.innerHTML = routes.map(r => {
@@ -1639,17 +1705,28 @@ const FlowApp = {
   updateAdminView: function(zones, routes, health) {
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || 800);
-    });
+    if (this.activeVenueId === 'sona-college') {
+      const sys = (health && health.system) ? health.system : {};
+      totalCap = (sys.gate_capacity !== undefined && sys.gate_capacity > 0) ? sys.gate_capacity : 10;
+      const espSensor = (this.cachedSensors || []).find(s => s.id && (s.id.includes('GATE') || s.id.includes('ESP32')));
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college' || (z.name && z.name.toLowerCase().includes('gate')));
+      totalCount = (sys.gate_crowd !== undefined) ? sys.gate_crowd : (espSensor ? (espSensor.current_count || 0) : (gateZone ? (gateZone.current_count || 0) : 0));
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
 
     const statHeadcount = document.getElementById('adminStatHeadcount');
     if (statHeadcount) statHeadcount.textContent = totalCount.toLocaleString();
 
     const capPctEl = document.getElementById('adminStatCapacityPct');
     if (capPctEl) {
-      const pct = totalCap > 0 ? ((totalCount / totalCap) * 100).toFixed(1) : 49.8;
+      const pct = totalCap > 0 ? ((totalCount / totalCap) * 100).toFixed(1) : '0.0';
       capPctEl.textContent = `${pct}% of ${totalCap.toLocaleString()} Capacity`;
     }
 
@@ -1767,10 +1844,19 @@ const FlowApp = {
     // 1. Calculate live totals
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || (this.activeVenueId === 'sona-college' ? 10 : 800));
-    });
+    if (this.activeVenueId === 'sona-college') {
+      totalCap = 10;
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college');
+      totalCount = gateZone ? (gateZone.current_count || 0) : 0;
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
 
     const occPct = totalCap > 0 ? Math.round((totalCount / totalCap) * 100) : 0;
 

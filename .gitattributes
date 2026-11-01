@@ -1,0 +1,10 @@
+# Treat machine learning model weights, binary caches, and datasets as binary
+*.joblib binary
+*.pkl binary
+*.h5 binary
+*.pt binary
+*.bin binary
+*.onnx binary
+*.model binary
+*.csv -diff
+

@@ -12,16 +12,10 @@ const SensorSimulator = {
   init: function() {
     this.bindEvents();
     this.fetchSensors();
-    this.startAutoSimulation();
+    this.stopAutoSimulation();
   },
 
-  startAutoSimulation: function() {
-    if (this.autoSimTimer) return;
-    this.autoSimTimer = setInterval(() => {
-      if (!this.isPaused && !this.isSimulating) {
-        this.fetchSensors();
-      }
-    }, 3500);
+  startAutoSimulation: function() { /* Disabled: system runs in live hardware telemetry mode */ return; }, 3500);
   },
 
   stopAutoSimulation: function() {

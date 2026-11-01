@@ -698,12 +698,19 @@ button {
   text-transform: uppercase;
 }
 
-/* ==================== VERTICAL ADMIN LAYOUT ==================== */
+/* ==================== VERTICAL ADMIN LAYOUT & SIDEBAR COLLAPSE ==================== */
 .admin-vertical-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
+  transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1), gap 0.28s ease;
+  position: relative;
+}
+
+.admin-vertical-layout.sidebar-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr) !important;
+  gap: 0 !important;
 }
 
 .admin-sidebar {
@@ -717,6 +724,82 @@ button {
   position: sticky;
   top: 90px;
   box-shadow: var(--shadow-card);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease, width 0.28s ease, padding 0.28s ease, margin 0.28s ease;
+  will-change: transform, opacity;
+}
+
+.admin-vertical-layout.sidebar-collapsed .admin-sidebar {
+  transform: translateX(-110%);
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+}
+
+/* Sidebar Toggle Buttons */
+.admin-sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.admin-sidebar-toggle-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+/* Floating Show Sidebar Pill on Screen Edge */
+.admin-sidebar-floating-show-btn {
+  position: fixed;
+  left: 0;
+  top: 135px;
+  z-index: 999;
+  background: #1e40af;
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  padding: 0.55rem 0.85rem 0.55rem 0.7rem;
+  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.35);
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.admin-sidebar-floating-show-btn:hover {
+  background: #2563eb;
+  padding-left: 0.85rem;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+}
+
+.admin-sidebar-floating-show-btn .sidebar-tab-pill {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  text-transform: uppercase;
 }
 
 .admin-sidebar-header {
@@ -1964,7 +2047,6 @@ img, svg, canvas {
   }
 }
 
-<<<<<<< Updated upstream
 /* ==================== SATELLITE TOP VIEW & GROUND LOCATION SELECTOR ==================== */
 .ground-search-container {
   display: flex;
@@ -2339,7 +2421,6 @@ img, svg, canvas {
 
 
 
-=======
 /* --- MOBILE & PHONES (<= 768px) --- */
 @media (max-width: 768px) {
   /* Dynamic Responsive Navbar */
@@ -2754,4 +2835,172 @@ img, svg, canvas {
 }
 
 
->>>>>>> Stashed changes
+
+
+/* CAD Ground Planner - Google Maps API Underlay & Controls */
+.cad-google-map-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  display: block;
+  border-radius: inherit;
+  overflow: hidden;
+  transform-origin: 50% 50%;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#cfSvgViewport {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: auto;
+}
+
+#cfSvgStageGroup {
+  transform-origin: 700px 425px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Satellite Color Vibrancy & Contrast Boost */
+.leaflet-tile-pane {
+  filter: saturate(var(--map-satellite-sat, 1.45)) contrast(var(--map-satellite-con, 1.18)) brightness(var(--map-satellite-bri, 1.04));
+  transition: filter 0.2s ease;
+}
+
+#cadGoogleMapDiv .leaflet-tile-pane {
+  filter: saturate(var(--cad-map-sat, 1.60)) contrast(var(--cad-map-con, 1.25)) brightness(var(--cad-map-bri, 1.06)) !important;
+  transition: filter 0.2s ease;
+}
+
+#cfGoogleMapsControls .cad-color-btn.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+  font-weight: 800 !important;
+}
+
+.visitor-map-wrap {
+  overflow: hidden;
+}
+
+#googleMapDiv {
+  transform: none !important;
+}
+
+#cfLayerGoogleMaps.active {
+  background: #1d4ed8 !important;
+  color: #ffffff !important;
+  border-color: #1e40af !important;
+  box-shadow: 0 1px 4px rgba(29, 78, 216, 0.35) !important;
+}
+
+#cfGoogleMapsControls button.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+  font-weight: 700 !important;
+}
+
+.cad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+}
+
+/* ==================== VISITOR MAP PATHWAYS & FILTERS ==================== */
+.pathway-toggle-btn {
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.pathway-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.pathway-toggle-btn.active {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  font-weight: 800 !important;
+}
+.map-legend-item {
+  transition: opacity 0.15s ease;
+}
+.map-legend-item:hover {
+  opacity: 0.8;
+}
+.custom-pathway-marker {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Interactive Pathway Editor */
+.pathway-editor-toolbar {
+  animation: slideDownFade 0.2s ease-out;
+}
+
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pathway-waypoint-handle {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  cursor: grab;
+  transition: transform 0.15s ease;
+}
+
+.pathway-waypoint-handle:hover {
+  transform: scale(1.15);
+}
+
+.pathway-waypoint-handle:active {
+  cursor: grabbing;
+}
+
+
+/* CAD Ground Planner - Pathway Drawing & Editing Styles */
+.cf-pathway-handle {
+  cursor: grab;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cf-pathway-handle:hover circle {
+  stroke-width: 4px;
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8));
+}
+
+.cf-pathway-handle:active {
+  cursor: grabbing;
+}
+
+.cf-pw-route-btn {
+  transition: all 0.18s ease;
+}
+
+.cf-pw-route-btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.cf-pw-route-btn.active {
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
