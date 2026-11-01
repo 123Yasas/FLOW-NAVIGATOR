@@ -8,6 +8,7 @@ const FlowTranslations = {
     // Brand & Header
     "brand.title": "FLOW NAVIGATOR",
     "brand.subtitle": "Autonomous Crowd Telemetry & Dynamic Venue Routing",
+    "nav.mode_demo": "Demo Data Mode",
     "nav.mode_real": "Real ESP32 IoT Mode",
     "nav.role_visitor": "Visitor View",
     "nav.role_admin": "Admin Control",
@@ -19,7 +20,7 @@ const FlowTranslations = {
     "landing.badge": "⚡ AI-POWERED CROWD TELEMETRY & HARDWARE GATEWAY",
     "landing.title": "Dynamic Campus Navigation & Real-time Flow Telemetry",
     "landing.desc": "Optimized crowd routing, venue occupancy analytics, and hardware-integrated ESP32 ToF IoT sensor monitoring for college events, auditoriums, and open grounds.",
-    "landing.btn_explore": "Explore Flow Navigator",
+    "landing.btn_demo": "Launch Interactive Demo Mode",
     "landing.btn_admin": "Admin Command Center",
     "landing.stat_capacity": "Total Venues Tracked",
     "landing.stat_sensors": "Active Hardware Nodes",
@@ -102,6 +103,7 @@ const FlowTranslations = {
     // Brand & Header
     "brand.title": "ஃப்ளோ நேவிகேட்டர்",
     "brand.subtitle": "தானியங்கி மக்கள் கூட்ட அளவீடு மற்றும் நிகழ்விட வழிசெலுத்தல்",
+    "nav.mode_demo": "மாதிரி தரவு பயன்முறை",
     "nav.mode_real": "உண்மை ESP32 IoT பயன்முறை",
     "nav.role_visitor": "பார்வையாளர் பார்வை",
     "nav.role_admin": "நிர்வாகி கட்டுப்பாடு",

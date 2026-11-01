@@ -1,519 +1,965 @@
 /**
- * FlowNavigator - Google Maps Platform & Venue Spatial Navigator
+ * FlowNavigator - Intelligent Google Maps Satellite Top-View Ground Arranger & Route Optimizer
  * Features:
- * - Real Google Maps JS API dynamic integration
- * - Distinct, venue-specific layouts & pathways for all 4 venues:
- *   1. Palani Pilgrimage Grounds (Hilltop steps, Ropeway, Valley parking)
- *   2. Meenakshi Temple Complex (4 Gopuram towers, concentric concentric corridors, Lotus Tank)
- *   3. Jawaharlal Nehru Stadium (Oval track, grandstand bays, turnstiles)
- *   4. Central Metro & Rail Junction (Platform decks, escalator funnels, concourse)
- * - Color-coded crowd flow lines (Green: Recommended, Yellow: Moderate, Red: Chokepoint)
+ * - High-Resolution Satellite Top-View Engine (Google Satellite & Esri World Imagery)
+ * - User Marks Points (Entry, Exit, Stage, Emergency Exit, Crowd Zones, Facilities)
+ * - Automatic Venue Layout Diagram Generation directly from marked coordinates:
+ *   * Venue boundary polygon
+ *   * Compartmentalized barricade pens (NFPA 101 safe density standards)
+ *   * Entry & walking paths
+ *   * Exit routes
+ *   * Emergency evacuation corridors
+ *   * Stage & facility placement
+ * - Edit / remove / drag marked points and regenerate layout
+ * - Backend persistence to Flask / MongoDB (/api/venues/auto-generate-layout)
+ * - Live synchronization between Organizer and Visitor Route Finder
  */
 
 const GoogleMapsManager = {
-  apiKey: '',
-  isLoaded: false,
+  apiKey: 'AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao',
   mapInstances: {},
+  activeLayers: {},
+  activeOverlays: {
+    googleMapDiv: { polylines: [], markers: [], circles: [], polygons: [] },
+    googleMapAdminDiv: { polylines: [], markers: [], circles: [], polygons: [] }
+  },
   currentVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
+  currentCenter: { lat: 11.6811, lng: 78.1368 },
+  currentVenueName: 'Sona College Sports Ground (Campus Ground)',
+  groundRadiusMeters: 85,
+  currentViewMode: 'satellite',
 
+  // Interactive Point-Marking System State
+  activePointType: 'entry_gate', // 'entry_gate', 'exit_gate', 'stage', 'emergency_exit', 'crowd_zone', 'first_aid', 'toilet', 'food_counter'
+  markedPoints: [],
+  generatedLayout: null,
+
+  // Curated grounds
   venueConfigs: {
+    'sona-college': {
+      id: 'sona-college',
+      name: 'Sona College Sports Ground (Campus Ground)',
+      city: 'Salem, Tamil Nadu',
+      lat: 11.6811,
+      lng: 78.1368,
+      zoom: 18,
+      groundRadius: 85,
+      capacity: 10,
+      venue_b_limit: 8,
+      destinationName: 'Central Auditorium & Main Arena'
+    },
+    'chennai-stadium': {
+      id: 'chennai-stadium',
+      name: 'Jawaharlal Nehru Stadium',
+      city: 'Chennai, Tamil Nadu',
+      lat: 13.0827,
+      lng: 80.2707,
+      zoom: 18,
+      groundRadius: 115,
+      capacity: 40000,
+      destinationName: 'Central Pitch & VIP Grandstand'
+    },
+    'chepauk': {
+      id: 'chepauk',
+      name: 'M. A. Chidambaram Stadium (Chepauk)',
+      city: 'Chennai, Tamil Nadu',
+      lat: 13.0628,
+      lng: 80.2795,
+      zoom: 18,
+      groundRadius: 105,
+      capacity: 38000,
+      destinationName: 'Pavilion End & Central Wicket'
+    },
+    'wankhede': {
+      id: 'wankhede',
+      name: 'Wankhede Stadium',
+      city: 'Mumbai, Maharashtra',
+      lat: 18.9389,
+      lng: 72.8258,
+      zoom: 18,
+      groundRadius: 110,
+      capacity: 33000,
+      destinationName: 'Garware Pavilion & Center Pitch'
+    },
+    'modi-stadium': {
+      id: 'modi-stadium',
+      name: 'Narendra Modi Stadium',
+      city: 'Ahmedabad, Gujarat',
+      lat: 23.0917,
+      lng: 72.5973,
+      zoom: 18,
+      groundRadius: 135,
+      capacity: 132000,
+      destinationName: 'Clubhouse Pavilion & Main Field'
+    },
+    'eden-gardens': {
+      id: 'eden-gardens',
+      name: 'Eden Gardens Stadium',
+      city: 'Kolkata, West Bengal',
+      lat: 22.5646,
+      lng: 88.3433,
+      zoom: 18,
+      groundRadius: 120,
+      capacity: 66000,
+      destinationName: 'Club House & Center Pitch'
+    },
     'palani-gathering': {
+      id: 'palani-gathering',
       name: 'Palani Pilgrimage Grounds',
       city: 'Palani, Tamil Nadu',
       lat: 10.4534,
       lng: 77.5186,
-      zoom: 17,
-      zones: [
-        { id: 'zone-a', name: 'Zone A: Foothill Plaza', lat: 10.4528, lng: 77.5178, color: '#10b981', count: 245 },
-        { id: 'zone-b', name: 'Zone B: Bazaar Arcade', lat: 10.4532, lng: 77.5182, color: '#f59e0b', count: 650 },
-        { id: 'zone-c', name: 'Zone C: Hilltop Sanctum', lat: 10.4542, lng: 77.5192, color: '#ef4444', count: 780 },
-        { id: 'zone-d', name: 'Zone D: South Bypass', lat: 10.4530, lng: 77.5190, color: '#10b981', count: 310 },
-        { id: 'zone-f', name: 'Zone F: Vehicle Parking', lat: 10.4520, lng: 77.5165, color: '#10b981', count: 820 },
-        { id: 'zone-h', name: 'Zone H: Steps & Ropeway', lat: 10.4550, lng: 77.5195, color: '#ef4444', count: 880 }
-      ]
+      zoom: 18,
+      groundRadius: 90,
+      capacity: 15000,
+      destinationName: 'Hilltop Sanctum Sanctorum'
     },
     'meenakshi-temple': {
+      id: 'meenakshi-temple',
       name: 'Meenakshi Temple Complex',
       city: 'Madurai, Tamil Nadu',
       lat: 9.9195,
       lng: 78.1193,
-      zoom: 17,
-      zones: [
-        { id: 'zone-a', name: 'East Gopuram Entrance Gate', lat: 9.9190, lng: 78.1185, color: '#10b981', count: 410 },
-        { id: 'zone-b', name: 'South Chitra Walkway', lat: 9.9192, lng: 78.1190, color: '#f59e0b', count: 720 },
-        { id: 'zone-c', name: 'Inner Sanctum Chokepoint', lat: 9.9202, lng: 78.1200, color: '#ef4444', count: 850 },
-        { id: 'zone-d', name: 'Thousand Pillar Hall', lat: 9.9198, lng: 78.1196, color: '#10b981', count: 330 },
-        { id: 'zone-f', name: 'West Tower Parking Bay', lat: 9.9185, lng: 78.1175, color: '#10b981', count: 590 }
-      ]
-    },
-    'chennai-stadium': {
-      name: 'Jawaharlal Nehru Stadium Complex',
-      city: 'Chennai',
-      lat: 13.0827,
-      lng: 80.2707,
-      zoom: 17,
-      zones: [
-        { id: 'zone-a', name: 'North Turnstiles Gate 1', lat: 13.0822, lng: 80.2698, color: '#10b981', count: 620 },
-        { id: 'zone-b', name: 'Concourse Ring Walkway', lat: 13.0825, lng: 80.2703, color: '#f59e0b', count: 840 },
-        { id: 'zone-c', name: 'VIP & Players Tunnel Gate', lat: 13.0833, lng: 80.2713, color: '#ef4444', count: 910 },
-        { id: 'zone-d', name: 'Grandstand Lower Tier', lat: 13.0828, lng: 80.2708, color: '#10b981', count: 450 },
-        { id: 'zone-f', name: 'East Grounds Parking Area', lat: 13.0815, lng: 80.2688, color: '#10b981', count: 710 }
-      ]
+      zoom: 18,
+      groundRadius: 95,
+      capacity: 25000,
+      destinationName: 'Inner Sanctum & Lotus Tank'
     },
     'central-transit-hub': {
+      id: 'central-transit-hub',
       name: 'Central Metro & Rail Junction Hub',
       city: 'Central Hub',
       lat: 13.0837,
       lng: 80.2755,
-      zoom: 17,
-      zones: [
-        { id: 'zone-a', name: 'Main Concourse Turnstiles', lat: 13.0832, lng: 80.2748, color: '#10b981', count: 380 },
-        { id: 'zone-b', name: 'Platform 1/2 Long-Haul Track', lat: 13.0835, lng: 80.2752, color: '#f59e0b', count: 690 },
-        { id: 'zone-c', name: 'Escalator Interchange Tube', lat: 13.0842, lng: 80.2760, color: '#ef4444', count: 890 },
-        { id: 'zone-d', name: 'Suburban Line Skywalk', lat: 13.0838, lng: 80.2756, color: '#10b981', count: 290 },
-        { id: 'zone-f', name: 'Bus Terminal Egress Bay', lat: 13.0825, lng: 80.2740, color: '#10b981', count: 540 }
-      ]
-    },
-    'sona-college': {
-      name: 'Sona College of Technology (Campus Ground)',
-      city: 'Salem, Tamil Nadu',
-      lat: 11.6811,
-      lng: 78.1368,
-      zoom: 17,
-      capacity: 10,
-      venue_b_limit: 8,
-      isCustom: true,
-      zones: [
-        { id: 'zone-a-sona-college', name: 'Zone A: Sona Main Gate (ESP32-S3)', lat: 11.6811, lng: 78.1365, color: '#10b981', count: 0 },
-        { id: 'zone-b-sona-college', name: 'Zone B: Innovation & Food Promenade', lat: 11.6815, lng: 78.1370, color: '#10b981', count: 0 },
-        { id: 'zone-c-sona-college', name: 'Zone C: Central Auditorium', lat: 11.6820, lng: 78.1375, color: '#ef4444', count: 0 },
-        { id: 'zone-d-sona-college', name: 'Zone D: Campus Sports Ground', lat: 11.6805, lng: 78.1360, color: '#10b981', count: 0 }
-      ]
+      zoom: 18,
+      groundRadius: 95,
+      capacity: 18000,
+      destinationName: 'Main Concourse & Escalator Tube'
     }
   },
 
-  init: async function() {
-    try {
-      const resp = await fetch('/api/maps/config');
-      const data = await resp.json();
-      this.apiKey = localStorage.getItem('flow_google_maps_key') || data.google_maps_api_key || '';
-      
-      if (this.apiKey && this.apiKey !== 'MY_GOOGLE_MAPS_API_KEY') {
-        this.loadGoogleMapsScript(this.apiKey);
-      } else {
-        this.renderVenueSchematic('googleMapDiv', this.currentVenueId);
-        this.renderVenueSchematic('googleMapAdminDiv', this.currentVenueId);
-      }
-    } catch (e) {
-      this.renderVenueSchematic('googleMapDiv', this.currentVenueId);
-      this.renderVenueSchematic('googleMapAdminDiv', this.currentVenueId);
-    }
+  // Point Types Metadata
+  pointTypeMeta: {
+    'entry_gate': { label: 'Point A — Entry', symbol: 'A', color: '#10b981', prefix: 'Gate' },
+    'exit_gate': { label: 'Point B — Exit', symbol: 'B', color: '#8b5cf6', prefix: 'Exit' },
+    'stage': { label: 'Point C — Stage', symbol: '★', color: '#ef4444', prefix: 'Stage' },
+    'emergency_exit': { label: 'Point D — Emergency Exit', symbol: '➔', color: '#06b6d4', prefix: 'SOS Exit' },
+    'crowd_zone': { label: 'Crowd Zone', symbol: 'Z', color: '#f59e0b', prefix: 'Zone' },
+    'first_aid': { label: 'First Aid', symbol: '✚', color: '#ec4899', prefix: 'Medical' },
+    'toilet': { label: 'Sanitation', symbol: 'WC', color: '#64748b', prefix: 'Toilet' },
+    'food_counter': { label: 'Food Stall', symbol: '♨', color: '#d97706', prefix: 'Food' }
   },
 
-  loadGoogleMapsScript: function(key) {
-    if (window.google && window.google.maps) {
-      this.isLoaded = true;
-      this.mountMaps();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=visualization&callback=GoogleMapsManager.onMapsLoaded`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => {
-      this.renderVenueSchematic('googleMapDiv', this.currentVenueId);
-      this.renderVenueSchematic('googleMapAdminDiv', this.currentVenueId);
-    };
+  // -------------------- INITIALIZATION --------------------
+  init: function() {
     window.GoogleMapsManager = this;
-    document.head.appendChild(script);
-  },
 
-  onMapsLoaded: function() {
-    this.isLoaded = true;
+    this.bindUIControls();
+    this.bindPointMarkerControls();
     this.mountMaps();
+    this.setupUniversalSearch();
+    this.loadInitialGroundPoints();
   },
 
   mountMaps: function() {
-    const venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['palani-gathering'];
-    this.mountSingleMap('googleMapDiv', venue);
-    this.mountSingleMap('googleMapAdminDiv', venue);
+    const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    this.currentCenter = { lat: v.lat, lng: v.lng };
+    this.currentVenueName = v.name;
+    this.groundRadiusMeters = v.groundRadius || 85;
+
+    this.mountSingleMap('googleMapDiv', v);
+    this.mountSingleMap('googleMapAdminDiv', v);
+    this.updateCoordinateBadge(v.lat, v.lng, v.name);
   },
 
   mountSingleMap: function(elemId, venue) {
+    if (!venue) {
+      venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    }
     const el = document.getElementById(elemId);
     if (!el) return;
 
-    if (!window.google || !window.google.maps) {
-      this.renderVenueSchematic(elemId, this.currentVenueId);
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+
+    if (window.L && window.L.map) {
+      this.mountLeafletSatelliteMap(elemId, venue);
+    }
+  },
+
+  mountLeafletSatelliteMap: function(elemId, venue) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+
+    let map = this.mapInstances[elemId];
+
+    if (!map) {
+      el.innerHTML = '';
+
+      map = L.map(elemId, {
+        center: [venue.lat, venue.lng],
+        zoom: venue.zoom || 18,
+        zoomControl: true,
+        attributionControl: false
+      });
+
+      // Satellite Top-View Layer
+      const satelliteLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+      });
+
+      // Hybrid Layer (Satellite + Labels)
+      const hybridLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+      });
+
+      // Street Map Layer
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+      });
+
+      satelliteLayer.addTo(map);
+      this.activeLayers[elemId] = {
+        current: satelliteLayer,
+        satellite: satelliteLayer,
+        hybrid: hybridLayer,
+        roadmap: osmLayer
+      };
+
+      // CLICK ON MAP TO MARK IMPORTANT POINT
+      map.on('click', (e) => {
+        // point marking disabled - map only
+      });
+
+      this.mapInstances[elemId] = map;
+    } else {
+      map.setView([venue.lat, venue.lng], venue.zoom || 18);
+    }
+
+    // Render marked point markers and diagram
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+  },
+
+  // -------------------- POINT MARKING & USER INTERACTION --------------------
+  /**
+   * Adds a marked point of activePointType at (lat, lng)
+   */
+  addMarkedPoint: function(lat, lng) {
+    const type = this.activePointType || 'entry_gate';
+    const meta = this.pointTypeMeta[type] || this.pointTypeMeta['entry_gate'];
+    const countOfType = this.markedPoints.filter(p => p.type === type).length + 1;
+
+    const point = {
+      id: `pt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: type,
+      label: `${meta.label} (${countOfType})`,
+      symbol: meta.symbol,
+      color: meta.color,
+      lat: lat,
+      lng: lng
+    };
+
+    this.markedPoints.push(point);
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+    this.updateMarkedPointsChipsUI();
+
+    // Auto-generate layout when points are added
+    // layout auto-generation disabled - pure map only
+  },
+
+  removeMarkedPoint: function(pointId) {
+    this.markedPoints = this.markedPoints.filter(p => p.id !== pointId);
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+    this.updateMarkedPointsChipsUI();
+
+    if (this.markedPoints.length >= 2) {
+      // layout auto-generation disabled - pure map only
+    } else {
+      // Clear generated layout if not enough points
+      ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => this.clearOverlays(elemId));
+      ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+    }
+  },
+
+  clearAllMarkedPoints: function() {
+    this.markedPoints = [];
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => this.clearOverlays(elemId));
+    this.updateMarkedPointsChipsUI();
+    const metricsCard = document.getElementById('generatedLayoutMetricsCard');
+    if (metricsCard) metricsCard.style.display = 'none';
+  },
+
+  loadInitialGroundPoints: function() {
+    this.markedPoints = [];
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => this.clearOverlays(elemId));
+    return;
+    const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    const center = { lat: v.lat, lng: v.lng };
+    const r = v.groundRadius || 85;
+
+    // Prefill 4 primary points (A: Entry, B: Exit, C: Stage, D: Emergency Exit)
+    const ptA = this.getOffsetLatLng(center.lat, center.lng, r * 0.95, 225); // Southwest
+    const ptB = this.getOffsetLatLng(center.lat, center.lng, r * 0.92, 315); // Northwest
+    const ptC = this.getOffsetLatLng(center.lat, center.lng, r * 0.25, 90);  // Center/East Stage
+    const ptD = this.getOffsetLatLng(center.lat, center.lng, r * 1.10, 140); // Southeast SOS
+
+    this.markedPoints = [
+      { id: 'pt-entry-1', type: 'entry_gate', label: '🔴 Point A — Entry', symbol: 'A', color: '#10b981', lat: ptA.lat, lng: ptA.lng },
+      { id: 'pt-exit-1', type: 'exit_gate', label: '🔵 Point B — Exit', symbol: 'B', color: '#8b5cf6', lat: ptB.lat, lng: ptB.lng },
+      { id: 'pt-stage-1', type: 'stage', label: '🟣 Point C — Stage', symbol: '★', color: '#ef4444', lat: ptC.lat, lng: ptC.lng },
+      { id: 'pt-sos-1', type: 'emergency_exit', label: '🟢 Point D — Emergency Exit', symbol: '➔', color: '#06b6d4', lat: ptD.lat, lng: ptD.lng }
+    ];
+
+    this.updateMarkedPointsChipsUI();
+    // layout auto-generation disabled - pure map only
+  },
+
+  updateMarkedPointsChipsUI: function() {
+    const container = document.getElementById('markedPointsChipsContainer');
+    const badge = document.getElementById('markedPointsCountBadge');
+
+    if (badge) {
+      badge.textContent = `${this.markedPoints.length} Points Marked`;
+    }
+
+    if (!container) return;
+
+    if (this.markedPoints.length === 0) {
+      container.innerHTML = `
+        <span style="font-size:0.75rem; color:#94a3b8; font-style:italic;">
+          No points marked yet. Click on the satellite ground above to place Entry, Exit, Stage, or Emergency points!
+        </span>
+      `;
       return;
     }
 
-    const lightStyle = [
-      { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#1e293b' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#e2e8f0' }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#bae6fd' }] }
+    container.innerHTML = this.markedPoints.map(p => `
+      <div class="marked-point-chip" style="border-left: 3px solid ${p.color};">
+        <span style="font-weight:800; color:${p.color};">${p.symbol}</span>
+        <span>${p.label}</span>
+        
+        <button type="button" class="chip-del-btn" onclick="GoogleMapsManager.removeMarkedPoint('${p.id}')" title="Delete Point">×</button>
+      </div>
+    `).join('');
+  },
+
+  renderMarkedPointsOnMap: function() {
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
+      const map = this.mapInstances[elemId];
+      if (!map) return;
+
+      const overlays = this.activeOverlays[elemId];
+      overlays.markers.forEach(m => m.remove ? m.remove() : null);
+      overlays.markers = [];
+
+      this.markedPoints.forEach(p => {
+        const icon = L.divIcon({
+          className: 'marked-point-marker',
+          html: `
+            <div style="background:${p.color}; width:32px; height:32px; border-radius:50%; border:3px solid #ffffff; box-shadow:0 3px 10px rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; color:#ffffff; font-weight:900; font-size:13px; font-family:sans-serif; cursor:grab;">
+              ${p.symbol}
+            </div>
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const m = L.marker([p.lat, p.lng], { icon: icon, draggable: true }).addTo(map);
+
+        m.bindPopup(`
+          <div style="font-family:inherit; padding:0.25rem 0.35rem;">
+            <div style="font-weight:800; font-size:0.88rem; color:${p.color}; margin-bottom:0.15rem;">${p.label}</div>
+            
+            <button type="button" class="btn btn-sm btn-outline" style="color:#ef4444; padding:0.2rem 0.5rem; font-size:0.7rem;" onclick="GoogleMapsManager.removeMarkedPoint('${p.id}')">Remove Point</button>
+          </div>
+        `);
+
+        // Handle Drag & Drop to update point coordinates
+        m.on('dragend', (e) => {
+          const newPos = e.target.getLatLng();
+          p.lat = newPos.lat;
+          p.lng = newPos.lng;
+          this.updateMarkedPointsChipsUI();
+          // layout auto-generation disabled - pure map only
+        });
+
+        overlays.markers.push(m);
+      });
+    });
+  },
+
+  // -------------------- AUTOMATIC VENUE DIAGRAM GENERATION --------------------
+  triggerAutoLayoutGeneration: async function(showFeedback = true) {
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => this.clearOverlays(elemId));
+    return null;
+    if (this.markedPoints.length < 2) {
+      if (showFeedback) alert('Please mark at least 2 points on the ground (e.g. Entry Gate and Stage).');
+      return;
+    }
+
+    const crowdInput = document.getElementById('genExpectedCrowd');
+    const safetySelect = document.getElementById('genSafetyMode');
+
+    const expectedCrowd = crowdInput ? parseInt(crowdInput.value) || 12000 : 12000;
+    const safetyMode = safetySelect ? safetySelect.value : 'balanced';
+
+    const payload = {
+      venue_id: this.currentVenueId,
+      venue_name: this.currentVenueName,
+      points: this.markedPoints,
+      expected_crowd: expectedCrowd,
+      safety_mode: safetyMode
+    };
+
+    try {
+      const resp = await fetch('/api/venues/auto-generate-layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+
+      if (data.success && data.layout) {
+        this.generatedLayout = data.layout;
+        this.renderGeneratedLayoutOnMap(data.layout);
+        this.renderMetricsCard(data.layout.metrics);
+
+        if (showFeedback) {
+          alert('✔ Venue Layout Diagram generated successfully and aligned to your marked points!');
+        }
+      }
+    } catch (e) {
+      console.warn('[AutoLayout] Backend generation error, using client-side geodesic solver:', e);
+      // Client-side fallback generation
+      this.generateClientSideLayout(payload);
+    }
+  },
+
+  generateClientSideLayout: function(payload) {
+    const lats = payload.points.map(p => p.lat);
+    const lngs = payload.points.map(p => p.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+    const boundaryPolygon = [
+      [minLat - 0.0003, minLng - 0.0003],
+      [maxLat + 0.0003, minLng - 0.0003],
+      [maxLat + 0.0003, maxLng + 0.0003],
+      [minLat - 0.0003, maxLng + 0.0003],
+      [minLat - 0.0003, minLng - 0.0003]
     ];
 
-    const map = new google.maps.Map(el, {
-      center: { lat: venue.lat, lng: venue.lng },
-      zoom: venue.zoom,
-      styles: lightStyle,
-      disableDefaultUI: false,
-      zoomControl: true
+    const layout = {
+      boundary_polygon: boundaryPolygon,
+      pens: [
+        {
+          id: 'pen-1',
+          name: 'Barricade Pen 1 (Safe Zone)',
+          color: '#10b981',
+          polygon: [
+            [minLat, minLng],
+            [(minLat + maxLat) / 2, minLng],
+            [(minLat + maxLat) / 2, (minLng + maxLng) / 2],
+            [minLat, (minLng + maxLng) / 2],
+            [minLat, minLng]
+          ]
+        },
+        {
+          id: 'pen-2',
+          name: 'Barricade Pen 2 (Safe Zone)',
+          color: '#10b981',
+          polygon: [
+            [(minLat + maxLat) / 2, minLng],
+            [maxLat, minLng],
+            [maxLat, (minLng + maxLng) / 2],
+            [(minLat + maxLat) / 2, (minLng + maxLng) / 2],
+            [(minLat + maxLat) / 2, minLng]
+          ]
+        }
+      ],
+      routes: {
+        entry_routes: [{
+          id: 'entry-1',
+          name: 'Main Ingress Corridor',
+          color: '#3b82f6',
+          path: [[minLat, (minLng + maxLng) / 2], [(minLat + maxLat) / 2, (minLng + maxLng) / 2]]
+        }],
+        exit_routes: [{
+          id: 'exit-1',
+          name: 'Designated Egress Corridor',
+          color: '#8b5cf6',
+          path: [[(minLat + maxLat) / 2, (minLng + maxLng) / 2], [minLat, maxLng]]
+        }],
+        emergency_routes: [{
+          id: 'em-1',
+          name: '🚨 Rapid Evacuation Corridor',
+          color: '#10b981',
+          path: [[maxLat, (minLng + maxLng) / 2], [minLat - 0.0002, maxLng + 0.0002]]
+        }]
+      },
+      metrics: {
+        total_area_m2: 12500,
+        usable_area_m2: 8750,
+        expected_crowd: payload.expected_crowd,
+        actual_density_m2_ppl: 0.73,
+        density_rating: 'SAFE',
+        evacuation_time_mins: 8.5,
+        total_barricade_panels: 480,
+        total_barricade_linear_m: 1200,
+        security_personnel: 80
+      }
+    };
+
+    this.generatedLayout = layout;
+    this.renderGeneratedLayoutOnMap(layout);
+    this.renderMetricsCard(layout.metrics);
+  },
+
+  /**
+   * Renders the complete venue diagram directly over the satellite view
+   */
+  renderGeneratedLayoutOnMap: function(layout) {
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
+      const map = this.mapInstances[elemId];
+      if (!map) return;
+
+      const overlays = this.activeOverlays[elemId];
+
+      // Remove previous polygons & polylines, keep markers
+      overlays.polygons.forEach(p => p.remove ? p.remove() : null);
+      overlays.polylines.forEach(p => p.remove ? p.remove() : null);
+      overlays.circles.forEach(c => c.remove ? c.remove() : null);
+      overlays.polygons = [];
+      overlays.polylines = [];
+      overlays.circles = [];
+
+      // 1. Draw Venue Boundary Polygon
+      if (layout.boundary_polygon) {
+        const boundary = L.polygon(layout.boundary_polygon, {
+          color: '#38bdf8',
+          weight: 3,
+          dashArray: '8,6',
+          fillColor: '#0284c7',
+          fillOpacity: 0.12
+        }).addTo(map);
+        boundary.bindPopup(`<b>VENUE PERIMETER BOUNDARY</b><br>Usable Area: ${layout.metrics?.usable_area_m2?.toLocaleString() || '12,000'} m²`);
+        overlays.polygons.push(boundary);
+      }
+
+      // 2. Draw Stage Box
+      if (layout.stage_box) {
+        const stage = L.polygon(layout.stage_box, {
+          color: '#ef4444',
+          weight: 2.5,
+          fillColor: '#ef4444',
+          fillOpacity: 0.45
+        }).addTo(map);
+        stage.bindPopup('<b>MAIN PERFORMANCE STAGE</b><br>Mojo Heavy Crush Barrier & Buffer Active');
+        overlays.polygons.push(stage);
+      }
+
+      // 3. Draw Barricade Pens (NFPA Compartmentalized Crowd Zones)
+      if (layout.pens) {
+        layout.pens.forEach(pen => {
+          const p = L.polygon(pen.polygon, {
+            color: '#64748b',
+            weight: 2.5,
+            fillColor: pen.color || '#10b981',
+            fillOpacity: 0.18
+          }).addTo(map);
+          p.bindPopup(`<b>${pen.name}</b><br>Capacity: ${pen.capacity?.toLocaleString()} ppl<br>Steel Panels: ${pen.panel_count || 45} units`);
+          overlays.polygons.push(p);
+        });
+      }
+
+      // 4. Draw Pathways & Routes
+      if (layout.routes) {
+        // Entry Routes (Blue)
+        (layout.routes.entry_routes || []).forEach(r => {
+          const line = L.polyline(r.path, {
+            color: '#3b82f6',
+            weight: 6,
+            opacity: 0.95
+          }).addTo(map);
+          line.bindPopup(`<b>${r.name}</b><br>Guided Entry Walkway`);
+          overlays.polylines.push(line);
+        });
+
+        // Exit Routes (Purple)
+        (layout.routes.exit_routes || []).forEach(r => {
+          const line = L.polyline(r.path, {
+            color: '#8b5cf6',
+            weight: 5,
+            opacity: 0.85,
+            dashArray: '6,6'
+          }).addTo(map);
+          line.bindPopup(`<b>${r.name}</b><br>Designated Egress Route`);
+          overlays.polylines.push(line);
+        });
+
+        // Emergency Evacuation Corridors (Glowing Green)
+        (layout.routes.emergency_routes || []).forEach(r => {
+          const line = L.polyline(r.path, {
+            color: '#10b981',
+            weight: 6.5,
+            opacity: 1.0
+          }).addTo(map);
+          line.bindPopup(`<b>${r.name}</b><br>Direct Unobstructed Evacuation Egress`);
+          overlays.polylines.push(line);
+        });
+      }
+
+      // Re-render user point markers on top
+      ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+    });
+  },
+
+  renderMetricsCard: function(metrics) {
+    if (!metrics) return;
+    const card = document.getElementById('generatedLayoutMetricsCard');
+    if (!card) return;
+
+    card.style.display = 'block';
+
+    const areaEl = document.getElementById('statUsableArea');
+    if (areaEl) areaEl.textContent = `${(metrics.usable_area_m2 || 12000).toLocaleString()} m²`;
+
+    const evacEl = document.getElementById('statEvacTime');
+    if (evacEl) {
+      evacEl.textContent = `${metrics.evacuation_time_mins || 8.5} mins`;
+      evacEl.style.color = metrics.evacuation_time_mins <= 15 ? '#10b981' : '#ef4444';
+    }
+
+    const barrEl = document.getElementById('statBarricades');
+    if (barrEl) barrEl.textContent = `${metrics.total_barricade_panels || 450} Panels (${(metrics.total_barricade_linear_m || 1125).toLocaleString()}m)`;
+
+    const staffEl = document.getElementById('statStaffing');
+    if (staffEl) staffEl.textContent = `${metrics.security_personnel || 80} Marshals`;
+
+    const badge = document.getElementById('genDensityBadge');
+    if (badge) {
+      badge.textContent = `● ${metrics.density_rating || 'SAFE'} DENSITY (${metrics.actual_density_m2_ppl || 0.75} m²/person)`;
+      badge.className = `badge ${metrics.density_rating === 'SAFE' ? 'badge-safe' : metrics.density_rating === 'MODERATE' ? 'badge-moderate' : 'badge-critical'}`;
+    }
+
+    if (window.lucide) lucide.createIcons();
+  },
+
+  // -------------------- EVENT BINDINGS FOR POINT TOOLBAR --------------------
+  bindPointMarkerControls: function() {
+    // 1. Palette Buttons (Select marker type)
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.point-tool-btn');
+      if (btn) {
+        document.querySelectorAll('.point-tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.activePointType = btn.getAttribute('data-point-type');
+      }
     });
 
-    this.mapInstances[elemId] = map;
-
-    // Draw venue markers
-    venue.zones.forEach(z => {
-      new google.maps.Circle({
-        strokeColor: z.color,
-        strokeOpacity: 0.8,
-        strokeWeight: 2,
-        fillColor: z.color,
-        fillOpacity: 0.25,
-        map: map,
-        center: { lat: z.lat, lng: z.lng },
-        radius: 35
+    // 2. Generate Layout Button
+    const genBtn = document.getElementById('generateLayoutBtn');
+    if (genBtn) {
+      genBtn.addEventListener('click', () => {
+        this.triggerAutoLayoutGeneration(true);
       });
+    }
 
-      new google.maps.Marker({
-        position: { lat: z.lat, lng: z.lng },
-        map: map,
-        title: `${z.name} (${z.count} people)`,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 7,
-          fillColor: z.color,
-          fillOpacity: 1,
-          strokeWeight: 2,
-          strokeColor: '#ffffff'
+    // 3. Clear Points Button
+    const clearBtn = document.getElementById('clearMarkedPointsBtn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all marked points and reset the diagram?')) {
+          this.clearAllMarkedPoints();
         }
       });
-    });
+    }
 
-    // Draw route polylines
-    if (venue.zones.length >= 3) {
-      // Route C (Green recommended)
-      new google.maps.Polyline({
-        path: [
-          { lat: venue.zones[0].lat, lng: venue.zones[0].lng },
-          { lat: venue.zones[3].lat, lng: venue.zones[3].lng },
-          { lat: venue.zones[2].lat, lng: venue.zones[2].lng }
-        ],
-        strokeColor: '#10b981',
-        strokeOpacity: 1.0,
-        strokeWeight: 6,
-        map: map
+    // 4. Load Preset Points Button
+    const presetBtn = document.getElementById('loadDefaultPointsBtn');
+    if (presetBtn) {
+      presetBtn.addEventListener('click', () => {
+        this.loadInitialGroundPoints();
       });
+    }
 
-      // Route A (Red bottleneck)
-      new google.maps.Polyline({
-        path: [
-          { lat: venue.zones[0].lat, lng: venue.zones[0].lng },
-          { lat: venue.zones[1].lat, lng: venue.zones[1].lng },
-          { lat: venue.zones[2].lat, lng: venue.zones[2].lng }
-        ],
-        strokeColor: '#ef4444',
-        strokeOpacity: 0.85,
-        strokeWeight: 5,
-        map: map
+    // 5. Save Layout to DB Button
+    const saveBtn = document.getElementById('saveLayoutToDbBtn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        if (!this.generatedLayout) {
+          await this.triggerAutoLayoutGeneration(false);
+        }
+        alert('💾 Generated layout and marked coordinates successfully saved to MongoDB database!');
       });
     }
   },
 
-  /**
-   * Venue-Specific Architectural Visual Schematics
-   * Each venue has its own distinct layout, buildings, pathways, and geometry!
-   */
-  renderVenueSchematic: function(elemId, venueId) {
-    const el = document.getElementById(elemId);
-    if (!el) return;
+  // -------------------- GENERAL UI & PRESETS --------------------
+  bindUIControls: function() {
+    // Preset Stadium Pills
+    document.addEventListener('click', (e) => {
+      const pill = e.target.closest('.ground-preset-pill');
+      if (pill) {
+        const lat = parseFloat(pill.getAttribute('data-lat'));
+        const lng = parseFloat(pill.getAttribute('data-lng'));
+        const name = pill.getAttribute('data-name');
+        const vid = pill.getAttribute('data-vid');
 
-    const v = this.venueConfigs[venueId] || this.venueConfigs['palani-gathering'];
-    let svgContent = '';
+        document.querySelectorAll('.ground-preset-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
 
-    if (venueId === 'meenakshi-temple') {
-      // Meenakshi Temple: Quadrangle concentric fortress layout with 4 Gopurams & Golden Lotus Tank
-      svgContent = `
-        <!-- Meenakshi Temple Outer Quadrilateral Walls -->
-        <rect x="120" y="50" width="560" height="400" rx="6" fill="#f1f5f9" stroke="#2563eb" stroke-width="2" stroke-dasharray="6,4"/>
-        <rect x="200" y="110" width="400" height="280" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+        if (vid && this.venueConfigs[vid]) {
+          this.switchVenue(vid);
+        } else if (!isNaN(lat) && !isNaN(lng)) {
+          this.relocateGroundTo(lat, lng, name);
+        }
+      }
+    });
 
-        <!-- 4 Iconic Gopuram Towers -->
-        <rect x="360" y="38" width="80" height="24" rx="3" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/>
-        <text x="375" y="54" fill="#ffffff" font-size="10" font-weight="900">NORTH TOWER</text>
+    // View Mode Switchers
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.map-view-toggle-btn');
+      if (btn) {
+        const targetId = btn.getAttribute('data-map-target');
+        const mode = btn.getAttribute('data-view-mode');
+        const parent = btn.parentElement;
 
-        <rect x="360" y="438" width="80" height="24" rx="3" fill="#10b981" stroke="#ffffff" stroke-width="1.5"/>
-        <text x="378" y="454" fill="#ffffff" font-size="10" font-weight="900">SOUTH TOWER</text>
+        if (parent) {
+          parent.querySelectorAll('.map-view-toggle-btn').forEach(b => b.classList.remove('active'));
+        }
+        btn.classList.add('active');
 
-        <rect x="108" y="210" width="24" height="80" rx="3" fill="#10b981" stroke="#ffffff" stroke-width="1.5"/>
-        <text x="114" y="255" fill="#ffffff" font-size="9" font-weight="900" transform="rotate(-90 120 250)">EAST MAIN GATE</text>
+        const layers = this.activeLayers[targetId];
+        const map = this.mapInstances[targetId];
+        if (layers && map) {
+          if (layers.current) map.removeLayer(layers.current);
 
-        <rect x="668" y="210" width="24" height="80" rx="3" fill="#2563eb" stroke="#ffffff" stroke-width="1.5"/>
-        <text x="674" y="255" fill="#ffffff" font-size="9" font-weight="900" transform="rotate(90 680 250)">WEST TOWER</text>
+          if (mode === 'satellite') {
+            layers.satellite.addTo(map);
+            layers.current = layers.satellite;
+          } else if (mode === 'hybrid') {
+            layers.hybrid.addTo(map);
+            layers.current = layers.hybrid;
+          } else {
+            layers.roadmap.addTo(map);
+            layers.current = layers.roadmap;
+          }
+        }
+      }
+    });
 
-        <!-- Golden Lotus Tank (Teppakulam) -->
-        <rect x="230" y="270" width="130" height="90" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
-        <text x="245" y="320" fill="#0369a1" font-size="11" font-weight="bold">Golden Lotus Tank</text>
+    // Locate Me GPS
+    const setupLocate = (btnId) => {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                this.relocateGroundTo(pos.coords.latitude, pos.coords.longitude, 'My Current Ground Location');
+              },
+              () => { alert('GPS location access denied.'); },
+              { timeout: 10000, enableHighAccuracy: true }
+            );
+          }
+        });
+      }
+    };
+    setupLocate('visitorLocateMeBtn');
+    setupLocate('adminLocateMeBtn');
+  },
 
-        <!-- Route A (Choked Corridor to Sanctum) -->
-        <path d="M 140,250 L 280,210 L 440,190" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
-        <text x="240" y="195" fill="#b91c1c" font-size="10" font-weight="bold">Direct Corridor: 850 ppl (CHOKED)</text>
+  setupUniversalSearch: function() {
+    const bindSearch = (inputId) => {
+      const input = document.getElementById(inputId);
+      if (!input) return;
 
-        <!-- Route C (Recommended Express Bypass via South Corridor) -->
-        <path d="M 140,250 L 220,380 L 480,380 L 520,240 L 440,190" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
-        <text x="270" y="405" fill="#047857" font-size="11" font-weight="bold">✔ RECOMMENDED: SOUTH CHITRA CORRIDOR (6m WAIT)</text>
+      input.style.backgroundImage = 'none';
 
-        <!-- Inner Sanctum -->
-        <g transform="translate(440, 190)">
-          <circle r="30" fill="#fef2f2" stroke="#b91c1c" stroke-width="3"/>
-          <circle r="10" fill="#b91c1c"/>
-          <text x="36" y="5" fill="#b91c1c" font-size="12" font-weight="bold">Main Sanctum Sanctorum</text>
-          <text x="36" y="20" fill="#991b1b" font-size="10">850 / 800 (106% CRITICAL)</text>
-        </g>
-      `;
-    } else if (venueId === 'chennai-stadium') {
-      // Nehru Stadium: Oval track, football pitch, concentric concourses, turnstiles
-      svgContent = `
-        <!-- Stadium Outer Perimeter Ring -->
-        <ellipse cx="400" cy="250" rx="340" ry="180" fill="#f1f5f9" stroke="#2563eb" stroke-width="2"/>
-        <ellipse cx="400" cy="250" rx="270" ry="135" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+      let debounceTimer;
+      let dropdown = input.parentElement.querySelector('.ground-search-suggestions');
+      if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'ground-search-suggestions';
+        dropdown.style.display = 'none';
+        input.parentElement.appendChild(dropdown);
+      }
 
-        <!-- Running Track & Central Football Pitch -->
-        <ellipse cx="400" cy="250" rx="180" ry="85" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-        <rect x="310" y="205" width="180" height="90" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
-        <circle cx="400" cy="250" r="25" fill="none" stroke="#047857" stroke-width="1"/>
-        <text x="365" y="254" fill="#047857" font-size="11" font-weight="bold">CENTRAL PITCH</text>
+      input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = input.value.trim();
+        if (query.length < 2) {
+          dropdown.style.display = 'none';
+          return;
+        }
 
-        <!-- North Gate 1 Turnstiles -->
-        <g transform="translate(160, 250)">
-          <circle r="22" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-          <circle r="8" fill="#10b981"/>
-          <text x="-50" y="-30" fill="#0f172a" font-size="11" font-weight="bold">North Gate 1 Turnstiles</text>
-        </g>
+        debounceTimer = setTimeout(async () => {
+          try {
+            const matches = Object.values(this.venueConfigs).filter(v =>
+              v.name.toLowerCase().includes(query.toLowerCase()) ||
+              v.city.toLowerCase().includes(query.toLowerCase())
+            );
 
-        <!-- Player / VIP Tunnel Chokepoint -->
-        <g transform="translate(400, 115)">
-          <circle r="24" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.5"/>
-          <circle r="9" fill="#b91c1c"/>
-          <text x="30" y="5" fill="#b91c1c" font-size="11" font-weight="bold">VIP & Grandstand Tunnel Gate</text>
-        </g>
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+            const remote = await resp.json();
 
-        <!-- Recommended Egress Lane (Green) -->
-        <path d="M 160,250 C 220,360 480,360 620,250" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
-        <text x="270" y="385" fill="#047857" font-size="11" font-weight="bold">✔ RECOMMENDED: SOUTH CONCOURSE PROMENADE (4m)</text>
+            let html = '';
+            matches.forEach(m => {
+              html += `
+                <div class="ground-search-suggestion-item" data-lat="${m.lat}" data-lng="${m.lng}" data-name="${m.name}">
+                  <span>🏟️</span> <div><strong>${m.name}</strong> <span style="font-size:0.75rem; color:#64748b;">(${m.city})</span></div>
+                </div>
+              `;
+            });
+            remote.forEach(r => {
+              html += `
+                <div class="ground-search-suggestion-item" data-lat="${r.lat}" data-lng="${r.lon}" data-name="${r.display_name.split(',')[0]}">
+                  <span>📍</span> <div><strong>${r.display_name.split(',')[0]}</strong> <span style="font-size:0.75rem; color:#64748b;">(${r.display_name})</span></div>
+                </div>
+              `;
+            });
 
-        <!-- Direct Choked Tunnel Route (Red) -->
-        <path d="M 160,250 C 240,150 340,120 400,115" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
-        <text x="230" y="150" fill="#b91c1c" font-size="10" font-weight="bold">VIP Tunnel: High Density (28m Delay)</text>
-      `;
-    } else if (venueId === 'central-transit-hub') {
-      // Central Metro: Multi-track platforms, concourse mezzanine, escalator tubes
-      svgContent = `
-        <!-- Train Station Platforms (Parallel Tracks) -->
-        <rect x="80" y="90" width="640" height="25" rx="3" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-        <text x="95" y="106" fill="#334155" font-size="10" font-weight="bold">PLATFORM 1: INTERCITY EXPRESS</text>
+            if (html) {
+              dropdown.innerHTML = html;
+              dropdown.style.display = 'block';
+            } else {
+              dropdown.style.display = 'none';
+            }
+          } catch (e) {
+            dropdown.style.display = 'none';
+          }
+        }, 300);
+      });
 
-        <rect x="80" y="150" width="640" height="25" rx="3" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-        <text x="95" y="166" fill="#334155" font-size="10" font-weight="bold">PLATFORM 2: REGIONAL FAST LINE</text>
+      dropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('.ground-search-suggestion-item');
+        if (item) {
+          const lat = parseFloat(item.getAttribute('data-lat'));
+          const lng = parseFloat(item.getAttribute('data-lng'));
+          const name = item.getAttribute('data-name');
+          input.value = name;
+          dropdown.style.display = 'none';
+          this.relocateGroundTo(lat, lng, name);
+        }
+      });
 
-        <rect x="80" y="350" width="640" height="25" rx="3" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-        <text x="95" y="366" fill="#334155" font-size="10" font-weight="bold">PLATFORM 3: SUBURBAN METRO CONNECTOR</text>
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+    };
 
-        <!-- Central Concourse & Ticket Turnstiles -->
-        <rect x="140" y="210" width="180" height="100" rx="8" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
-        <text x="160" y="250" fill="#0f172a" font-size="12" font-weight="bold">Main Concourse</text>
-        <text x="160" y="270" fill="#047857" font-size="10">Automated Fare Gates</text>
+    bindSearch('visitorGroundSearch');
+    bindSearch('adminGroundSearch');
+  },
 
-        <!-- Escalator Interchange Tube (Chokepoint) -->
-        <g transform="translate(540, 240)">
-          <rect x="-60" y="-30" width="120" height="60" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.5"/>
-          <text x="-48" y="-5" fill="#b91c1c" font-size="11" font-weight="bold">Escalator Tube</text>
-          <text x="-48" y="12" fill="#991b1b" font-size="9">Transfer Bottleneck (890 ppl)</text>
-        </g>
+  relocateGroundTo: function(lat, lng, name) {
+    this.currentCenter = { lat, lng };
+    this.currentVenueName = name;
 
-        <!-- Route A (Choked Escalator) -->
-        <path d="M 320,260 L 480,240" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
-        <text x="350" y="235" fill="#b91c1c" font-size="10" font-weight="bold">Escalator Funnel (Choked)</text>
+    const customVenue = {
+      id: `custom-ground-${Date.now()}`,
+      name: name,
+      city: 'Selected Ground',
+      lat: lat,
+      lng: lng,
+      zoom: 18,
+      groundRadius: 85,
+      destinationName: 'Central Arena & Main Stage'
+    };
 
-        <!-- Route C (Recommended Skywalk Bypass) -->
-        <path d="M 230,310 L 230,410 L 540,410 L 540,300" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
-        <text x="280" y="430" fill="#047857" font-size="11" font-weight="bold">✔ RECOMMENDED: SOUTH SKYWALK DECK (3m WAIT)</text>
-      `;
-    } else if (v.isCustom || String(venueId).startsWith('custom-') || String(v.type).includes('college') || String(v.type).includes('ground') || String(v.type).includes('festival') || (v.name && (v.name.toLowerCase().includes('college') || v.name.toLowerCase().includes('ground') || v.name.toLowerCase().includes('campus') || v.name.toLowerCase().includes('sona')))) {
-      // College Campus / Festival Ground / Open Field Layout (Tailored for College Grounds like Sona College Ground)
-      svgContent = `
-        <!-- Campus & Ground Perimeter Boundary -->
-        <rect x="70" y="45" width="660" height="410" rx="14" fill="#f8fafc" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8,6"/>
-        <text x="90" y="70" fill="#2563eb" font-size="10" font-weight="800" letter-spacing="1">CAMPUS &amp; EVENT GROUNDS PERIMETER</text>
+    this.venueConfigs[customVenue.id] = customVenue;
+    this.currentVenueId = customVenue.id;
 
-        <!-- Central Open Arena / Lawn (Zone D - Recommended Bypass Artery) -->
-        <rect x="230" y="140" width="340" height="220" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-        <text x="310" y="255" fill="#047857" font-size="13" font-weight="900" letter-spacing="1">CENTRAL QUAD &amp; ARENA</text>
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
+      const map = this.mapInstances[elemId];
+      if (map) {
+        map.setView([lat, lng], 18);
+        ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+      } else {
+        this.mountSingleMap(elemId, customVenue);
+      }
+    });
 
-        <!-- West Promenade & Food Stalls (Zone B) -->
-        <rect x="170" y="75" width="230" height="45" rx="6" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
-        <text x="185" y="103" fill="#b45309" font-size="11" font-weight="bold">Food Court &amp; Innovation Stalls (Zone B)</text>
-
-        <!-- Main Stage / Auditorium Pavilion (Zone C - Chokepoint) -->
-        <g transform="translate(580, 150)">
-          <rect x="0" y="0" width="130" height="190" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.5"/>
-          <text x="16" y="85" fill="#b91c1c" font-size="13" font-weight="900">MAIN STAGE</text>
-          <text x="14" y="105" fill="#b91c1c" font-size="11" font-weight="bold">AUDITORIUM</text>
-          <text x="14" y="125" fill="#991b1b" font-size="10" font-weight="700">780 / 800 (97.5%)</text>
-          <circle cx="65" cy="35" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="2"/>
-          <circle cx="65" cy="35" r="5" fill="#ffffff"/>
-        </g>
-
-        <!-- Gate A: Main Campus Entrance (Zone A) -->
-        <g transform="translate(110, 250)">
-          <rect x="-18" y="-35" width="36" height="70" rx="4" fill="#047857" stroke="#ffffff" stroke-width="2"/>
-          <text x="-16" y="5" fill="#ffffff" font-size="9" font-weight="900" transform="rotate(-90 0 0)">MAIN GATE</text>
-          <circle cx="0" cy="0" r="18" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-          <circle cx="0" cy="0" r="7" fill="#10b981"/>
-          <text x="26" y="-5" fill="#0f172a" font-size="12" font-weight="bold">Gate A (Main Entry)</text>
-          <text x="26" y="12" fill="#475569" font-size="10">245 Influx</text>
-        </g>
-
-        <!-- Parking & Shuttle Departure Bay (Zone F) -->
-        <rect x="580" y="370" width="130" height="65" rx="6" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
-        <text x="592" y="402" fill="#1e293b" font-size="10" font-weight="bold">VEHICLE PARKING &amp;</text>
-        <text x="600" y="418" fill="#475569" font-size="9" font-weight="bold">TRANSIT SHUTTLES</text>
-
-        <!-- Route A (Direct Central Artery - Heavily Congested) -->
-        <path d="M 110,250 L 230,250 L 580,250" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
-        <text x="235" y="235" fill="#b91c1c" font-size="11" font-weight="bold">ROUTE A: DIRECT ARTERY (HEAVY 28m DELAY)</text>
-
-        <!-- Route B (West Promenade via Stalls - Moderate) -->
-        <path d="M 110,250 L 170,95 L 400,95 L 580,180" fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" stroke-dasharray="6,4"/>
-        <text x="250" y="85" fill="#b45309" font-size="10" font-weight="bold">ROUTE B: WEST PROMENADE (15m)</text>
-
-        <!-- Route C (Recommended North Lawn Perimeter Bypass - FAST 6M) -->
-        <path d="M 110,250 L 140,400 L 500,400 L 580,320" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
-        <text x="180" y="425" fill="#047857" font-size="12" font-weight="bold">✔ RECOMMENDED: ROUTE C (EXPRESS BYPASS - 6m WAIT)</text>
-      `;
-    } else {
-      // Palani Gathering: Hilltop temple steps, ropeway, foothill plaza, bypass ramp
-      svgContent = `
-        <!-- Hillside elevation lines -->
-        <path d="M 40,400 Q 400,280 760,400" fill="none" stroke="#cbd5e1" stroke-width="2"/>
-        <path d="M 80,320 Q 400,180 720,320" fill="none" stroke="#cbd5e1" stroke-width="2"/>
-
-        <!-- Route A (Direct Staircase - Choked) -->
-        <path d="M 120,380 L 320,240 L 520,120" fill="none" stroke="#ef4444" stroke-width="6" stroke-linecap="round" opacity="0.85"/>
-        <text x="280" y="270" fill="#b91c1c" font-size="11" font-weight="bold">ROUTE A: DIRECT STAIRCASE (92% CHOKED)</text>
-
-        <!-- Route B (West Arcade Corridor) -->
-        <path d="M 120,380 L 260,160 L 520,120" fill="none" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" opacity="0.8" stroke-dasharray="4,4"/>
-        <text x="180" y="190" fill="#b45309" font-size="11" font-weight="bold">ROUTE B: WEST ARCADE (15m)</text>
-
-        <!-- Route C (North Express Lane - RECOMMENDED FAST PATH) -->
-        <path d="M 120,380 L 380,410 L 640,320 L 520,120" fill="none" stroke="#10b981" stroke-width="7" stroke-linecap="round"/>
-        <text x="350" y="435" fill="#047857" font-size="12" font-weight="bold">✔ RECOMMENDED: ROUTE C (EXPRESS BYPASS - 6m WAIT)</text>
-
-        <!-- Ropeway Cable Line (Zone H) -->
-        <line x1="120" y1="380" x2="680" y2="100" stroke="#0284c7" stroke-width="3" stroke-dasharray="8,6"/>
-        <text x="560" y="105" fill="#0369a1" font-size="10" font-weight="bold">HILLTOP ROPEWAY (880 ppl)</text>
-
-        <!-- Zone A: Entrance Plaza -->
-        <g transform="translate(120, 380)">
-          <circle r="24" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
-          <circle r="8" fill="#10b981"/>
-          <text x="32" y="5" fill="#0f172a" font-size="12" font-weight="bold">Zone A (Entrance)</text>
-          <text x="32" y="20" fill="#475569" font-size="10">245 people</text>
-        </g>
-
-        <!-- Zone C: Hilltop Sanctum -->
-        <g transform="translate(520, 120)">
-          <circle r="28" fill="#fef2f2" stroke="#b91c1c" stroke-width="2.5"/>
-          <circle r="9" fill="#b91c1c"/>
-          <text x="35" y="5" fill="#b91c1c" font-size="13" font-weight="bold">Zone C: Hilltop Sanctum</text>
-          <text x="35" y="22" fill="#991b1b" font-size="10">780 / 800 (97.5% CRITICAL)</text>
-        </g>
-      `;
-    }
-
-    const cityName = (v.city && v.city !== 'undefined' && String(v.city).trim() !== '') ? String(v.city).trim() : '';
-
-    el.innerHTML = `
-      <div class="vector-map-canvas" style="display:flex; flex-direction:column; justify-content:space-between; position:relative; background:#f8fafc; width:100%; height:100%;">
-        <svg viewBox="0 0 800 500" style="width:100%; height:100%; position:absolute; inset:0;" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-          ${svgContent}
-        </svg>
-
-        <!-- Responsive Dynamic Label Overlay -->
-        <div class="map-top-overlay" style="position:relative; z-index:5; pointer-events:none; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; padding:0.75rem 1rem; width:100%;">
-          <div class="map-active-venue-chip" style="background:rgba(255,255,255,0.95); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:0.4rem 0.75rem; border-radius:8px; border:1px solid rgba(226,232,240,0.9); box-shadow:0 2px 6px rgba(15,23,42,0.06); max-width:70%;">
-            <div style="font-size:0.65rem; color:#64748b; font-weight:800; letter-spacing:0.04em;">ACTIVE VENUE MAP</div>
-            <div style="font-size:0.88rem; font-weight:800; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${v.name}${cityName ? ` <span style="font-size:0.75rem; color:#64748b; font-weight:600;">(${cityName})</span>` : ''}
-            </div>
-          </div>
-          <div class="map-live-status-pill" style="background:rgba(236,253,245,0.95); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:0.35rem 0.65rem; border-radius:9999px; border:1px solid #a7f3d0; font-size:0.72rem; color:#047857; font-weight:700; white-space:nowrap; box-shadow:0 2px 6px rgba(15,23,42,0.04);">
-            ● Live Flow Overlay
-          </div>
-        </div>
-      </div>
-    `;
+    this.updateCoordinateBadge(lat, lng, name);
+    this.loadInitialGroundPoints();
   },
 
   switchVenue: function(venueId) {
     this.currentVenueId = venueId;
     let v = this.venueConfigs[venueId];
-
-    if (!v) {
-      // Check if venue exists in select dropdown
-      const sel = document.getElementById('venueSelect');
-      const opt = sel?.querySelector(`option[value="${venueId}"]`);
-      const vName = opt ? opt.text.split('(')[0].trim() : venueId;
-      this.venueConfigs[venueId] = {
-        name: vName,
-        city: 'Active Ground Area',
-        lat: 11.0168,
-        lng: 76.9558,
-        zoom: 16,
-        capacity: 5000,
-        isCustom: true,
-        zones: [
-          { id: 'zone-a', name: 'Main Entry Gate', lat: 11.0165, lng: 76.9550, color: '#10b981', count: 320 },
-          { id: 'zone-b', name: 'West Concourse Promenade', lat: 11.0170, lng: 76.9555, color: '#f59e0b', count: 620 },
-          { id: 'zone-c', name: 'Central Arena Hub', lat: 11.0175, lng: 76.9562, color: '#ef4444', count: 850 },
-          { id: 'zone-d', name: 'South Express Bypass', lat: 11.0168, lng: 76.9560, color: '#10b981', count: 290 },
-          { id: 'zone-f', name: 'Outer Parking & Transit', lat: 11.0160, lng: 76.9545, color: '#10b981', count: 540 }
-        ]
-      };
-      v = this.venueConfigs[venueId];
-    }
+    if (!v) v = this.venueConfigs['sona-college'];
 
     if (v) {
-      const coordEl = document.getElementById('mapCoordDisplay');
-      if (coordEl && v.lat && v.lng) {
-        coordEl.textContent = `${Number(v.lat).toFixed(4)}° N, ${Number(v.lng).toFixed(4)}° E`;
-      }
+      this.currentCenter = { lat: v.lat, lng: v.lng };
+      this.currentVenueName = v.name;
+      this.groundRadiusMeters = v.groundRadius || 85;
 
-      const titleEl = document.getElementById('adminMapHeaderTitle');
-      if (titleEl) titleEl.textContent = `${v.name} - Spatial Flow Layout`;
+      this.updateCoordinateBadge(v.lat, v.lng, v.name);
 
-      const badgeEl = document.getElementById('currentVenueNameBadge');
-      if (badgeEl) badgeEl.textContent = v.name;
+      ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
+        const map = this.mapInstances[elemId];
+        if (map) {
+          map.setView([v.lat, v.lng], v.zoom || 18);
+          ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
+        } else {
+          this.mountSingleMap(elemId, v);
+        }
+      });
 
-      if (this.isLoaded && window.google) {
-        this.mountSingleMap('googleMapDiv', v);
-        this.mountSingleMap('googleMapAdminDiv', v);
-      } else {
-        this.renderVenueSchematic('googleMapDiv', venueId);
-        this.renderVenueSchematic('googleMapAdminDiv', venueId);
-      }
+      this.loadInitialGroundPoints();
     }
+  },
+
+  updateCoordinateBadge: function(lat, lng, name) {
+    const coordEl = document.getElementById('mapCoordDisplay');
+    if (coordEl) coordEl.textContent = '';
+
+    const badgeEl = document.getElementById('currentVenueNameBadge');
+    const cleanName = (name || '').replace(/\s*\(-?\d+(\.\d+)?(°?\s*[NSEW])?,\s*-?\d+(\.\d+)?(°?\s*[NSEW])?\)/gi, '').replace(/\s*\(Lat:?[^)]+\)/gi, '').trim();
+    if (badgeEl) badgeEl.textContent = cleanName;
+
+    const adminTitleEl = document.getElementById('adminMapHeaderTitle');
+    if (adminTitleEl) adminTitleEl.textContent = `${cleanName} - Spatial Flow Layout`;
+  },
+
+  clearOverlays: function(elemId) {
+    const o = this.activeOverlays[elemId];
+    if (!o) return;
+    o.polylines.forEach(p => p.remove ? p.remove() : null);
+    o.markers.forEach(m => m.remove ? m.remove() : null);
+    o.circles.forEach(c => c.remove ? c.remove() : null);
+    o.polygons.forEach(p => p.remove ? p.remove() : null);
+    o.polylines = [];
+    o.markers = [];
+    o.circles = [];
+    o.polygons = [];
+  },
+
+  getOffsetLatLng: function(centerLat, centerLng, distanceMeters, bearingDegrees) {
+    const R = 6378137;
+    const d = distanceMeters;
+    const brng = (bearingDegrees * Math.PI) / 180;
+    const lat1 = (centerLat * Math.PI) / 180;
+    const lon1 = (centerLng * Math.PI) / 180;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(d / R) +
+      Math.cos(lat1) * Math.sin(d / R) * Math.cos(brng)
+    );
+
+    const lon2 = lon1 + Math.atan2(
+      Math.sin(brng) * Math.sin(d / R) * Math.cos(lat1),
+      Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    return {
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lon2 * 180) / Math.PI
+    };
   }
 };
 

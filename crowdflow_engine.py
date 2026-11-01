@@ -723,4 +723,228 @@ class CrowdFlowEngine:
             "alternatives": alternatives
         }
 
+    @staticmethod
+    def generate_layout_from_points(params):
+        """
+        Automatic Venue Layout Generation directly from User-Marked Points on Google Maps.
+        Computes geographic boundary, compartmentalized barricade pens, stage buffer,
+        entry/exit routes, and emergency corridors conforming to NFPA 101.
+        """
+        venue_id = params.get("venue_id", "custom-venue")
+        venue_name = params.get("venue_name", "Venue Ground")
+        points = params.get("points", [])
+        expected_crowd = max(100, int(params.get("expected_crowd", 12000)))
+        safety_mode = params.get("safety_mode", "balanced").lower() # 'safety_priority', 'balanced', 'high_throughput'
+
+        if not points:
+            return {"success": False, "error": "No points marked on map"}
+
+        # Classify points
+        entries = [p for p in points if p.get("type") in ["entry_gate", "entry"]]
+        exits = [p for p in points if p.get("type") in ["exit_gate", "exit"]]
+        emergencies = [p for p in points if p.get("type") in ["emergency_exit", "emergency"]]
+        stages = [p for p in points if p.get("type") == "stage"]
+        crowd_zones = [p for p in points if p.get("type") == "crowd_zone"]
+        first_aids = [p for p in points if p.get("type") == "first_aid"]
+        toilets = [p for p in points if p.get("type") == "toilet"]
+        foods = [p for p in points if p.get("type") == "food_counter"]
+
+        lats = [float(p["lat"]) for p in points]
+        lngs = [float(p["lng"]) for p in points]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lng, max_lng = min(lngs), max(lngs)
+        mid_lat = (min_lat + max_lat) / 2.0
+        mid_lng = (min_lng + max_lng) / 2.0
+
+        # Geodesic scaling (meters per degree)
+        m_per_lat = 111132.0
+        m_per_lng = 111132.0 * math.cos(math.radians(mid_lat))
+
+        # Ground dimensions with buffer (minimum 100m x 80m)
+        width_m = max(100.0, (max_lng - min_lng) * m_per_lng + 40.0)
+        length_m = max(80.0, (max_lat - min_lat) * m_per_lat + 40.0)
+        total_area_m2 = width_m * length_m
+
+        # Expand boundary polygon around points
+        buf_lat = 20.0 / m_per_lat
+        buf_lng = 20.0 / m_per_lng
+        b_min_lat = min_lat - buf_lat
+        b_max_lat = max_lat + buf_lat
+        b_min_lng = min_lng - buf_lng
+        b_max_lng = max_lng + buf_lng
+
+        boundary_polygon = [
+            [b_min_lat, b_min_lng],
+            [b_max_lat, b_min_lng],
+            [b_max_lat, b_max_lng],
+            [b_min_lat, b_max_lng],
+            [b_min_lat, b_min_lng]
+        ]
+
+        # Stage Location & Buffer
+        stage_pt = stages[0] if stages else {"lat": max_lat - (10.0 / m_per_lat), "lng": mid_lng, "label": "Main Stage"}
+        stage_w_m = 32.0
+        stage_d_m = 18.0
+        stage_half_w = (stage_w_m / 2.0) / m_per_lng
+        stage_half_d = (stage_d_m / 2.0) / m_per_lat
+
+        stage_box = [
+            [stage_pt["lat"] - stage_half_d, stage_pt["lng"] - stage_half_w],
+            [stage_pt["lat"] + stage_half_d, stage_pt["lng"] - stage_half_w],
+            [stage_pt["lat"] + stage_half_d, stage_pt["lng"] + stage_half_w],
+            [stage_pt["lat"] - stage_half_d, stage_pt["lng"] + stage_half_w],
+            [stage_pt["lat"] - stage_half_d, stage_pt["lng"] - stage_half_w]
+        ]
+
+        # Usable Crowd Area & NFPA 101 Density
+        usable_area_m2 = max(400.0, total_area_m2 * 0.68)
+        density_std = 0.85 if safety_mode == "safety_priority" else 0.70 if safety_mode == "balanced" else 0.55
+        max_safe_capacity = int(usable_area_m2 / density_std)
+        actual_density_m2_ppl = round(usable_area_m2 / max(1, expected_crowd), 2)
+
+        density_rating = "SAFE" if actual_density_m2_ppl >= 0.75 else "MODERATE" if actual_density_m2_ppl >= 0.50 else "CRITICAL"
+
+        # Gate Throughput & Evacuation Time
+        total_exit_gates = max(1, len(exits) + len(emergencies))
+        egress_per_gate = 168 # ppl/min (2.4m effective gate * 70 ppl/min/m)
+        total_throughput = total_exit_gates * egress_per_gate
+        evacuation_time_mins = round(expected_crowd / max(1, total_throughput), 1)
+
+        # Barricade Compartments (Pens)
+        target_pen_cap = 1000 if safety_mode == "safety_priority" else 1200
+        pens_count = max(2, min(8, int(math.ceil(expected_crowd / target_pen_cap))))
+        if pens_count % 2 != 0:
+            pens_count += 1
+
+        pen_cap = int(expected_crowd / pens_count)
+        pens = []
+        cols = pens_count // 2
+        pen_w_deg = ((b_max_lng - b_min_lng) * 0.65) / cols
+        pen_h_deg = ((b_max_lat - b_min_lat) * 0.32)
+        start_lng = b_min_lng + ((b_max_lng - b_min_lng) * 0.18)
+
+        pen_idx = 1
+        for c in range(cols):
+            p_lng1 = start_lng + (c * pen_w_deg)
+            p_lng2 = p_lng1 + pen_w_deg * 0.90
+
+            # Row 1 (Top Pen)
+            p_top_lat2 = mid_lat + (pen_h_deg * 0.95)
+            p_top_lat1 = mid_lat + (pen_h_deg * 0.15)
+            pens.append({
+                "id": f"pen-{pen_idx}",
+                "name": f"Barricade Pen {pen_idx}",
+                "capacity": pen_cap,
+                "color": "#10b981" if density_rating == "SAFE" else "#f59e0b",
+                "polygon": [
+                    [p_top_lat1, p_lng1],
+                    [p_top_lat2, p_lng1],
+                    [p_top_lat2, p_lng2],
+                    [p_top_lat1, p_lng2],
+                    [p_top_lat1, p_lng1]
+                ],
+                "panel_count": int(math.ceil((pen_w_deg * m_per_lng * 2 + pen_h_deg * m_per_lat * 2) / 2.5))
+            })
+            pen_idx += 1
+
+            # Row 2 (Bottom Pen)
+            p_bot_lat2 = mid_lat - (pen_h_deg * 0.15)
+            p_bot_lat1 = mid_lat - (pen_h_deg * 0.95)
+            pens.append({
+                "id": f"pen-{pen_idx}",
+                "name": f"Barricade Pen {pen_idx}",
+                "capacity": pen_cap,
+                "color": "#10b981" if density_rating == "SAFE" else "#f59e0b",
+                "polygon": [
+                    [p_bot_lat1, p_lng1],
+                    [p_bot_lat2, p_lng1],
+                    [p_bot_lat2, p_lng2],
+                    [p_bot_lat1, p_lng2],
+                    [p_bot_lat1, p_lng1]
+                ],
+                "panel_count": int(math.ceil((pen_w_deg * m_per_lng * 2 + pen_h_deg * m_per_lat * 2) / 2.5))
+            })
+            pen_idx += 1
+
+        # Calculate Barricade Linear Meters & Panels
+        total_barricade_linear_m = round(sum(p["panel_count"] * 2.5 for p in pens) + stage_w_m * 2.5 + len(entries) * 20.0, 1)
+        total_barricade_panels = int(math.ceil(total_barricade_linear_m / 2.5))
+
+        # Generate Route Network connecting marked points
+        entry_routes = []
+        for e in (entries if entries else [{"lat": b_min_lat, "lng": mid_lng, "label": "Entry Gate"}]):
+            # Connect Entry to central corridor then to pens and stage
+            route_path = [
+                [e["lat"], e["lng"]],
+                [mid_lat, (e["lng"] + mid_lng) / 2.0],
+                [mid_lat, mid_lng],
+                [stage_pt["lat"], stage_pt["lng"]]
+            ]
+            entry_routes.append({
+                "id": f"entry-route-{len(entry_routes)+1}",
+                "name": f"Ingress Flow from {e.get('label', 'Entry Gate')}",
+                "color": "#3b82f6",
+                "path": route_path
+            })
+
+        exit_routes = []
+        for ex in (exits if exits else [{"lat": b_min_lat, "lng": b_max_lng, "label": "Main Exit"}]):
+            route_path = [
+                [stage_pt["lat"], stage_pt["lng"]],
+                [mid_lat, mid_lng],
+                [ex["lat"], ex["lng"]]
+            ]
+            exit_routes.append({
+                "id": f"exit-route-{len(exit_routes)+1}",
+                "name": f"Egress Flow to {ex.get('label', 'Exit Gate')}",
+                "color": "#8b5cf6",
+                "path": route_path
+            })
+
+        emergency_routes = []
+        for em in (emergencies if emergencies else [{"lat": mid_lat, "lng": b_min_lng, "label": "Emergency Exit"}]):
+            # Direct rapid egress paths from stage and central pen corridor directly to emergency exit
+            route_path = [
+                [stage_pt["lat"], stage_pt["lng"]],
+                [em["lat"], em["lng"]]
+            ]
+            emergency_routes.append({
+                "id": f"em-route-{len(emergency_routes)+1}",
+                "name": f"🚨 Rapid Evacuation to {em.get('label', 'Emergency Exit')}",
+                "color": "#10b981",
+                "path": route_path
+            })
+
+        return {
+            "success": True,
+            "venue_id": venue_id,
+            "venue_name": venue_name,
+            "boundary_polygon": boundary_polygon,
+            "stage_box": stage_box,
+            "stage_point": [stage_pt["lat"], stage_pt["lng"]],
+            "pens": pens,
+            "routes": {
+                "entry_routes": entry_routes,
+                "exit_routes": exit_routes,
+                "emergency_routes": emergency_routes
+            },
+            "points": points,
+            "metrics": {
+                "total_area_m2": round(total_area_m2, 1),
+                "usable_area_m2": round(usable_area_m2, 1),
+                "expected_crowd": expected_crowd,
+                "max_safe_capacity": max_safe_capacity,
+                "actual_density_m2_ppl": actual_density_m2_ppl,
+                "density_rating": density_rating,
+                "total_exit_gates": total_exit_gates,
+                "evacuation_time_mins": evacuation_time_mins,
+                "evac_compliant": evacuation_time_mins <= 15.0,
+                "total_barricade_linear_m": total_barricade_linear_m,
+                "total_barricade_panels": total_barricade_panels,
+                "security_personnel": max(8, int(math.ceil(expected_crowd / 120))),
+                "paramedics_count": max(4, int(math.ceil(expected_crowd / 1500))),
+                "restrooms_count": max(6, int(math.ceil(expected_crowd / 90)))
+            }
+        }
+
 crowdflow_engine = CrowdFlowEngine()

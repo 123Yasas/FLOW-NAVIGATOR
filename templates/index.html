@@ -14,6 +14,10 @@
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   
+  <!-- Universal Satellite Mapping Engine (Fallback & Direct Satellite Provider) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
   <!-- Core Design System CSS -->
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -52,11 +56,11 @@
       <div class="venue-select-box">
         <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
         <select id="venueSelect" class="venue-select">
-          <option value="sona-college" selected>Sona College of Technology (Campus Ground)</option>
           <option value="palani-gathering">Palani Pilgrimage Grounds (Tamil Nadu)</option>
           <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
           <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
           <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
+          <option value="sona-college">Sona College of Technology (Salem)</option>
         </select>
       </div>
       <!-- CrowdFlow AI Direct Launcher Button -->
@@ -70,10 +74,16 @@
         <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
       </button>
 
-      <!-- REAL ESP32 IOT LIVE TELEMETRY BADGE -->
-      <div id="dataModeIndicator" class="live-hardware-badge" title="Live ESP32 IoT Hardware Telemetry Active" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:20px;font-size:0.75rem;font-weight:700;color:#047857;white-space:nowrap;">
-        <i data-lucide="radio" style="width:13px;height:13px;color:#059669;"></i>
-        <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
+      <!-- DATA MODE SWITCHER (DEMO SIMULATION VS REAL ESP32 IOT LIVE) -->
+      <div id="dataModeSwitcher" class="data-mode-toggle" title="Switch between Demo Simulation and Real ESP32 IoT Hardware Telemetry">
+        <button id="modeDemoBtn" class="mode-btn active" data-mode="demo">
+          <i data-lucide="sparkles" style="width:13px;height:13px;"></i>
+          <span data-i18n="nav.mode_demo">Demo Data Mode</span>
+        </button>
+        <button id="modeRealBtn" class="mode-btn" data-mode="real">
+          <i data-lucide="radio" style="width:13px;height:13px;"></i>
+          <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
+        </button>
       </div>
 
       <!-- Role Switcher & Controls -->
@@ -204,7 +214,7 @@
             <!-- Admin Credentials Hint Box -->
             <div style="background:#ffffff; border:1px dashed #3b82f6; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1.5rem; font-size:0.8rem; color:#1e40af;">
               <div style="font-weight:800; margin-bottom:0.2rem; display:flex; align-items:center; gap:0.4rem;">
-                <i data-lucide="key" style="width:14px;height:14px;"></i> Default Admin Login Credentials:
+                <i data-lucide="key" style="width:14px;height:14px;"></i> Demo Admin Login Credentials:
               </div>
               <div style="font-family:monospace; font-size:0.85rem; font-weight:700;">
                 Username: <strong style="color:#1d4ed8;">admin</strong> &nbsp;|&nbsp; Password: <strong style="color:#1d4ed8;">admin123</strong>
@@ -338,7 +348,7 @@
           <!-- Circle Meter -->
           <div>
             <div id="citizenMeterCircle" class="crowd-meter-circle safe">
-              <span id="citizenMeterValue" class="crowd-meter-val">0%</span>
+              <span id="citizenMeterValue" class="crowd-meter-val">48%</span>
               <span id="citizenMeterStatus" class="crowd-meter-label">Safe Flow</span>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted);">Overall Venue Capacity Density</p>
@@ -350,10 +360,10 @@
               Total People in Venue
             </div>
             <div id="citizenTotalPeople" style="font-size:3.2rem; font-weight:900; font-family:var(--font-display); color:var(--accent-cyan); line-height:1;">
-              0
+              12,450
             </div>
             <div style="font-size:0.85rem; color:var(--color-safe); margin-top:0.5rem; display:flex; align-items:center; justify-content:center; gap:0.35rem;">
-              <i data-lucide="check-circle" style="width:16px;height:16px;"></i> Flow is moving normally
+              <i data-lucide="arrow-down-right" style="width:16px;height:16px;"></i> Flow is moving normally
             </div>
           </div>
 
@@ -406,10 +416,10 @@
           <div id="routeRecommendationAlert" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:var(--radius-md); padding:1rem; margin-bottom:1.25rem;">
             <div style="display:flex; align-items:center; gap:0.5rem; color:var(--color-safe); font-weight:800; font-size:0.85rem; margin-bottom:0.25rem;">
               <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
-              LIVE FLOW: Corridors Clear (Normal Entry)
+              RECOMMENDED: Route C (North Express Lane)
             </div>
-            <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
-              Hardware optical sensors online. Real-time telemetry monitoring venue gateways.
+            <p style="font-size:0.8rem; color:var(--text-muted);">
+              Wait time is only <strong>6 mins</strong> (34% density). Avoid Direct Pathway (Route A) which is 92% congested with 28 min bottleneck delays.
             </p>
           </div>
 
@@ -428,32 +438,67 @@
               Live Venue Map & Guidance
             </div>
             <div class="visitor-map-actions">
-              <!-- Dynamic Route Status Badges (Cleanly located in header without overlapping map canvas) -->
+              <!-- Dynamic Route Status Badges -->
               <div id="mapHeaderRouteBadges" class="map-header-route-badges">
                 <span class="badge badge-safe">● Route C: Fast (6m)</span>
                 <span class="badge badge-moderate">● Route B: Moderate (15m)</span>
                 <span class="badge badge-critical">● Route A: Heavy Congestion (28m)</span>
               </div>
-              <button id="openMapsKeyModalBtn" class="btn btn-outline btn-sm">
+              <div class="map-view-toggle-bar">
+                <button type="button" class="map-view-toggle-btn active" data-map-target="googleMapDiv" data-view-mode="satellite">🛰️ Top View</button>
+                <button type="button" class="map-view-toggle-btn" data-map-target="googleMapDiv" data-view-mode="hybrid">🗺️ Hybrid</button>
+                <button type="button" class="map-view-toggle-btn" data-map-target="googleMapDiv" data-view-mode="roadmap">📐 Map</button>
+              </div>
+              <button id="openMapsKeyModalBtn" class="btn btn-outline btn-sm" style="display:none;">
                 <i data-lucide="key" style="width:13px;height:13px;"></i> Maps API Key
               </button>
             </div>
           </div>
 
+          <!-- Location Search & Ground Autocomplete -->
+          <div class="ground-search-container">
+            <div class="ground-search-input-wrap">
+              <i data-lucide="search" class="ground-search-icon"></i>
+              <input id="visitorGroundSearch" class="ground-search-input" type="text" placeholder="🔍 Search any Stadium, College Ground, Arena (e.g. Wankhede, Chepauk, Sona Ground)..." />
+              <button id="visitorLocateMeBtn" type="button" class="btn btn-outline btn-sm" title="Use current GPS position" style="white-space:nowrap; padding:0.4rem 0.65rem;">
+                <i data-lucide="crosshair" style="width:13px;height:13px;"></i> My Location
+              </button>
+            </div>
+            <div class="ground-preset-pills" id="visitorPresetPills">
+              <span style="font-size:0.73rem; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:0.25rem;">
+                <i data-lucide="sparkles" style="width:12px;height:12px;color:#f59e0b;"></i> Presets:
+              </span>
+              <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.6811" data-lng="78.1368" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
+              <button type="button" class="ground-preset-pill" data-vid="chennai-stadium" data-lat="13.0827" data-lng="80.2707" data-name="Jawaharlal Nehru Stadium (Chennai)">🏟️ Nehru Stadium</button>
+              <button type="button" class="ground-preset-pill" data-vid="chepauk" data-lat="13.0628" data-lng="80.2795" data-name="M. A. Chidambaram Stadium (Chepauk)">🏟️ Chepauk Stadium</button>
+              <button type="button" class="ground-preset-pill" data-vid="wankhede" data-lat="18.9389" data-lng="72.8258" data-name="Wankhede Stadium (Mumbai)">🏟️ Wankhede Stadium</button>
+              <button type="button" class="ground-preset-pill" data-vid="modi-stadium" data-lat="23.0917" data-lng="72.5973" data-name="Narendra Modi Stadium (Ahmedabad)">🏟️ Modi Stadium</button>
+              <button type="button" class="ground-preset-pill" data-vid="eden-gardens" data-lat="22.5646" data-lng="88.3433" data-name="Eden Gardens (Kolkata)">🏟️ Eden Gardens</button>
+              <button type="button" class="ground-preset-pill" data-vid="palani-gathering" data-lat="10.4534" data-lng="77.5186" data-name="Palani Pilgrimage Grounds">🛕 Palani Grounds</button>
+            </div>
+          </div>
+
           <!-- Map Element -->
-          <div class="map-container-wrap visitor-map-wrap">
+          <div class="map-container-wrap visitor-map-wrap" style="position:relative;">
             <div id="googleMapDiv"></div>
 
-            <div class="map-badge-legend">
-              <div><span style="color:var(--color-safe);">■</span> Recommended Flow</div>
-              <div><span style="color:var(--color-critical);">■</span> Bottleneck Chokepoint</div>
+            <div class="map-top-view-badge" id="visitorTopViewBadge" style="display:none;">
+              <span class="map-top-view-pulse"></span>
+              <span id="visitorTopViewText">SATELLITE TOP VIEW • GROUND ARRANGEMENT ACTIVE</span>
+            </div>
+
+            <div class="map-badge-legend" style="display:none;">
+              <div><span style="color:#10b981; font-weight:900;">■</span> Route C (Express 6m)</div>
+              <div><span style="color:#f59e0b; font-weight:900;">■</span> Route B (Moderate 15m)</div>
+              <div><span style="color:#ef4444; font-weight:900;">■</span> Route A (Chokepoint 28m)</div>
+              <div><span style="color:#06b6d4; font-weight:900;">■</span> Evacuation Path</div>
             </div>
           </div>
           
-          <div class="visitor-map-footer">
-            <span>GPS Location: <strong id="mapCoordDisplay">10.4534° N, 77.5186° E</strong></span>
+          <div class="visitor-map-footer" style="display:none;">
+            <span id="mapCoordDisplay" style="display:none;"></span>
             <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-              <span id="currentVenueNameBadge" class="venue-name-badge-text">Sona College of Technology (Campus Ground)</span>
+              <span id="currentVenueNameBadge" class="venue-name-badge-text">Palani Pilgrimage Grounds</span>
               <span class="badge badge-safe" style="font-size:0.7rem; white-space:nowrap;">● Active Monitoring</span>
             </div>
           </div>
@@ -487,7 +532,7 @@
         <aside class="admin-sidebar">
           <div class="admin-sidebar-header">
             <div class="admin-sidebar-title">COMMAND CENTER</div>
-            <div class="admin-sidebar-sub" id="adminSidebarVenue">Sona College of Technology</div>
+            <div class="admin-sidebar-sub" id="adminSidebarVenue">Palani Pilgrimage Grounds</div>
           </div>
 
           <button class="admin-nav-item active" data-tab="overview">
@@ -569,18 +614,18 @@
             <div class="grid-4" style="margin-bottom:1.5rem;">
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Total People in Venue</div>
-                <div id="adminStatHeadcount" style="font-size:2rem; font-weight:800; color:var(--accent-cyan); margin:0.35rem 0;">0</div>
-                <div style="font-size:0.75rem; color:var(--color-safe);" id="adminStatCapacityPct">0.0% of 10 Capacity</div>
+                <div id="adminStatHeadcount" style="font-size:2rem; font-weight:800; color:var(--accent-cyan); margin:0.35rem 0;">12,450</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);" id="adminStatCapacityPct">49.8% of 25,000 Capacity</div>
               </div>
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Counting Gates</div>
-                <div id="adminStatSensors" style="font-size:2rem; font-weight:800; color:var(--text-main); margin:0.35rem 0;">1 Gate</div>
-                <div style="font-size:0.75rem; color:var(--color-safe);">● Live Telemetry Online</div>
+                <div id="adminStatSensors" style="font-size:2rem; font-weight:800; color:var(--text-main); margin:0.35rem 0;">6 Gates</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);">● 100% Gates Reporting Influx</div>
               </div>
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Peak Chokepoint Warning</div>
-                <div id="adminStatSurge" style="font-size:1.6rem; font-weight:800; color:var(--color-safe); margin:0.35rem 0;">Normal (0%)</div>
-                <div style="font-size:0.75rem; color:var(--text-muted);">Corridors Operating Normally</div>
+                <div id="adminStatSurge" style="font-size:1.6rem; font-weight:800; color:var(--color-critical); margin:0.35rem 0;">Zone C (97.5%)</div>
+                <div style="font-size:0.75rem; color:var(--text-muted);">High density surge in +15m</div>
               </div>
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Safety & Egress Status</div>
@@ -670,18 +715,172 @@
                   <h2 id="adminMapHeaderTitle">Venue Map & Pathway Layout</h2>
                   <p style="font-size:0.85rem; color:var(--text-muted);">Real-time crowd heat density overlays and directional routes for selected venue.</p>
                 </div>
-                <!-- Quick venue switch buttons -->
-                <div id="adminVenuePillsContainer" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                  <button class="btn btn-outline btn-sm venue-pill active" data-vid="sona-college">Sona College</button>
-                  <button class="btn btn-outline btn-sm venue-pill" data-vid="palani-gathering">Palani</button>
-                  <button class="btn btn-outline btn-sm venue-pill" data-vid="meenakshi-temple">Meenakshi Temple</button>
-                  <button class="btn btn-outline btn-sm venue-pill" data-vid="chennai-stadium">Nehru Stadium</button>
-                  <button class="btn btn-outline btn-sm venue-pill" data-vid="central-transit-hub">Central Transit</button>
+                <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                  <div class="map-view-toggle-bar">
+                    <button type="button" class="map-view-toggle-btn active" data-map-target="googleMapAdminDiv" data-view-mode="satellite">🛰️ Top View</button>
+                    <button type="button" class="map-view-toggle-btn" data-map-target="googleMapAdminDiv" data-view-mode="hybrid">🗺️ Hybrid</button>
+                    <button type="button" class="map-view-toggle-btn" data-map-target="googleMapAdminDiv" data-view-mode="roadmap">📐 Map</button>
+                  </div>
+                  <!-- Quick venue switch buttons -->
+                  <div id="adminVenuePillsContainer" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                    <button class="btn btn-outline btn-sm venue-pill active" data-vid="sona-college">Sona College</button>
+                    <button class="btn btn-outline btn-sm venue-pill" data-vid="chennai-stadium">Nehru Stadium</button>
+                    <button class="btn btn-outline btn-sm venue-pill" data-vid="palani-gathering">Palani</button>
+                    <button class="btn btn-outline btn-sm venue-pill" data-vid="meenakshi-temple">Meenakshi Temple</button>
+                    <button class="btn btn-outline btn-sm venue-pill" data-vid="central-transit-hub">Central Transit</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Organizer Location Search Bar -->
+              <div class="ground-search-container">
+                <div class="ground-search-input-wrap">
+                  <i data-lucide="search" class="ground-search-icon"></i>
+                  <input id="adminGroundSearch" class="ground-search-input" type="text" placeholder="🔍 Organizer Search: Any Stadium, Sports Complex, Festival Ground, Arena..." />
+                  <button id="adminLocateMeBtn" type="button" class="btn btn-outline btn-sm" title="Use current GPS position" style="white-space:nowrap; padding:0.4rem 0.65rem;">
+                    <i data-lucide="crosshair" style="width:13px;height:13px;"></i> My Location
+                  </button>
+                </div>
+                <div class="ground-preset-pills" id="adminPresetPills">
+                  <span style="font-size:0.73rem; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:0.25rem;">
+                    <i data-lucide="sparkles" style="width:12px;height:12px;color:#f59e0b;"></i> Presets:
+                  </span>
+                  <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.6811" data-lng="78.1368" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
+                  <button type="button" class="ground-preset-pill" data-vid="chennai-stadium" data-lat="13.0827" data-lng="80.2707" data-name="Jawaharlal Nehru Stadium (Chennai)">🏟️ Nehru Stadium</button>
+                  <button type="button" class="ground-preset-pill" data-vid="chepauk" data-lat="13.0628" data-lng="80.2795" data-name="M. A. Chidambaram Stadium (Chepauk)">🏟️ Chepauk Stadium</button>
+                  <button type="button" class="ground-preset-pill" data-vid="wankhede" data-lat="18.9389" data-lng="72.8258" data-name="Wankhede Stadium (Mumbai)">🏟️ Wankhede Stadium</button>
+                  <button type="button" class="ground-preset-pill" data-vid="modi-stadium" data-lat="23.0917" data-lng="72.5973" data-name="Narendra Modi Stadium (Ahmedabad)">🏟️ Modi Stadium</button>
+                  <button type="button" class="ground-preset-pill" data-vid="eden-gardens" data-lat="22.5646" data-lng="88.3433" data-name="Eden Gardens (Kolkata)">🏟️ Eden Gardens</button>
+                </div>
+              </div>
+
+              <!-- Interactive Point Marking & Automatic Diagram Generator Toolbar -->
+              <div class="ground-generator-panel" style="display:none;">
+                <div class="generator-header">
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span style="font-size:1.2rem;">📍</span>
+                    <div>
+                      <div style="font-weight:800; font-size:0.92rem; color:var(--text-main);">Automatic Venue Diagram Generator</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted);">Mark points directly on the Google Maps satellite view — the system automatically calculates boundary, crowd pens, barricades, and optimized routes.</div>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-sm btn-outline" id="loadDefaultPointsBtn" title="Prefill recommended ground markers">
+                      📋 Load Preset Points
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline" id="clearMarkedPointsBtn" style="color:#ef4444;" title="Clear all points">
+                      🗑️ Clear Points
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" id="generateLayoutBtn" style="background:#10b981; border-color:#059669; font-weight:800; box-shadow:0 4px 12px rgba(16,185,129,0.3);">
+                      ⚡ Generate Venue Layout
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline" id="saveLayoutToDbBtn" title="Save to MongoDB">
+                      💾 Save Layout
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Point Type Palette -->
+                <div class="point-palette-bar">
+                  <span style="font-size:0.75rem; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Current Marker:</span>
+                  <div class="point-palette-buttons" id="pointPaletteContainer">
+                    <button type="button" class="point-tool-btn active" data-point-type="entry_gate" data-color="#10b981">
+                      🔴 Point A — Entry
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="exit_gate" data-color="#8b5cf6">
+                      🔵 Point B — Exit
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="stage" data-color="#ef4444">
+                      🟣 Point C — Stage
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="emergency_exit" data-color="#06b6d4">
+                      🟢 Point D — Emergency Exit
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="crowd_zone" data-color="#f59e0b">
+                      🟡 Crowd Zone
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="first_aid" data-color="#ec4899">
+                      🏥 First Aid
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="toilet" data-color="#64748b">
+                      🚻 Toilet
+                    </button>
+                    <button type="button" class="point-tool-btn" data-point-type="food_counter" data-color="#d97706">
+                      🍔 Food Counter
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Crowd Requirements Parameters -->
+                <div class="ground-requirements-bar">
+                  <div class="req-input-group">
+                    <label>Expected Crowd Size</label>
+                    <input type="number" id="genExpectedCrowd" value="12000" min="500" max="150000" step="500" />
+                  </div>
+                  <div class="req-input-group">
+                    <label>Safety Profile (NFPA 101)</label>
+                    <select id="genSafetyMode">
+                      <option value="balanced" selected>Balanced Safe Flow (0.70 m²/person)</option>
+                      <option value="safety_priority">Safety Priority (0.85 m²/person - Strict)</option>
+                      <option value="high_throughput">High Throughput (0.55 m²/person)</option>
+                    </select>
+                  </div>
+                  <div class="req-input-group" style="max-width:160px;">
+                    <label>Points On Map</label>
+                    <div id="markedPointsCountBadge" class="points-count-badge">4 Points Marked</div>
+                  </div>
+                </div>
+
+                <!-- Marked Points Chips List -->
+                <div id="markedPointsChipsContainer" class="marked-points-chips">
+                  <!-- Populated dynamically with marked point chips -->
                 </div>
               </div>
               
-              <div class="map-container-wrap" style="height:560px;">
+              <div class="map-container-wrap" style="height:560px; position:relative;">
                 <div id="googleMapAdminDiv" style="width:100%; height:100%;"></div>
+
+                <div class="map-top-view-badge" id="adminTopViewBadge" style="display:none;">
+                  <span class="map-top-view-pulse"></span>
+                  <span id="adminTopViewText">SATELLITE TOP VIEW • GROUND ARRANGEMENT ACTIVE</span>
+                </div>
+
+                <div class="map-badge-legend" style="display:none;">
+                  <div><span style="color:#10b981; font-weight:900;">■</span> Route C (Express Bypass)</div>
+                  <div><span style="color:#f59e0b; font-weight:900;">■</span> Route B (Secondary Arcade)</div>
+                  <div><span style="color:#ef4444; font-weight:900;">■</span> Route A (Chokepoint)</div>
+                  <div><span style="color:#06b6d4; font-weight:900;">■</span> Evacuation Path</div>
+                </div>
+              </div>
+
+              <!-- Generated Layout Metrics & NFPA Compliance Card -->
+              <div id="generatedLayoutMetricsCard" class="card" style="margin-top:1rem; display:none; background:#f8fafc; border:1.5px solid #cbd5e1;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+                  <div style="font-weight:800; font-size:1rem; color:var(--text-main); display:flex; align-items:center; gap:0.4rem;">
+                    <i data-lucide="shield-check" style="color:#10b981;"></i>
+                    <span id="genLayoutTitle">Generated NFPA 101 Ground Diagram Metrics</span>
+                  </div>
+                  <span class="badge badge-safe" id="genDensityBadge">● SAFE DENSITY (0.82 m²/person)</span>
+                </div>
+
+                <div class="grid-4" style="gap:0.75rem;">
+                  <div class="stat-card" style="background:#ffffff;">
+                    <div class="stat-val" id="statUsableArea" style="color:#2563eb;">14,250 m²</div>
+                    <div class="stat-lbl">Usable Event Area</div>
+                  </div>
+                  <div class="stat-card" style="background:#ffffff;">
+                    <div class="stat-val" id="statEvacTime" style="color:#10b981;">8.4 mins</div>
+                    <div class="stat-lbl">Evac Clearance Time (< 15m Compliant)</div>
+                  </div>
+                  <div class="stat-card" style="background:#ffffff;">
+                    <div class="stat-val" id="statBarricades" style="color:#f59e0b;">560 Panels</div>
+                    <div class="stat-lbl">2.5m Steel Barricades (1,400m)</div>
+                  </div>
+                  <div class="stat-card" style="background:#ffffff;">
+                    <div class="stat-val" id="statStaffing" style="color:#8b5cf6;">100 Marshals</div>
+                    <div class="stat-lbl">Safety & Paramedic Crew</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1926,7 +2125,7 @@ void loop() {
           <div style="font-size:1.2rem; font-weight:800; color:var(--accent-cyan); letter-spacing:0.05em; text-transform:uppercase;">
             FlowNavigator Public Directional Display
           </div>
-          <h1 style="font-size:2.8rem; margin:0.25rem 0;" id="kioskVenueTitle">Sona College of Technology</h1>
+          <h1 style="font-size:2.8rem; margin:0.25rem 0;" id="kioskVenueTitle">Palani Gathering Grounds</h1>
         </div>
         <div style="text-align:right;">
           <div style="font-size:2.5rem; font-weight:900; font-family:var(--font-display);" id="kioskClock">19:30</div>
@@ -2146,10 +2345,10 @@ void loop() {
           </div>
         </div>
 
-        <!-- Default credentials hint box -->
+        <!-- Demo credentials hint box -->
         <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:0.75rem; font-size:0.8rem; color:#1d4ed8; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-weight:700;">🔑 Default Credentials:</div>
+            <div style="font-weight:700;">🔑 Demo Credentials:</div>
             <div>Username: <strong>admin</strong> | Password: <strong>admin123</strong></div>
           </div>
           <button type="button" id="autoFillDemoAdminBtn" class="btn btn-outline btn-sm" style="font-size:0.72rem; padding:0.3rem 0.6rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd; white-space:nowrap;">
