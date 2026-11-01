@@ -4,8 +4,8 @@
   "version": "2.0.0",
   "description": "FlowNavigator - AI + IoT Crowd Management & Guidance System",
   "scripts": {
-    "start": "python app.py",
-    "dev": "python app.py",
+    "start": "node api.js && python app.py",
+    "dev": "node api.js && python app.py",
     "dev:ui": "tsx server.ts",
     "dev:vite": "vite",
     "train-ml": "python ml/train_model.py"
