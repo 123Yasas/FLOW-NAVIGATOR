@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🧭 FlowNavigator - Intelligent Crowd Guidance & Safety System
 
 > **Next-Generation AI + IoT Crowd Management & Directional Routing Platform**  
@@ -107,3 +108,7 @@ The project is pre-configured for one-command deployment to Vercel:
 npx vercel
 ```
 Or connect your GitHub repository to Vercel; `vercel.json` and `api/index.py` handle serverless execution automatically!
+=======
+# sona-final-year-mini-it-aids-d-yasaswini-j-581
+StartupFair hackathon: Solo Participant 54 (Final year mini project (IT / AIDS Dept))
+>>>>>>> startupfair/main
