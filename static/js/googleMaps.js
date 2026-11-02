@@ -54,10 +54,10 @@ const GoogleMapsManager = {
   customPathways: {},
   activePaths: {},
   routeMeta: {
-    'C': { name: 'Route C — Express Walkway', gate: 'Gate C (Express)', time: '4-6 mins', desc: 'Recommended Fastest Pathway', color: '#10b981', glowColor: '#34d399' },
-    'B': { name: 'Route B — Secondary Concourse', gate: 'Gate B (Secondary)', time: '12-15 mins', desc: 'Steady Flow Concourse', color: '#f59e0b', glowColor: '#fbbf24' },
-    'A': { name: 'Route A — Main Gate Walkway', gate: 'Gate A (Main Entrance)', time: '25-28 mins', desc: 'Heavy Chokepoint Gate', color: '#ef4444', glowColor: '#f87171' },
-    'EMERGENCY': { name: 'Emergency Evacuation Safety Egress', gate: 'SOS Exit', time: 'Immediate', desc: 'Direct Unobstructed Egress', color: '#06b6d4', glowColor: '#67e8f9' }
+    'C': { name: 'Route C — Express Walkway', gate: 'Gate C Ingress ➔ Exit EX-1', time: '4-6 mins', desc: 'Recommended Fastest Pathway • Direct Ingress to North Egress', color: '#10b981', glowColor: '#34d399' },
+    'B': { name: 'Route B — Secondary Concourse', gate: 'Gate B Ingress ➔ Exit EX-2', time: '12-15 mins', desc: 'Central Arterial Safety Concourse & Mid Egress', color: '#f59e0b', glowColor: '#fbbf24' },
+    'A': { name: 'Route A — Main Walkway', gate: 'Gate A Ingress ➔ Exit EX-4', time: '25-28 mins', desc: 'Main South Entrance & South Egress Portal', color: '#ef4444', glowColor: '#f87171' },
+    'EMERGENCY': { name: 'Emergency Evacuation Safety Egress', gate: 'Central Arena ➔ SOS Exit', time: 'Immediate', desc: 'Direct Unobstructed Evacuation Egress', color: '#06b6d4', glowColor: '#67e8f9' }
   },
 
   // Curated grounds
@@ -1231,6 +1231,14 @@ const GoogleMapsManager = {
       const local = localStorage.getItem('flow_pathways_' + venueId);
       if (local) {
         this.customPathways = JSON.parse(local);
+        // Check if custom pathways lack exit connections (< 5 points on ingress routes)
+        if (this.customPathways && this.customPathways['A'] && this.customPathways['A'].length < 5) {
+          if (window.CadPlanner && typeof window.CadPlanner.getGpsPathways === 'function') {
+            this.customPathways = window.CadPlanner.getGpsPathways();
+          } else {
+            this.customPathways = null;
+          }
+        }
       }
       const localBarricades = localStorage.getItem('flow_barricades_' + venueId);
       if (localBarricades) {
@@ -1253,7 +1261,12 @@ const GoogleMapsManager = {
         if (data && data.success) {
           let updated = false;
           if (data.pathways && Object.keys(data.pathways).length > 0) {
-            this.customPathways = data.pathways;
+            if (data.pathways['A'] && data.pathways['A'].length < 5 && window.CadPlanner && typeof window.CadPlanner.getGpsPathways === 'function') {
+              this.customPathways = window.CadPlanner.getGpsPathways();
+              this.setCustomPathways(this.customPathways, true);
+            } else {
+              this.customPathways = data.pathways;
+            }
             updated = true;
           }
           if (data.barricades && data.barricades.length > 0) {
@@ -1459,7 +1472,12 @@ const GoogleMapsManager = {
     // Destination Landmark (Central Arena & Main Stage)
     const destPt = this.getOffsetLatLng(lat, lng, r * 0.12, 60);
 
-    // Default Route C - Express Ingress (Southwest Gate C)
+    // Default Perimeter Exit Portals (Opposite Ingress Gates)
+    const ptExitC = this.getOffsetLatLng(lat, lng, r * 1.05, 325); // Northwest Exit EX-1
+    const ptExitB = this.getOffsetLatLng(lat, lng, r * 1.02, 285); // West Mid Exit EX-2
+    const ptExitA = this.getOffsetLatLng(lat, lng, r * 1.05, 240); // Southwest Exit EX-4
+
+    // Default Route C - Express Ingress (Gate C) -> Arena Front -> Northwest Exit EX-1
     const ptGateC = this.getOffsetLatLng(lat, lng, r * 1.05, 220);
     const ptC1 = this.getOffsetLatLng(lat, lng, r * 0.70, 195);
     const ptC2 = this.getOffsetLatLng(lat, lng, r * 0.38, 150);
@@ -1467,10 +1485,11 @@ const GoogleMapsManager = {
       [ptGateC.lat, ptGateC.lng],
       [ptC1.lat, ptC1.lng],
       [ptC2.lat, ptC2.lng],
-      [destPt.lat, destPt.lng]
+      [destPt.lat, destPt.lng],
+      [ptExitC.lat, ptExitC.lng]
     ];
 
-    // Default Route B - Secondary Concourse (Northwest Gate B)
+    // Default Route B - Secondary Concourse (Gate B) -> Arena Front -> West Mid Exit EX-2
     const ptGateB = this.getOffsetLatLng(lat, lng, r * 1.02, 305);
     const ptB1 = this.getOffsetLatLng(lat, lng, r * 0.75, 335);
     const ptB2 = this.getOffsetLatLng(lat, lng, r * 0.42, 20);
@@ -1478,19 +1497,21 @@ const GoogleMapsManager = {
       [ptGateB.lat, ptGateB.lng],
       [ptB1.lat, ptB1.lng],
       [ptB2.lat, ptB2.lng],
-      [destPt.lat, destPt.lng]
+      [destPt.lat, destPt.lng],
+      [ptExitB.lat, ptExitB.lng]
     ];
 
-    // Default Route A - Main Gate Walkway (South Gate A)
+    // Default Route A - Main Walkway (Gate A) -> Arena Front -> Southwest Exit EX-4
     const ptGateA = this.getOffsetLatLng(lat, lng, r * 1.0, 175);
     const ptA1 = this.getOffsetLatLng(lat, lng, r * 0.58, 140);
     let pathA = [
       [ptGateA.lat, ptGateA.lng],
       [ptA1.lat, ptA1.lng],
-      [destPt.lat, destPt.lng]
+      [destPt.lat, destPt.lng],
+      [ptExitA.lat, ptExitA.lng]
     ];
 
-    // Default Emergency Evacuation Safety Egress (East SOS Plaza)
+    // Default Emergency Evacuation Safety Egress (Arena -> North SOS Egress EX-1)
     const ptSos1 = this.getOffsetLatLng(lat, lng, r * 0.65, 80);
     const ptSosGate = this.getOffsetLatLng(lat, lng, r * 1.15, 90);
     let pathSos = [
@@ -1499,7 +1520,7 @@ const GoogleMapsManager = {
       [ptSosGate.lat, ptSosGate.lng]
     ];
 
-    // Apply custom pathways if set
+    // Apply custom pathways if set (Ensuring fallback to clean defaults if legacy truncated path found)
     if (this.customPathways) {
       if (this.customPathways['C'] && this.customPathways['C'].length >= 2) pathC = this.customPathways['C'];
       if (this.customPathways['B'] && this.customPathways['B'].length >= 2) pathB = this.customPathways['B'];
@@ -1514,12 +1535,27 @@ const GoogleMapsManager = {
       'EMERGENCY': pathSos
     };
 
-    // Entry point positions (Gate pills follow custom pathway starting points)
+    // Entry point positions (Gate pills follow pathway starting points on East perimeter)
     const posGateC = (pathC && pathC.length > 0) ? pathC[0] : [ptGateC.lat, ptGateC.lng];
     const posGateB = (pathB && pathB.length > 0) ? pathB[0] : [ptGateB.lat, ptGateB.lng];
     const posGateA = (pathA && pathA.length > 0) ? pathA[0] : [ptGateA.lat, ptGateA.lng];
-    const posDest  = (pathC && pathC.length > 0) ? pathC[pathC.length - 1] : [destPt.lat, destPt.lng];
+
+    // Exit point positions (Exit pills follow pathway terminating points on West perimeter)
+    const posExitC = (pathC && pathC.length > 1) ? pathC[pathC.length - 1] : [ptExitC.lat, ptExitC.lng];
+    const posExitB = (pathB && pathB.length > 1) ? pathB[pathB.length - 1] : [ptExitB.lat, ptExitB.lng];
+    const posExitA = (pathA && pathA.length > 1) ? pathA[pathA.length - 1] : [ptExitA.lat, ptExitA.lng];
     const posSos   = (pathSos && pathSos.length > 0) ? pathSos[pathSos.length - 1] : [ptSosGate.lat, ptSosGate.lng];
+
+    // Destination Landmark (Central Arena & Main Stage) anchored at actual stage GPS coordinates
+    let posDest = [destPt.lat, destPt.lng];
+    if (window.CadPlanner && typeof window.CadPlanner.cadToGps === 'function') {
+      try {
+        const stageGps = window.CadPlanner.cadToGps(238, 420);
+        if (stageGps && stageGps.length === 2 && !isNaN(stageGps[0])) {
+          posDest = stageGps;
+        }
+      } catch(e) {}
+    }
 
     const createPillIcon = (label, bg, border) => L.divIcon({
       className: 'custom-pathway-marker',
@@ -1536,7 +1572,7 @@ const GoogleMapsManager = {
       // Route C
       const glowC = L.polyline(pathC, { color: '#34d399', weight: 12, opacity: 0.38, lineCap: 'round', lineJoin: 'round' }).addTo(map);
       const lineC = L.polyline(pathC, { color: '#10b981', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-      lineC.bindPopup(`<b>🟢 Route C — Express Walkway</b><br>4-6 mins • Direct Fast Link`);
+      lineC.bindPopup(`<b>🟢 Route C — Express Walkway</b><br>Gate C Ingress ➔ Arena ➔ Exit EX-1<br>4-6 mins • Direct Fast Link`);
       lineC.on('click', () => this.highlightRoute('C'));
       allPolylines['C'].push(lineC);
       allGlows['C'].push(glowC);
@@ -1544,7 +1580,7 @@ const GoogleMapsManager = {
       // Route B
       const glowB = L.polyline(pathB, { color: '#fbbf24', weight: 10, opacity: 0.28, lineCap: 'round', lineJoin: 'round' }).addTo(map);
       const lineB = L.polyline(pathB, { color: '#f59e0b', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-      lineB.bindPopup(`<b>🟡 Route B — Secondary Concourse</b><br>10-14 mins • Moderate Traffic`);
+      lineB.bindPopup(`<b>🟡 Route B — Secondary Concourse</b><br>Gate B Ingress ➔ Arena ➔ Exit EX-2<br>10-14 mins • Moderate Traffic`);
       lineB.on('click', () => this.highlightRoute('B'));
       allPolylines['B'].push(lineB);
       allGlows['B'].push(glowB);
@@ -1552,7 +1588,7 @@ const GoogleMapsManager = {
       // Route A
       const glowA = L.polyline(pathA, { color: '#f87171', weight: 10, opacity: 0.28, lineCap: 'round', lineJoin: 'round' }).addTo(map);
       const lineA = L.polyline(pathA, { color: '#ef4444', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-      lineA.bindPopup(`<b>🔴 Route A — Main Gate Walkway</b><br>20-28 mins • High Crowd Density`);
+      lineA.bindPopup(`<b>🔴 Route A — Main Walkway</b><br>Gate A Ingress ➔ Arena ➔ Exit EX-4<br>20-28 mins • High Crowd Density`);
       lineA.on('click', () => this.highlightRoute('A'));
       allPolylines['A'].push(lineA);
       allGlows['A'].push(glowA);
@@ -1560,12 +1596,12 @@ const GoogleMapsManager = {
       // Emergency Egress
       const glowSos = L.polyline(pathSos, { color: '#67e8f9', weight: 9, opacity: 0.3, dashArray: '6, 6', lineCap: 'round', lineJoin: 'round' }).addTo(map);
       const lineSos = L.polyline(pathSos, { color: '#06b6d4', weight: 4.5, opacity: 0.95, dashArray: '6, 6', lineCap: 'round', lineJoin: 'round' }).addTo(map);
-      lineSos.bindPopup(`<b>🛡️ Emergency Egress Pathway</b><br>Unobstructed Assembly Evacuation`);
+      lineSos.bindPopup(`<b>🛡️ Emergency Egress Pathway</b><br>Arena ➔ SOS Exit (EX-1)<br>Unobstructed Assembly Evacuation`);
       lineSos.on('click', () => this.highlightRoute('EMERGENCY'));
       allPolylines['EMERGENCY'].push(lineSos);
       allGlows['EMERGENCY'].push(glowSos);
 
-      // Markers placed at active pathway locations (entry points opposite stage)
+      // Ingress Gate Markers
       const mGateC = L.marker(posGateC, { icon: createPillIcon('🟢 Gate C (Express)', '#10b981', '#059669') }).addTo(map).bindPopup('<b>🟢 Gate C Entrance</b><br>Fast Ingress • Direct Route C Link');
       mGateC.on('click', () => this.highlightRoute('C'));
       gateMarkers['C'].push(mGateC);
@@ -1577,6 +1613,16 @@ const GoogleMapsManager = {
       const mGateA = L.marker(posGateA, { icon: createPillIcon('🔴 Gate A (Main Entrance)', '#ef4444', '#dc2626') }).addTo(map).bindPopup('<b>🔴 Gate A Main Entrance</b><br>High Crowd Ingress Point');
       mGateA.on('click', () => this.highlightRoute('A'));
       gateMarkers['A'].push(mGateA);
+
+      // Exit Gate Markers on West Egress Perimeter
+      const mExitC = L.marker(posExitC, { icon: createPillIcon('🚪 Exit EX-1', '#059669', '#047857') }).addTo(map).bindPopup('<b>🚪 Exit Gate 1 (EX-1)</b><br>North Express Egress Portal • Direct Link from Route C');
+      mExitC.on('click', () => this.highlightRoute('C'));
+
+      const mExitB = L.marker(posExitB, { icon: createPillIcon('🚪 Exit EX-2', '#d97706', '#b45309') }).addTo(map).bindPopup('<b>🚪 Exit Gate 2 (EX-2)</b><br>Mid Arterial Egress Portal • Direct Link from Route B');
+      mExitB.on('click', () => this.highlightRoute('B'));
+
+      const mExitA = L.marker(posExitA, { icon: createPillIcon('🚪 Exit EX-4', '#dc2626', '#b91c1c') }).addTo(map).bindPopup('<b>🚪 Exit Gate 4 (EX-4)</b><br>South Relief Egress Portal • Direct Link from Route A');
+      mExitA.on('click', () => this.highlightRoute('A'));
 
       const destName = venue.destinationName || 'Central Arena & Main Stage';
       const mDest = L.marker(posDest, { icon: createPillIcon(`🏟️ ${destName.length > 20 ? destName.slice(0, 20) + '...' : destName}`, '#2563eb', '#1d4ed8') }).addTo(map).bindPopup(`<b>🏟️ ${destName}</b><br>Primary Destination Hub`);
@@ -1599,7 +1645,7 @@ const GoogleMapsManager = {
 
       const mWater = L.marker(ptWater, { icon: createPillIcon('💧 Water Hub', '#0284c7', '#0369a1') }).addTo(map).bindPopup('<b>💧 Hydration Point</b><br>Automated Touchless Bulk Taps');
 
-      allMarkers.push(mGateC, mGateB, mGateA, mDest, mSos, mFirstAid, mWater);
+      allMarkers.push(mGateC, mGateB, mGateA, mDest, mExitC, mExitB, mExitA, mSos, mFirstAid, mWater);
 
       if (this.facilities && this.facilities['food_court'] && this.facilities['food_court'].pos) {
         const mFood = L.marker(this.facilities['food_court'].pos, { icon: createPillIcon('🍔 Food Court', '#d97706', '#b45309') }).addTo(map).bindPopup('<b>🍔 Food Court & Concessions</b>');

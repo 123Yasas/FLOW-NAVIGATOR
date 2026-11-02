@@ -97,10 +97,10 @@ const CadPlanner = {
   },
 
   pathwayMeta: {
-    'C': { name: 'Route C — Express Walkway', color: '#10b981', glow: '#34d399', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate C (Express)', icon: '🟢', bg: '#059669', badgeBg: '#047857' },
-    'B': { name: 'Route B — Secondary Walkway', color: '#f59e0b', glow: '#fbbf24', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate B (Secondary)', icon: '🟡', bg: '#d97706', badgeBg: '#78350f' },
-    'A': { name: 'Route A — Main Entrance', color: '#ef4444', glow: '#f87171', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate A (Main Entrance)', icon: '🔴', bg: '#dc2626', badgeBg: '#7f1d1d' },
-    'EMERGENCY': { name: 'Emergency SOS Egress', color: '#dc2626', glow: '#ef4444', strokeWidth: 6, strokeDash: '8 4', gateLabel: 'SOS Evacuation Corridor', icon: '🚨', bg: '#e11d48', badgeBg: '#881337' }
+    'C': { name: 'Route C — Express Walkway', color: '#10b981', glow: '#34d399', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate C (Express)', exitLabel: 'Exit EX-1 (North Egress)', icon: '🟢', bg: '#059669', badgeBg: '#047857' },
+    'B': { name: 'Route B — Secondary Walkway', color: '#f59e0b', glow: '#fbbf24', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate B (Secondary)', exitLabel: 'Exit EX-2 (Mid Egress)', icon: '🟡', bg: '#d97706', badgeBg: '#78350f' },
+    'A': { name: 'Route A — Main Entrance', color: '#ef4444', glow: '#f87171', strokeWidth: 5.5, strokeDash: '', gateLabel: 'Gate A (Main Entrance)', exitLabel: 'Exit EX-4 (South Egress)', icon: '🔴', bg: '#dc2626', badgeBg: '#7f1d1d' },
+    'EMERGENCY': { name: 'Emergency SOS Egress', color: '#dc2626', glow: '#ef4444', strokeWidth: 6, strokeDash: '8 4', gateLabel: 'SOS Evacuation Corridor', exitLabel: 'SOS Exit (EX-1)', icon: '🚨', bg: '#e11d48', badgeBg: '#881337' }
   },
 
   init: function() {
@@ -124,6 +124,7 @@ const CadPlanner = {
     this.state.cadRotationDeg = savedCadRot;
 
     this.loadCadPathways();
+    this.saveCadPathways(false);
     this.fetchOrComputePlan();
     this.setCadRotation(savedCadRot, false);
     this.setMapRotation(savedMapRot, false);
@@ -3195,6 +3196,16 @@ const CadPlanner = {
     return [lat, lng];
   },
 
+  getGpsPathways: function() {
+    const gpsPathways = {};
+    for (const [key, pts] of Object.entries(this.state.cadPathways || {})) {
+      if (Array.isArray(pts) && pts.length >= 2) {
+        gpsPathways[key] = pts.map(pt => this.cadToGps(pt.x, pt.y));
+      }
+    }
+    return gpsPathways;
+  },
+
   getGpsBoundary: function() {
     const layout = this.state.plan && this.state.plan.layout;
     const boundary = (layout && layout.boundary) || [
@@ -3427,19 +3438,51 @@ const CadPlanner = {
       stageHub
     ];
 
-    // ── EXIT GATES SELECTION FOR SOS EVACUATION ──
+    // ── EXIT GATES SELECTION FOR INGRESS-THROUGH-EGRESS CONTINUATION ──
     // Sort exit gates along Y axis (top to bottom)
     const sortedExits = [...exits].sort((a, b) => a.y - b.y);
-    // Select primary unobstructed exit gate (EXIT EX-1) clear of stage structure
-    const exTopGate = sortedExits.find(e => e.y < (stage.y || 275)) || sortedExits[0] || { x: 52, y: 195, width: 36, height: 45 };
-    const exTop = getCenter(exTopGate, { x: 52, y: 195 });
+    const exTopGate = sortedExits.find(e => e.y < (stage.y || 275)) || sortedExits[0] || { x: 52, y: 130, width: 36, height: 45 };
+    const exTop = getCenter(exTopGate, { x: 52, y: 130 });
 
-    // ── EMERGENCY SOS EGRESS (RED DASHED): Stage Hub -> North Corridor -> EXIT EX-1 Portal -> Perimeter Road ──
-    let pathSos;
+    const exMidGate = sortedExits[1] || sortedExits[Math.floor(sortedExits.length / 2)] || sortedExits[0] || { x: 52, y: 326, width: 36, height: 45 };
+    const exMid = getCenter(exMidGate, { x: 52, y: 326 });
+
+    const exBotGate = sortedExits[sortedExits.length - 1] || { x: 52, y: 720, width: 36, height: 45 };
+    const exBot = getCenter(exBotGate, { x: 52, y: 720 });
+
+    // ── EXIT LEGS (Connecting from Stage Front Audience Hub -> Clear Aisles -> Exit Gates -> Perimeter Road) ──
+    let exitLegC, exitLegB, exitLegA, pathSos;
+
     if (sp === 'west') {
-      const clearNorthY = Math.min(Math.round((stage.y || 265) - 35), Math.round(exTop.y));
-      const crossAisleX = Math.round(stage.x + (stage.width || 105) / 2);
+      const clearNorthY = Math.min(Math.round((stage.y || 275) - 35), Math.round(exTop.y));
+      const clearSouthY = Math.min(745, Math.max(Math.round((stage.y || 275) + (stage.height || 290) + 35), Math.round(exBot.y)));
 
+      // Route C: Stage Front -> North Stage Aisle -> EXIT EX-1 -> 12M Perimeter Road
+      exitLegC = [
+        { x: Math.round(stageHub.x - 20), y: Math.max(140, clearNorthY) },
+        { x: Math.round(exTop.x + 48), y: exTop.y },
+        { x: exTop.x, y: exTop.y },
+        { x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y }
+      ];
+
+      // Route B: Stage Front -> Central Arterial Safety Corridor -> EXIT EX-2 -> 12M Perimeter Road
+      exitLegB = [
+        { x: Math.round(stageHub.x - 25), y: Math.round(exMid.y) },
+        { x: Math.round(exMid.x + 48), y: exMid.y },
+        { x: exMid.x, y: exMid.y },
+        { x: Math.max(28, Math.round(exMid.x - 24)), y: exMid.y }
+      ];
+
+      // Route A: Stage Front -> South Stage Aisle -> EXIT EX-4 -> 12M Perimeter Road
+      exitLegA = [
+        { x: Math.round(stageHub.x - 20), y: clearSouthY },
+        { x: Math.round(exBot.x + 48), y: exBot.y },
+        { x: exBot.x, y: exBot.y },
+        { x: Math.max(28, Math.round(exBot.x - 24)), y: exBot.y }
+      ];
+
+      // SOS Emergency Route: Direct clear evacuation corridor from stage -> EXIT EX-1 -> Safe Assembly Perimeter
+      const crossAisleX = Math.round(stage.x + (stage.width || 105) / 2);
       pathSos = [
         stageHub,
         { x: Math.round(stageHub.x - 15), y: clearNorthY },
@@ -3449,7 +3492,27 @@ const CadPlanner = {
         { x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y }
       ];
     } else if (sp === 'east') {
-      const clearNorthY = Math.min(Math.round((stage.y || 265) - 35), Math.round(exTop.y));
+      const clearNorthY = Math.min(Math.round((stage.y || 275) - 35), Math.round(exTop.y));
+      const clearSouthY = Math.max(Math.round((stage.y || 275) + (stage.height || 290) + 35), Math.round(exBot.y));
+
+      exitLegC = [
+        { x: Math.round(stageHub.x + 20), y: Math.max(140, clearNorthY) },
+        { x: Math.round(exTop.x - 48), y: exTop.y },
+        { x: exTop.x, y: exTop.y },
+        { x: Math.min(1360, Math.round(exTop.x + 24)), y: exTop.y }
+      ];
+      exitLegB = [
+        { x: Math.round(stageHub.x + 25), y: Math.round(exMid.y) },
+        { x: Math.round(exMid.x - 48), y: exMid.y },
+        { x: exMid.x, y: exMid.y },
+        { x: Math.min(1360, Math.round(exMid.x + 24)), y: exMid.y }
+      ];
+      exitLegA = [
+        { x: Math.round(stageHub.x + 20), y: Math.min(745, clearSouthY) },
+        { x: Math.round(exBot.x - 48), y: exBot.y },
+        { x: exBot.x, y: exBot.y },
+        { x: Math.min(1360, Math.round(exBot.x + 24)), y: exBot.y }
+      ];
       pathSos = [
         stageHub,
         { x: Math.round(stageHub.x + 15), y: clearNorthY },
@@ -3459,6 +3522,21 @@ const CadPlanner = {
         { x: Math.min(1360, Math.round(exTop.x + 24)), y: exTop.y }
       ];
     } else {
+      exitLegC = [
+        { x: Math.round((stageHub.x + exTop.x) / 2), y: Math.round((stageHub.y + exTop.y) / 2) },
+        { x: exTop.x, y: exTop.y },
+        { x: exTop.x, y: Math.max(30, exTop.y - 25) }
+      ];
+      exitLegB = [
+        { x: Math.round((stageHub.x + exMid.x) / 2), y: Math.round((stageHub.y + exMid.y) / 2) },
+        { x: exMid.x, y: exMid.y },
+        { x: exMid.x, y: Math.max(30, exMid.y - 25) }
+      ];
+      exitLegA = [
+        { x: Math.round((stageHub.x + exBot.x) / 2), y: Math.round((stageHub.y + exBot.y) / 2) },
+        { x: exBot.x, y: exBot.y },
+        { x: exBot.x, y: Math.min(820, exBot.y + 25) }
+      ];
       pathSos = [
         stageHub,
         { x: Math.round((stageHub.x + exTop.x) / 2), y: Math.round((stageHub.y + exTop.y) / 2) },
@@ -3467,10 +3545,11 @@ const CadPlanner = {
       ];
     }
 
+    // Connect pathways through from Stage Hub out to designated Exit Gates
     return {
-      'C': pathC,
-      'B': pathB,
-      'A': pathA,
+      'C': pathC.concat(exitLegC),
+      'B': pathB.concat(exitLegB),
+      'A': pathA.concat(exitLegA),
       'EMERGENCY': pathSos
     };
   },
@@ -3500,9 +3579,9 @@ const CadPlanner = {
         }
         const start = pts[0];
         const end = pts[pts.length - 1];
-        // Ingress start points must originate on East (x > 850), terminating near stage (x < 650)
-        // Discard any legacy converted satellite points (which had start.x < 800 or y < 90)
-        if (start.x < 850 || end.x > 650 || start.y < 90 || end.y > 650) {
+        // Ingress start points must originate on East (x > 850), terminating at Exit Gates (x <= 80 for west stage)
+        // Discard any legacy points that terminated at stageHub (x > 80) or converted satellite points
+        if (start.x < 850 || end.x > 80 || start.y < 90 || end.y > 780) {
           isCadValid = false; break;
         }
       }
@@ -3533,12 +3612,7 @@ const CadPlanner = {
     } catch(e) {}
 
     // Convert to GPS for Visitor Map & Routing synchronization
-    const gpsPathways = {};
-    for (const [key, pts] of Object.entries(this.state.cadPathways)) {
-      if (Array.isArray(pts) && pts.length >= 2) {
-        gpsPathways[key] = pts.map(pt => this.cadToGps(pt.x, pt.y));
-      }
-    }
+    const gpsPathways = this.getGpsPathways();
 
     // Extract GPS barricades based on CAD layout setting
     const gpsBarricades = this.getGpsBarricades();
@@ -3662,14 +3736,14 @@ const CadPlanner = {
         if (!curSos || curSos.length < 4 || (curSos[curSos.length - 1] && curSos[curSos.length - 1].x > 80) || k === key) {
           this.state.cadPathways['EMERGENCY'] = JSON.parse(JSON.stringify(pts));
         }
-      } else if (!this.state.cadPathways[k] || this.state.cadPathways[k].length < 2 || this.state.cadPathways[k][0].x < 850 || k === key) {
+      } else if (!this.state.cadPathways[k] || this.state.cadPathways[k].length < 2 || this.state.cadPathways[k][0].x < 850 || (this.state.cadPathways[k][this.state.cadPathways[k].length - 1] && this.state.cadPathways[k][this.state.cadPathways[k].length - 1].x > 80) || k === key) {
         this.state.cadPathways[k] = JSON.parse(JSON.stringify(pts));
       }
     }
     this.updatePathwayBadgeCounts();
     this.renderCanvas();
     this.saveCadPathways(true);
-    this.showToast(`✨ Generated route cleanly from ${this.pathwayMeta[key].gateLabel} through barricades to Stage!`, 'success');
+    this.showToast(`✨ Generated route cleanly from ${this.pathwayMeta[key].gateLabel} through Barricades & Stage to Exit Portal!`, 'success');
   },
 
   autoRouteAllRoutes: function() {
@@ -3729,32 +3803,38 @@ const CadPlanner = {
         </g>
       `;
 
-      // End Landmark Badges
+      // End Landmark Badges (Exit Gate Portals on West Perimeter)
       const endPt = pts[pts.length - 1];
-      if (isSos) {
-        // SOS Exit Gate Landmark Badge placed cleanly at the exit portal
-        const badgeEndX = Math.round(endPt.x + 75);
-        const badgeEndY = Math.round(endPt.y);
-        html += `
-          <g class="cf-rotatable-text" data-cx="${badgeEndX}" data-cy="${badgeEndY}" transform="rotate(${rot}, ${badgeEndX}, ${badgeEndY})">
-            <rect x="${badgeEndX - 65}" y="${badgeEndY - 11}" width="130" height="22" rx="11" fill="#b91c1c" stroke="#ffffff" stroke-width="2" filter="url(#cfShadowCard)" />
-            <text x="${badgeEndX}" y="${badgeEndY + 4}" text-anchor="middle" font-size="9" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
-              🚨 SOS Exit (EX-1)
-            </text>
-          </g>
-        `;
-      } else if (routeKey === 'C') {
-        // Draw Main Stage Destination Hub badge once (for Route C / Main Stage)
-        html += `
-          <g class="cf-rotatable-text" data-cx="${endPt.x}" data-cy="${endPt.y + 26}" transform="rotate(${rot}, ${endPt.x}, ${endPt.y + 26})">
-            <rect x="${endPt.x - 85}" y="${endPt.y + 15}" width="170" height="22" rx="11" fill="#1e3a8a" stroke="#60a5fa" stroke-width="2" filter="url(#cfShadowCard)" />
-            <text x="${endPt.x}" y="${endPt.y + 30}" text-anchor="middle" font-size="9.5" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
-              🏟️ Main Stage / Destination Hub
-            </text>
-          </g>
-        `;
-      }
+      const badgeEndX = Math.round(endPt.x + 75);
+      const badgeEndY = Math.round(endPt.y);
+      const exitTitle = isSos ? '🚨 SOS Exit (EX-1)' : (meta.exitLabel ? meta.exitLabel.split('(')[0].trim() : (routeKey === 'C' ? '🚪 Exit EX-1' : routeKey === 'B' ? '🚪 Exit EX-2' : '🚪 Exit EX-4'));
+      const badgeFill = isSos ? '#b91c1c' : meta.badgeBg;
+
+      html += `
+        <g class="cf-rotatable-text" data-cx="${badgeEndX}" data-cy="${badgeEndY}" transform="rotate(${rot}, ${badgeEndX}, ${badgeEndY})">
+          <rect x="${badgeEndX - 65}" y="${badgeEndY - 11}" width="130" height="22" rx="11" fill="${badgeFill}" stroke="#ffffff" stroke-width="2" filter="url(#cfShadowCard)" />
+          <text x="${badgeEndX}" y="${badgeEndY + 4}" text-anchor="middle" font-size="9" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
+            ${exitTitle}
+          </text>
+        </g>
+      `;
     });
+
+    // Central Landmark Badge: Main Stage & Primary Audience Hub (Anchored in front of stage)
+    const stage = (this.state.plan && this.state.plan.layout && this.state.plan.layout.stage) || { x: 98, y: 275, width: 105, height: 290 };
+    const sp = (this.state.stage_position || 'west').toLowerCase();
+    const stageHubX = sp === 'east' ? Math.round(stage.x - 35) : Math.round(stage.x + (stage.width || 105) + 35);
+    const stageHubY = Math.round(stage.y + (stage.height || 290) / 2);
+    const rot = this.getTextRotationAngle();
+
+    html += `
+      <g class="cf-rotatable-text" data-cx="${stageHubX}" data-cy="${stageHubY + 28}" transform="rotate(${rot}, ${stageHubX}, ${stageHubY + 28})">
+        <rect x="${stageHubX - 88}" y="${stageHubY + 17}" width="176" height="22" rx="11" fill="#1e3a8a" stroke="#60a5fa" stroke-width="2" filter="url(#cfShadowCard)" />
+        <text x="${stageHubX}" y="${stageHubY + 32}" text-anchor="middle" font-size="9.5" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
+          🏟️ Main Stage / Destination Hub
+        </text>
+      </g>
+    `;
 
     // Interactive Draggable Waypoint Handles (when in Pathway Edit Mode)
     if (this.state.mapInteractionMode === 'pathway') {
