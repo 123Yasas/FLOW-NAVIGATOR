@@ -12,12 +12,16 @@ const FlowApp = {
   emergencyActive: false,
   dataMode: 'real', // 'demo' or 'real'
   isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
+  adminUser: (function() {
+    try { return JSON.parse(sessionStorage.getItem('fn_admin_user') || 'null'); } catch(e) { return null; }
+  })(),
   pollTimer: null,
   cachedAnalyticsData: [],
 
   init: function() {
     this.bindRoleNavigation();
     this.bindAdminAuth();
+    this.verifyAdminSession();
     this.bindAdminSidebar();
     this.bindDataModeToggle();
     this.bindEsp32HardwareManager();
@@ -112,12 +116,62 @@ const FlowApp = {
     }
   },
 
+  getAuthHeaders: function() {
+    const token = sessionStorage.getItem('fn_admin_token') || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = 'Bearer ' + token;
+    }
+    return headers;
+  },
+
+  verifyAdminSession: async function() {
+    const token = sessionStorage.getItem('fn_admin_token');
+    if (!token) {
+      this.isAdminLoggedIn = false;
+      this.adminUser = null;
+      this.updateAdminNavBadge();
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/admin/verify', {
+        headers: this.getAuthHeaders()
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success && data.user) {
+        this.isAdminLoggedIn = true;
+        this.adminUser = data.user;
+        sessionStorage.setItem('fn_admin_user', JSON.stringify(data.user));
+        this.updateAdminNavBadge();
+      } else {
+        // Token expired or invalid
+        sessionStorage.removeItem('fn_admin_token');
+        sessionStorage.removeItem('fn_admin_user');
+        this.isAdminLoggedIn = false;
+        this.adminUser = null;
+        this.updateAdminNavBadge();
+        if (this.currentRole === 'admin') {
+          this.switchRole('landing');
+          this.openAdminLoginModal();
+          const err = document.getElementById('adminLoginError');
+          if (err) {
+            err.textContent = 'Your session has expired. Please log in again.';
+            err.style.display = 'block';
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[AdminSession] Verify offline/check:', e);
+    }
+  },
+
   bindAdminAuth: function() {
     const modal = document.getElementById('adminLoginModal');
     const closeBtn = document.getElementById('closeAdminLoginModalBtn');
     const cancelBtn = document.getElementById('cancelAdminLoginBtn');
     const form = document.getElementById('adminLoginForm');
-    const autoFillBtn = document.getElementById('autoFillDemoAdminBtn');
 
     if (closeBtn) closeBtn.addEventListener('click', () => this.closeAdminLoginModal());
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeAdminLoginModal());
@@ -128,12 +182,31 @@ const FlowApp = {
       });
     }
 
-    if (autoFillBtn) {
-      autoFillBtn.addEventListener('click', () => {
+    // Role Quick-Fill Buttons
+    document.querySelectorAll('.auth-quick-role-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
         const u = document.getElementById('adminUsernameInput');
         const p = document.getElementById('adminPasswordInput');
-        if (u) u.value = 'admin';
-        if (p) p.value = 'admin123';
+        if (u) u.value = btn.dataset.user || 'admin';
+        if (p) p.value = btn.dataset.pw || 'admin123';
+        const err = document.getElementById('adminLoginError');
+        if (err) err.style.display = 'none';
+      });
+    });
+
+    // Password Show/Hide Toggle
+    const togglePwBtn = document.getElementById('toggleAdminPasswordBtn');
+    if (togglePwBtn) {
+      togglePwBtn.addEventListener('click', () => {
+        const pwInput = document.getElementById('adminPasswordInput');
+        const icon = document.getElementById('toggleAdminPasswordIcon');
+        if (!pwInput) return;
+        const isPassword = pwInput.type === 'password';
+        pwInput.type = isPassword ? 'text' : 'password';
+        if (icon) {
+          icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+          if (window.lucide) lucide.createIcons();
+        }
       });
     }
 
@@ -152,6 +225,28 @@ const FlowApp = {
     if (navSignOut) navSignOut.addEventListener('click', () => this.adminLogout());
     if (sidebarSignOut) sidebarSignOut.addEventListener('click', () => this.adminLogout());
     if (tabSignOut) tabSignOut.addEventListener('click', () => this.adminLogout());
+
+    // Bind Change Password Modal
+    const changePwBtn = document.getElementById('adminSidebarChangePasswordBtn');
+    const changePwModal = document.getElementById('changePasswordModal');
+    const closeChangePwBtn = document.getElementById('closeChangePasswordModalBtn');
+    const cancelChangePwBtn = document.getElementById('cancelChangePasswordBtn');
+    const changePwForm = document.getElementById('changePasswordForm');
+
+    if (changePwBtn) changePwBtn.addEventListener('click', () => this.openChangePasswordModal());
+    if (closeChangePwBtn) closeChangePwBtn.addEventListener('click', () => this.closeChangePasswordModal());
+    if (cancelChangePwBtn) cancelChangePwBtn.addEventListener('click', () => this.closeChangePasswordModal());
+    if (changePwModal) {
+      changePwModal.addEventListener('click', (e) => {
+        if (e.target === changePwModal) this.closeChangePasswordModal();
+      });
+    }
+    if (changePwForm) {
+      changePwForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.submitChangePassword();
+      });
+    }
 
     this.bindUserManagement();
     this.updateAdminNavBadge();
@@ -174,6 +269,103 @@ const FlowApp = {
     if (modal) modal.classList.remove('active');
   },
 
+  openChangePasswordModal: function() {
+    const modal = document.getElementById('changePasswordModal');
+    const fb = document.getElementById('changePasswordFeedback');
+    if (fb) fb.style.display = 'none';
+    const cur = document.getElementById('currentPasswordInput');
+    const np = document.getElementById('newPasswordInput');
+    const cnp = document.getElementById('confirmNewPasswordInput');
+    if (cur) cur.value = '';
+    if (np) np.value = '';
+    if (cnp) cnp.value = '';
+    if (modal) {
+      modal.classList.add('active');
+      if (cur) cur.focus();
+      if (window.lucide) lucide.createIcons();
+    }
+  },
+
+  closeChangePasswordModal: function() {
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  submitChangePassword: async function() {
+    const cur = document.getElementById('currentPasswordInput')?.value.trim();
+    const np = document.getElementById('newPasswordInput')?.value.trim();
+    const cnp = document.getElementById('confirmNewPasswordInput')?.value.trim();
+    const fb = document.getElementById('changePasswordFeedback');
+    const btn = document.getElementById('submitChangePasswordBtn');
+
+    if (!cur || !np || !cnp) {
+      if (fb) {
+        fb.textContent = 'Please fill in all password fields';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    if (np.length < 6) {
+      if (fb) {
+        fb.textContent = 'New password must be at least 6 characters long';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    if (np !== cnp) {
+      if (fb) {
+        fb.textContent = 'New passwords do not match';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      if (btn) btn.disabled = true;
+
+      const resp = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ current_password: cur, new_password: np })
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        if (fb) {
+          fb.textContent = '✅ ' + data.message;
+          fb.style.background = '#ecfdf5';
+          fb.style.color = '#047857';
+          fb.style.display = 'block';
+        }
+        setTimeout(() => this.closeChangePasswordModal(), 1500);
+      } else {
+        if (fb) {
+          fb.textContent = data.message || 'Error updating password';
+          fb.style.background = '#fef2f2';
+          fb.style.color = '#b91c1c';
+          fb.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      if (fb) {
+        fb.textContent = 'Network error while updating password';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
   performAdminLogin: async function() {
     const u = document.getElementById('adminUsernameInput')?.value.trim();
     const p = document.getElementById('adminPasswordInput')?.value.trim();
@@ -189,7 +381,11 @@ const FlowApp = {
     }
 
     try {
-      if (submitBtn) submitBtn.disabled = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Authenticating...';
+        if (window.lucide) lucide.createIcons();
+      }
 
       const resp = await fetch('/api/admin/login', {
         method: 'POST',
@@ -199,38 +395,48 @@ const FlowApp = {
 
       const data = await resp.json();
 
-      if (resp.ok && data.success) {
+      if (resp.ok && data.success && data.token) {
         this.isAdminLoggedIn = true;
+        this.adminUser = data.user;
         sessionStorage.setItem('fn_admin_token', data.token);
+        sessionStorage.setItem('fn_admin_user', JSON.stringify(data.user));
         this.closeAdminLoginModal();
         this.updateAdminNavBadge();
         this.switchRole('admin');
+        this.showToast(`🛡️ ${data.message}`, 'success');
       } else {
         if (err) {
-          err.textContent = data.message || 'Invalid username or password (use admin / admin123)';
+          err.textContent = data.message || 'Invalid username or password';
           err.style.display = 'block';
         }
       }
     } catch (e) {
       console.error('[AdminLogin] Error:', e);
-      if (u === 'admin' && p === 'admin123') {
-        this.isAdminLoggedIn = true;
-        sessionStorage.setItem('fn_admin_token', 'fn_admin_session_token_authenticated');
-        this.closeAdminLoginModal();
-        this.updateAdminNavBadge();
-        this.switchRole('admin');
-      } else if (err) {
-        err.textContent = 'Login failed. Please verify credentials (admin / admin123)';
+      if (err) {
+        err.textContent = 'Connection error. Unable to reach authentication server.';
         err.style.display = 'block';
       }
     } finally {
-      if (submitBtn) submitBtn.disabled = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i data-lucide="log-in" style="width:14px;height:14px;"></i> Login to Admin Center';
+        if (window.lucide) lucide.createIcons();
+      }
     }
   },
 
-  adminLogout: function() {
+  adminLogout: async function() {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
+    } catch (e) {}
+
     this.isAdminLoggedIn = false;
+    this.adminUser = null;
     sessionStorage.removeItem('fn_admin_token');
+    sessionStorage.removeItem('fn_admin_user');
     this.updateAdminNavBadge();
     this.switchRole('landing');
 
@@ -247,11 +453,11 @@ const FlowApp = {
     const adminBtn = document.getElementById('roleAdminBtn');
     const navSignOut = document.getElementById('navSignOutBtn');
 
-    if (this.isAdminLoggedIn) {
+    if (this.isAdminLoggedIn && this.adminUser) {
       if (adminBtn) {
         adminBtn.innerHTML = `
           <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
-          <span>Admin (Active)</span>
+          <span>Admin (${this.adminUser.name ? this.adminUser.name.split(' ')[0] : 'Active'})</span>
         `;
       }
       if (navSignOut) navSignOut.style.display = 'inline-flex';
@@ -502,6 +708,14 @@ const FlowApp = {
 
     if (tab === 'venue-management-tab' && window.VenueCrudManager) {
       window.VenueCrudManager.loadVenues();
+    }
+
+    if (tab === 'digital-twin') {
+      if (this.cachedZones && this.cachedZones.length) {
+        this.updateAdminView(this.cachedZones, [], {});
+      } else {
+        this.refreshData();
+      }
     }
   },
 
@@ -817,12 +1031,42 @@ const FlowApp = {
   bindUserManagement: function() {
     const refreshBtn = document.getElementById('refreshUsersBtn');
     const form = document.getElementById('addUserForm');
+    const genPwBtn = document.getElementById('generateUserPasswordBtn');
+    const togglePwBtn = document.getElementById('toggleNewUserPasswordBtn');
 
     if (refreshBtn) refreshBtn.addEventListener('click', () => this.fetchUsers());
     if (form) {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         this.createUser();
+      });
+    }
+
+    if (genPwBtn) {
+      genPwBtn.addEventListener('click', () => {
+        const charset = 'abcdefghijkmnpqrstuvwxyz23456789!@#$%';
+        let pw = '';
+        for (let i = 0; i < 10; i++) pw += charset.charAt(Math.floor(Math.random() * charset.length));
+        const inp = document.getElementById('newUserPassword');
+        if (inp) {
+          inp.value = pw;
+          inp.type = 'text';
+          const icon = document.getElementById('toggleNewUserPasswordIcon');
+          if (icon) icon.setAttribute('data-lucide', 'eye-off');
+          if (window.lucide) lucide.createIcons();
+        }
+      });
+    }
+
+    if (togglePwBtn) {
+      togglePwBtn.addEventListener('click', () => {
+        const inp = document.getElementById('newUserPassword');
+        const icon = document.getElementById('toggleNewUserPasswordIcon');
+        if (!inp) return;
+        const isPw = inp.type === 'password';
+        inp.type = isPw ? 'text' : 'password';
+        if (icon) icon.setAttribute('data-lucide', isPw ? 'eye-off' : 'eye');
+        if (window.lucide) lucide.createIcons();
       });
     }
   },
@@ -833,10 +1077,17 @@ const FlowApp = {
     if (!tbody) return;
 
     try {
-      const resp = await fetch('/api/admin/users');
+      const resp = await fetch('/api/admin/users', {
+        headers: this.getAuthHeaders()
+      });
       const data = await resp.json();
-      const users = data.users || [];
 
+      if (resp.status === 401) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:#b91c1c; font-weight:700;">🔒 Session expired. Please log in to view system users.</td></tr>';
+        return;
+      }
+
+      const users = data.users || [];
       if (totalCountEl) totalCountEl.textContent = `${users.length} Users`;
 
       tbody.innerHTML = users.map(u => `
@@ -852,7 +1103,7 @@ const FlowApp = {
           </td>
           <td style="font-size:0.8rem; color:var(--text-muted); font-weight:600;">${u.venue_scope}</td>
           <td>
-            <span class="badge ${u.status === 'Active Session' ? 'badge-safe' : 'badge-safe'}" style="font-size:0.72rem;">
+            <span class="badge ${u.status === 'Active' ? 'badge-safe' : 'badge-moderate'}" style="font-size:0.72rem;">
               ● ${u.status}
             </span>
           </td>
@@ -875,6 +1126,7 @@ const FlowApp = {
   createUser: async function() {
     const nameInput = document.getElementById('newUserName');
     const usernameInput = document.getElementById('newUserUsername');
+    const passwordInput = document.getElementById('newUserPassword');
     const emailInput = document.getElementById('newUserEmail');
     const roleInput = document.getElementById('newUserRole');
     const venueInput = document.getElementById('newUserVenueScope');
@@ -883,13 +1135,24 @@ const FlowApp = {
 
     const name = nameInput?.value.trim();
     const username = usernameInput?.value.trim();
+    const password = passwordInput?.value.trim();
     const email = emailInput?.value.trim();
     const role = roleInput?.value;
     const venue = venueInput?.value;
 
-    if (!name || !username) {
+    if (!name || !username || !password) {
       if (feedback) {
-        feedback.textContent = 'Please fill in Name and Username';
+        feedback.textContent = 'Please fill in Name, Username, and Initial Password';
+        feedback.style.background = '#fef2f2';
+        feedback.style.color = '#b91c1c';
+        feedback.style.display = 'block';
+      }
+      return;
+    }
+
+    if (password.length < 6) {
+      if (feedback) {
+        feedback.textContent = 'Password must be at least 6 characters long';
         feedback.style.background = '#fef2f2';
         feedback.style.color = '#b91c1c';
         feedback.style.display = 'block';
@@ -902,24 +1165,25 @@ const FlowApp = {
 
       const resp = await fetch('/api/admin/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, username, email, role, venue_scope: venue })
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ name, username, password, email, role, venue_scope: venue })
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.success) {
         if (feedback) {
-          feedback.textContent = `✅ User @${username} created successfully`;
+          feedback.textContent = `✅ User @${username} created with secure hashed credentials`;
           feedback.style.background = '#ecfdf5';
           feedback.style.color = '#047857';
           feedback.style.display = 'block';
         }
         if (nameInput) nameInput.value = '';
         if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
         if (emailInput) emailInput.value = '';
         this.fetchUsers();
-        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3000);
+        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3500);
       } else {
         if (feedback) {
           feedback.textContent = data.message || 'Error creating user account';
@@ -929,9 +1193,30 @@ const FlowApp = {
         }
       }
     } catch (e) {
-      console.error('[UserManagement] Create error:', e);
+      console.error('[UserManagement] Create user error:', e);
     } finally {
       if (btn) btn.disabled = false;
+    }
+  },
+
+  deleteUser: async function(username) {
+    if (!confirm(`Are you sure you want to permanently revoke access for @${username}?`)) return;
+
+    try {
+      const resp = await fetch(`/api/admin/users/${username}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders()
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        this.showToast(`User @${username} access revoked`, 'info');
+        this.fetchUsers();
+      } else {
+        alert(data.message || 'Error deleting user');
+      }
+    } catch (e) {
+      console.error('[UserManagement] Delete user error:', e);
     }
   },
 
@@ -1429,10 +1714,10 @@ const FlowApp = {
         this.updateEmergencyUI(this.emergencyActive);
       }
 
-      this.updateCitizenView(zonesData.zones || [], routesData.routes || [], healthData.system || {});
-      this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData);
-      this.updateKioskView(zonesData.zones || [], routesData.routes || []);
-      this.updateAlerts(alertsData.alerts || []);
+      try { this.updateCitizenView(zonesData.zones || [], routesData.routes || [], healthData.system || {}); } catch(err) { console.error('[FlowApp] Citizen view update error:', err); }
+      try { this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData); } catch(err) { console.error('[FlowApp] Admin view update error:', err); }
+      try { this.updateKioskView(zonesData.zones || [], routesData.routes || []); } catch(err) { console.error('[FlowApp] Kiosk view update error:', err); }
+      try { this.updateAlerts(alertsData.alerts || []); } catch(err) { console.error('[FlowApp] Alerts update error:', err); }
     } catch (e) {
       console.warn('[FlowApp] Polling error:', e);
     }
@@ -1748,41 +2033,51 @@ const FlowApp = {
 
     // Render human-friendly zone occupancy cards
     const grid = document.getElementById('adminZoneGrid');
-    if (grid && zones.length) {
-      grid.innerHTML = zones.map(z => {
-        const occ = Math.round(((z.current_count || 0) / (z.capacity || 800)) * 100);
-        const status = z.status || 'SAFE';
-        const net = (z.entry_rate || 35) - (z.exit_rate || 30);
-        const statusLabel = status === 'CRITICAL' ? 'CRITICAL CHOKEPOINT' : status === 'HIGH' ? 'HEAVY CONGESTION' : status === 'MODERATE' ? 'MODERATE QUEUE' : 'FREE FLOWING';
+    if (grid) {
+      if (zones && zones.length) {
+        grid.innerHTML = zones.map(z => {
+          const occ = Math.round(((z.current_count || 0) / (z.capacity || 800)) * 100);
+          const status = z.status || 'SAFE';
+          const net = (z.entry_rate || 35) - (z.exit_rate || 30);
+          const statusLabel = status === 'CRITICAL' ? 'CRITICAL CHOKEPOINT' : status === 'HIGH' ? 'HEAVY CONGESTION' : status === 'MODERATE' ? 'MODERATE QUEUE' : 'FREE FLOWING';
 
-        return `
-          <div class="zone-card ${status}">
-            <div class="zone-header">
-              <span class="zone-code">${z.code}</span>
-              <span class="badge badge-${status.toLowerCase()}">${statusLabel}</span>
-            </div>
-            <div class="zone-name">${z.name}</div>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">
-              ${z.description}
-            </div>
+          return `
+            <div class="zone-card ${status}">
+              <div class="zone-header">
+                <span class="zone-code">${z.code || 'ZONE'}</span>
+                <span class="badge badge-${(status || 'safe').toLowerCase()}">${statusLabel}</span>
+              </div>
+              <div class="zone-name">${z.name || 'Monitoring Sector'}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                ${z.description || 'Live hardware telemetry sector'}
+              </div>
 
-            <div class="zone-progress-bg">
-              <div class="zone-progress-fill" style="width:${Math.min(100, occ)}%; background:${status === 'CRITICAL' ? 'var(--color-critical)' : status === 'HIGH' ? 'var(--color-high)' : status === 'MODERATE' ? 'var(--color-moderate)' : 'var(--color-safe)'};"></div>
-            </div>
+              <div class="zone-progress-bg">
+                <div class="zone-progress-fill" style="width:${Math.min(100, occ)}%; background:${status === 'CRITICAL' ? 'var(--color-critical)' : status === 'HIGH' ? 'var(--color-high)' : status === 'MODERATE' ? 'var(--color-moderate)' : 'var(--color-safe)'};"></div>
+              </div>
 
-            <div class="zone-stats-row">
-              <span>Present: <strong>${z.current_count} / ${z.capacity} (${occ}%)</strong></span>
-              <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : 'var(--text-main)'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
-            </div>
+              <div class="zone-stats-row">
+                <span>Present: <strong>${z.current_count || 0} / ${z.capacity || 800} (${occ}%)</strong></span>
+                <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : 'var(--text-main)'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
+              </div>
 
-            <div style="display:flex; justify-content:space-between; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-muted);">
-              <span>Entering: <strong>+${z.entry_rate || 35}/min</strong></span>
-              <span>Exiting: <strong>-${z.exit_rate || 30}/min</strong></span>
-              <span>Wait: <strong style="color:var(--text-main);">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
+              <div style="display:flex; justify-content:space-between; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-muted);">
+                <span>Entering: <strong>+${z.entry_rate || 0}/min</strong></span>
+                <span>Exiting: <strong>-${z.exit_rate || 0}/min</strong></span>
+                <span>Wait: <strong style="color:var(--text-main);">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
+              </div>
             </div>
+          `;
+        }).join('');
+      } else {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1.5rem; background: var(--bg-card); border: 1.5px dashed var(--border-subtle); border-radius: var(--radius-lg);">
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">No Zones Configured for this Venue</div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Live occupancy telemetry zones have not been linked to this ground yet.</p>
+            <button class="btn btn-primary btn-sm" onclick="FlowApp.refreshData()">🔄 Refresh Counts</button>
           </div>
         `;
-      }).join('');
+      }
     }
 
     // Render Dynamic Hourly Venue Footfall & Movement Velocity Chart

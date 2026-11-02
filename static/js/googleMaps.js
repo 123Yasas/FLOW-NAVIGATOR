@@ -37,8 +37,15 @@ const GoogleMapsManager = {
   visitorPathways: {
     polylines: {},
     glows: {},
-    markers: []
+    markers: [],
+    gateMarkers: {},
+    barricades: []
   },
+  barricades: [],
+  facilities: {},
+  boundary: [],
+  mapRotationDeg: 0,
+  isMapOriented: { googleMapDiv: false, googleMapAdminDiv: false },
   activeVisitorRoute: 'ALL',
   isPathwayEditing: false,
   editingRouteKey: 'C',
@@ -63,6 +70,7 @@ const GoogleMapsManager = {
       lng: 78.123532,
       zoom: 18,
       groundRadius: 105,
+      mapRotationDeg: 270,
       capacity: 10,
       venue_b_limit: 8,
       destinationName: 'Central Auditorium & Main Arena'
@@ -914,6 +922,21 @@ const GoogleMapsManager = {
       });
     }
 
+    // Visitor Map & Admin Map CAD Layout Orientation Toggles
+    const visitorOrientBtn = document.getElementById('visitorMapOrientBtn');
+    if (visitorOrientBtn) {
+      visitorOrientBtn.addEventListener('click', () => {
+        this.toggleMapOrientation('googleMapDiv');
+      });
+    }
+
+    const adminOrientBtn = document.getElementById('adminMapOrientBtn');
+    if (adminOrientBtn) {
+      adminOrientBtn.addEventListener('click', () => {
+        this.toggleMapOrientation('googleMapAdminDiv');
+      });
+    }
+
     // Locate Me GPS
     const setupLocate = (btnId) => {
       const btn = document.getElementById(btnId);
@@ -1194,9 +1217,13 @@ const GoogleMapsManager = {
     if (!venueId) venueId = this.currentVenueId || 'sona-college';
     
     // 1. In-memory venue config
-    if (this.venueConfigs[venueId] && this.venueConfigs[venueId].customPathways) {
-      this.customPathways = JSON.parse(JSON.stringify(this.venueConfigs[venueId].customPathways));
-      return;
+    if (this.venueConfigs[venueId]) {
+      if (this.venueConfigs[venueId].customPathways) {
+        this.customPathways = JSON.parse(JSON.stringify(this.venueConfigs[venueId].customPathways));
+      }
+      if (this.venueConfigs[venueId].barricades) {
+        this.barricades = JSON.parse(JSON.stringify(this.venueConfigs[venueId].barricades));
+      }
     }
 
     // 2. LocalStorage persistence
@@ -1204,7 +1231,18 @@ const GoogleMapsManager = {
       const local = localStorage.getItem('flow_pathways_' + venueId);
       if (local) {
         this.customPathways = JSON.parse(local);
-        return;
+      }
+      const localBarricades = localStorage.getItem('flow_barricades_' + venueId);
+      if (localBarricades) {
+        this.barricades = JSON.parse(localBarricades);
+      }
+      const localFacs = localStorage.getItem('flow_facilities_' + venueId);
+      if (localFacs) {
+        this.facilities = JSON.parse(localFacs);
+      }
+      const localBound = localStorage.getItem('flow_boundary_' + venueId);
+      if (localBound) {
+        this.boundary = JSON.parse(localBound);
       }
     } catch(e) {}
 
@@ -1212,12 +1250,195 @@ const GoogleMapsManager = {
     fetch(`/api/venues/${venueId}/pathways`)
       .then(res => res.json())
       .then(data => {
-        if (data && data.success && data.pathways && Object.keys(data.pathways).length > 0) {
-          this.customPathways = data.pathways;
-          this.renderVisitorPathways();
+        if (data && data.success) {
+          let updated = false;
+          if (data.pathways && Object.keys(data.pathways).length > 0) {
+            this.customPathways = data.pathways;
+            updated = true;
+          }
+          if (data.barricades && data.barricades.length > 0) {
+            this.barricades = data.barricades;
+            updated = true;
+          }
+          if (data.facilities && Object.keys(data.facilities).length > 0) {
+            this.facilities = data.facilities;
+            updated = true;
+          }
+          if (data.boundary && data.boundary.length > 0) {
+            this.boundary = data.boundary;
+            updated = true;
+          }
+          if (data.map_rotation !== undefined && data.map_rotation !== null) {
+            this.mapRotationDeg = data.map_rotation;
+          }
+          if (updated) {
+            this.renderVisitorPathways();
+          }
         }
       })
       .catch(() => {});
+  },
+
+  setFacilities: function(facs) {
+    if (!facs) return;
+    this.facilities = JSON.parse(JSON.stringify(facs));
+    const venueId = this.currentVenueId || 'sona-college';
+    try {
+      localStorage.setItem('flow_facilities_' + venueId, JSON.stringify(this.facilities));
+    } catch(e) {}
+  },
+
+  setBoundary: function(boundary) {
+    if (!boundary) return;
+    this.boundary = JSON.parse(JSON.stringify(boundary));
+    const venueId = this.currentVenueId || 'sona-college';
+    try {
+      localStorage.setItem('flow_boundary_' + venueId, JSON.stringify(this.boundary));
+    } catch(e) {}
+    this.renderVisitorPathways();
+  },
+
+  toggleMapOrientation: function(elemId) {
+    if (!elemId) elemId = 'googleMapDiv';
+    const isOriented = !this.isMapOriented[elemId];
+    this.isMapOriented[elemId] = isOriented;
+
+    const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    const venueId = this.currentVenueId || 'sona-college';
+    let rot = v.mapRotationDeg !== undefined ? v.mapRotationDeg : 0;
+    try {
+      const mr = localStorage.getItem('cad_map_rot_' + venueId);
+      if (mr !== null) rot = parseInt(mr, 10) || 0;
+    } catch(e) {}
+
+    const mapDiv = document.getElementById(elemId);
+    if (mapDiv) {
+      mapDiv.style.transformOrigin = '50% 50%';
+      mapDiv.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+      if (isOriented && rot !== 0) {
+        mapDiv.style.transform = `scale(1.42) rotate(${rot}deg)`;
+      } else {
+        mapDiv.style.transform = 'none';
+      }
+    }
+
+    // Counter-rotate marker pills and popups so labels stay upright and easy to read
+    const wrap = mapDiv ? mapDiv.parentElement : document;
+    const counterRot = isOriented ? -rot : 0;
+    if (wrap) {
+      wrap.querySelectorAll('.custom-pathway-marker, .barricade-pen-marker, .leaflet-popup').forEach(el => {
+        el.style.transform = isOriented && counterRot !== 0 ? `rotate(${counterRot}deg)` : '';
+      });
+    }
+
+    // Update button visual state
+    const btn = document.getElementById(elemId === 'googleMapDiv' ? 'visitorMapOrientBtn' : 'adminMapOrientBtn');
+    if (btn) {
+      if (isOriented) {
+        btn.classList.add('active');
+        btn.style.background = '#2563eb';
+        btn.style.color = '#ffffff';
+        btn.style.borderColor = '#1d4ed8';
+        btn.innerHTML = `🧭 Reset North-Up (${rot}°)`;
+      } else {
+        btn.classList.remove('active');
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+        btn.innerHTML = `🔄 CAD Orientation (${rot}°)`;
+      }
+    }
+
+    const toastMsg = isOriented
+      ? `Oriented map to match CAD ground alignment (${rot}°). Click again to return to North-Up.`
+      : `Reset map to standard North-Up geographic satellite orientation.`;
+    this.showToast(toastMsg, 'info');
+  },
+
+  setBarricades: function(barricades, autoSave = false) {
+    if (!Array.isArray(barricades)) return;
+    this.barricades = JSON.parse(JSON.stringify(barricades));
+    const venueId = this.currentVenueId || 'sona-college';
+
+    try {
+      localStorage.setItem('flow_barricades_' + venueId, JSON.stringify(this.barricades));
+    } catch(e) {}
+
+    if (autoSave) {
+      fetch(`/api/venues/${venueId}/barricades`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barricades: this.barricades })
+      }).catch(() => {});
+    }
+
+    this.renderVisitorPathways();
+  },
+
+  generateDefaultGpsBarricades: function(venue) {
+    if (!venue) venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    const lat = venue.lat;
+    const lng = venue.lng;
+    const r = venue.groundRadius || 85;
+
+    if (window.CadPlanner && typeof window.CadPlanner.getGpsBarricades === 'function') {
+      try {
+        const cadPens = window.CadPlanner.getGpsBarricades();
+        if (cadPens && cadPens.length > 0) return cadPens;
+      } catch(e) {}
+    }
+
+    const pens = [];
+    const colOffsets = [-0.25, 0.05, 0.35];
+    let counter = 1;
+
+    colOffsets.forEach((colX, colIdx) => {
+      // Top pen (Box 1, 3, 5)
+      const topCenter = this.getOffsetLatLng(lat, lng, r * 0.48, 15 + colIdx * 35);
+      const halfW = 0.00012;
+      const halfH = 0.00009;
+      pens.push({
+        id: `box-${counter}`,
+        label: `BARRICADE PEN ${counter}`,
+        polygon: [
+          [topCenter.lat + halfH, topCenter.lng - halfW],
+          [topCenter.lat + halfH, topCenter.lng + halfW],
+          [topCenter.lat - halfH, topCenter.lng + halfW],
+          [topCenter.lat - halfH, topCenter.lng - halfW]
+        ],
+        center: [topCenter.lat, topCenter.lng],
+        capacity: 1200,
+        current_occupancy: 920,
+        is_limit_exceeded: false,
+        status: 'COMPLIANT',
+        panel_count: 42,
+        specs: 'Capacity: 1,200 ppl. Dual surge relief exits facing central corridor.'
+      });
+      counter++;
+
+      // Bottom pen (Box 2, 4, 6)
+      const botCenter = this.getOffsetLatLng(lat, lng, r * 0.48, 165 - colIdx * 35);
+      pens.push({
+        id: `box-${counter}`,
+        label: `BARRICADE PEN ${counter}`,
+        polygon: [
+          [botCenter.lat + halfH, botCenter.lng - halfW],
+          [botCenter.lat + halfH, botCenter.lng + halfW],
+          [botCenter.lat - halfH, botCenter.lng + halfW],
+          [botCenter.lat - halfH, botCenter.lng - halfW]
+        ],
+        center: [botCenter.lat, botCenter.lng],
+        capacity: 1200,
+        current_occupancy: 890,
+        is_limit_exceeded: false,
+        status: 'COMPLIANT',
+        panel_count: 42,
+        specs: 'Capacity: 1,200 ppl. Dual surge relief exits facing central corridor.'
+      });
+      counter++;
+    });
+
+    return pens;
   },
 
   renderVisitorPathways: function(venue) {
@@ -1362,19 +1583,137 @@ const GoogleMapsManager = {
 
       const mSos = L.marker(posSos, { icon: createPillIcon('🚨 SOS Exit', '#06b6d4', '#0891b2') }).addTo(map).bindPopup('<b>🚨 Emergency Assembly Area</b>');
 
-      const ptFirstAid = this.getOffsetLatLng(lat, lng, r * 0.60, 40);
-      const mFirstAid = L.marker([ptFirstAid.lat, ptFirstAid.lng], { icon: createPillIcon('🏥 First Aid', '#ec4899', '#db2777') }).addTo(map).bindPopup('<b>🏥 Emergency Medical Station</b>');
+      const ptFirstAid = (this.facilities && this.facilities['medical'] && this.facilities['medical'].pos)
+        ? this.facilities['medical'].pos
+        : (window.CadPlanner && typeof window.CadPlanner.cadToGps === 'function')
+          ? window.CadPlanner.cadToGps(1110, 180)
+          : [this.getOffsetLatLng(lat, lng, r * 0.60, 40).lat, this.getOffsetLatLng(lat, lng, r * 0.60, 40).lng];
 
-      const ptWater = this.getOffsetLatLng(lat, lng, r * 0.52, 255);
-      const mWater = L.marker([ptWater.lat, ptWater.lng], { icon: createPillIcon('💧 Water Hub', '#0284c7', '#0369a1') }).addTo(map).bindPopup('<b>💧 Hydration Point</b>');
+      const mFirstAid = L.marker(ptFirstAid, { icon: createPillIcon('🏥 First Aid', '#ec4899', '#db2777') }).addTo(map).bindPopup('<b>🏥 Emergency Medical Station</b><br>Triage Tent & Ambulance Egress');
+
+      const ptWater = (this.facilities && this.facilities['water'] && this.facilities['water'].pos)
+        ? this.facilities['water'].pos
+        : (window.CadPlanner && typeof window.CadPlanner.cadToGps === 'function')
+          ? window.CadPlanner.cadToGps(1110, 560)
+          : [this.getOffsetLatLng(lat, lng, r * 0.52, 255).lat, this.getOffsetLatLng(lat, lng, r * 0.52, 255).lng];
+
+      const mWater = L.marker(ptWater, { icon: createPillIcon('💧 Water Hub', '#0284c7', '#0369a1') }).addTo(map).bindPopup('<b>💧 Hydration Point</b><br>Automated Touchless Bulk Taps');
 
       allMarkers.push(mGateC, mGateB, mGateA, mDest, mSos, mFirstAid, mWater);
+
+      if (this.facilities && this.facilities['food_court'] && this.facilities['food_court'].pos) {
+        const mFood = L.marker(this.facilities['food_court'].pos, { icon: createPillIcon('🍔 Food Court', '#d97706', '#b45309') }).addTo(map).bindPopup('<b>🍔 Food Court & Concessions</b>');
+        allMarkers.push(mFood);
+      }
+      if (this.facilities && this.facilities['restroom'] && this.facilities['restroom'].pos) {
+        const mRest = L.marker(this.facilities['restroom'].pos, { icon: createPillIcon('🚻 Restrooms', '#7c3aed', '#6d28d9') }).addTo(map).bindPopup('<b>🚻 Sanitation & Restroom Bays</b>');
+        allMarkers.push(mRest);
+      }
     });
+
+    // Render CAD Venue Perimeter Boundary Polygon
+    let boundaryPts = this.boundary;
+    if ((!boundaryPts || !boundaryPts.length) && window.CadPlanner && typeof window.CadPlanner.getGpsBoundary === 'function') {
+      try {
+        boundaryPts = window.CadPlanner.getGpsBoundary();
+        this.boundary = boundaryPts;
+      } catch(e) {}
+    }
+    if (boundaryPts && boundaryPts.length >= 3) {
+      targetMaps.forEach(map => {
+        const poly = L.polygon(boundaryPts, {
+          color: '#38bdf8',
+          weight: 2.5,
+          dashArray: '8, 5',
+          fillColor: '#0284c7',
+          fillOpacity: 0.08
+        }).addTo(map);
+        poly.bindPopup('<b>PERIMETER BOUNDARY & 12M EGRESS ROAD</b><br>NFPA 101 Compliant Venue Boundary');
+        allMarkers.push(poly);
+      });
+    }
+
+    // Render CAD Barricades (Mojo Pens) across both Visitor and Admin maps
+    const allBarricadeLayers = [];
+    let barricadeList = this.barricades;
+    if ((!barricadeList || !barricadeList.length) && window.CadPlanner && typeof window.CadPlanner.getGpsBarricades === 'function') {
+      try {
+        barricadeList = window.CadPlanner.getGpsBarricades();
+        this.barricades = barricadeList;
+      } catch(e) {}
+    }
+    if (!barricadeList || !barricadeList.length) {
+      barricadeList = this.generateDefaultGpsBarricades(venue);
+      this.barricades = barricadeList;
+    }
+
+    if (barricadeList && barricadeList.length) {
+      targetMaps.forEach(map => {
+        barricadeList.forEach(b => {
+          if (!b.polygon || b.polygon.length < 3) return;
+
+          const isExceeded = Boolean(b.is_limit_exceeded);
+          const occ = b.current_occupancy !== undefined ? b.current_occupancy : 800;
+          const cap = b.capacity || 1200;
+          const occPct = cap > 0 ? Math.round((occ / cap) * 100) : 75;
+
+          // Barricade Steel Pen Polygon
+          const penPoly = L.polygon(b.polygon, {
+            color: isExceeded ? '#ef4444' : '#0284c7',
+            weight: isExceeded ? 3 : 2,
+            dashArray: isExceeded ? '6, 4' : '4, 4',
+            fillColor: isExceeded ? '#dc2626' : '#0369a1',
+            fillOpacity: isExceeded ? 0.38 : 0.20,
+            className: isExceeded ? 'cad-barricade-exceeded' : 'cad-barricade-normal'
+          }).addTo(map);
+
+          // Barricade Badge Marker at Center
+          const badgeHtml = isExceeded
+            ? `<div class="barricade-pen-marker" style="background:#dc2626; color:#ffffff; border:1.5px solid #fecaca; border-radius:6px; padding:2px 7px; font-size:10px; font-weight:900; white-space:nowrap; box-shadow:0 0 10px rgba(220,38,38,0.8); display:flex; align-items:center; gap:4px; transform:translate(-50%, -50%); cursor:pointer; font-family:sans-serif;">
+                ⚠️ <span>${b.label || 'BARRICADE'} (EXCEEDED)</span>
+               </div>`
+            : `<div class="barricade-pen-marker" style="background:rgba(15,23,42,0.88); color:#38bdf8; border:1.2px solid #0284c7; border-radius:6px; padding:2px 7px; font-size:9.5px; font-weight:800; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.45); display:flex; align-items:center; gap:4px; transform:translate(-50%, -50%); cursor:pointer; font-family:sans-serif;">
+                🚧 <span>${b.label || 'BARRICADE'}</span> <span style="color:#22c55e; font-size:8.5px; font-weight:700;">(${occPct}%)</span>
+               </div>`;
+
+          const mIcon = L.divIcon({
+            className: 'barricade-center-divicon',
+            html: badgeHtml,
+            iconSize: [0, 0]
+          });
+
+          const centerPt = b.center || b.polygon[0];
+          const mBadge = L.marker(centerPt, { icon: mIcon }).addTo(map);
+
+          const popupContent = `
+            <div style="font-family:sans-serif; min-width:190px; color:#1e293b;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                <strong style="color:#0f172a; font-size:12px;">🚧 ${b.label || 'Barricade Pen'}</strong>
+                <span style="font-size:9px; padding:2px 6px; border-radius:4px; font-weight:800; ${isExceeded ? 'background:#fee2e2; color:#b91c1c;' : 'background:#ecfdf5; color:#047857;'}">
+                  ${isExceeded ? '⚠️ LIMIT EXCEEDED' : '✅ COMPLIANT'}
+                </span>
+              </div>
+              <div style="font-size:11px; color:#475569; line-height:1.5;">
+                <b>Occupancy:</b> ${occ.toLocaleString()} / ${cap.toLocaleString()} ppl (${occPct}%)<br>
+                <b>Barricade Panels:</b> ${b.panel_count || 42} Steel Mojo Panels (2.5m)<br>
+                <b>Routing Status:</b> ${isExceeded ? '<span style="color:#dc2626; font-weight:700;">Relief Egress Open • Pathways Diverted</span>' : '<span style="color:#059669; font-weight:700;">Normal Ingress Connected</span>'}
+              </div>
+            </div>
+          `;
+
+          penPoly.bindPopup(popupContent);
+          mBadge.bindPopup(popupContent);
+
+          allBarricadeLayers.push(penPoly, mBadge);
+        });
+      });
+    }
 
     this.visitorPathways.polylines = allPolylines;
     this.visitorPathways.glows = allGlows;
     this.visitorPathways.markers = allMarkers;
     this.visitorPathways.gateMarkers = gateMarkers;
+    this.visitorPathways.barricades = allBarricadeLayers;
 
     // Ensure legend and top badge are active
     const legendEl = document.getElementById('visitorMapLegend');
@@ -1382,6 +1721,29 @@ const GoogleMapsManager = {
 
     const topBadge = document.getElementById('visitorTopViewBadge');
     if (topBadge) topBadge.style.display = 'flex';
+
+    // If map orientation toggle is active, maintain orientation
+    ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
+      if (this.isMapOriented && this.isMapOriented[elemId]) {
+        const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+        const venueId = this.currentVenueId || 'sona-college';
+        let rot = v.mapRotationDeg !== undefined ? v.mapRotationDeg : 0;
+        try {
+          const mr = localStorage.getItem('cad_map_rot_' + venueId);
+          if (mr !== null) rot = parseInt(mr, 10) || 0;
+        } catch(e) {}
+        const mapDiv = document.getElementById(elemId);
+        if (mapDiv && rot !== 0) {
+          mapDiv.style.transform = `scale(1.42) rotate(${rot}deg)`;
+          const wrap = mapDiv.parentElement;
+          if (wrap) {
+            wrap.querySelectorAll('.custom-pathway-marker, .barricade-pen-marker, .leaflet-popup').forEach(el => {
+              el.style.transform = `rotate(${-rot}deg)`;
+            });
+          }
+        }
+      }
+    });
   },
 
   clearVisitorPathways: function() {
@@ -1395,10 +1757,12 @@ const GoogleMapsManager = {
         else if (item && item.remove) item.remove();
       });
       (this.visitorPathways.markers || []).forEach(m => { if (m && m.remove) m.remove(); });
+      (this.visitorPathways.barricades || []).forEach(b => { if (b && b.remove) b.remove(); });
       this.visitorPathways.polylines = {};
       this.visitorPathways.glows = {};
       this.visitorPathways.markers = [];
       this.visitorPathways.gateMarkers = {};
+      this.visitorPathways.barricades = [];
     }
   },
 
@@ -1676,7 +2040,7 @@ const GoogleMapsManager = {
     fetch(`/api/venues/${venueId}/pathways`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pathways: this.customPathways })
+      body: JSON.stringify({ pathways: this.customPathways, barricades: this.barricades })
     }).then(r => r.json()).then(data => {
       console.log('Saved custom pathways to backend:', data);
     }).catch(err => {
@@ -1826,35 +2190,44 @@ const GoogleMapsManager = {
     if (!routes || !routes.length || !this.visitorPathways || !this.visitorPathways.polylines) return;
 
     routes.forEach(r => {
-      const key = (r.id && r.id.toLowerCase().includes('c')) || (r.name && r.name.toLowerCase().includes('route c')) || (r.tag === 'RECOMMENDED') ? 'C' :
-                  (r.id && r.id.toLowerCase().includes('b')) || (r.name && r.name.toLowerCase().includes('route b')) ? 'B' : 'A';
-      
-      const line = this.visitorPathways.polylines[key];
-      if (line) {
+      try {
+        const key = (r.id && r.id.toLowerCase().includes('c')) || (r.name && r.name.toLowerCase().includes('route c')) || (r.tag === 'RECOMMENDED') ? 'C' :
+                    (r.id && r.id.toLowerCase().includes('b')) || (r.name && r.name.toLowerCase().includes('route b')) ? 'B' : 'A';
+        
+        const lines = Array.isArray(this.visitorPathways.polylines[key])
+          ? this.visitorPathways.polylines[key]
+          : (this.visitorPathways.polylines[key] ? [this.visitorPathways.polylines[key]] : []);
+        
         const wait = r.estimated_wait_minutes || (key === 'C' ? 4 : key === 'B' ? 12 : 28);
         const dist = r.distance_meters || (key === 'C' ? 180 : key === 'B' ? 240 : 120);
         const color = key === 'C' ? '#047857' : (key === 'B' ? '#b45309' : '#b91c1c');
         const badgeText = key === 'C' ? '🟢 RECOMMENDED FASTEST PATHWAY' : (key === 'B' ? '🟡 STEADY FLOW' : '🔴 HEAVY CHOKEPOINT');
 
-        line.setPopupContent(`
-          <div style="font-family:sans-serif; min-width:180px;">
-            <div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">
-              <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${r.color || color};"></span>
-              <strong style="color:${color}; font-size:0.92rem;">${r.name || ('Route ' + key)}</strong>
-            </div>
-            <div style="font-size:0.78rem; color:#334155; line-height:1.4;">
-              <span style="color:${color}; font-weight:700;">● ${badgeText}</span><br>
-              <b>Est. Queue:</b> ${wait} mins<br>
-              <b>Walk Distance:</b> ${dist}m<br>
-              <b>Density:</b> ${r.occupancy_percentage || 50}%
-            </div>
-          </div>
-        `);
-      }
+        lines.forEach(line => {
+          if (line && typeof line.setPopupContent === 'function') {
+            line.setPopupContent(`
+              <div style="font-family:sans-serif; min-width:180px;">
+                <div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">
+                  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${r.color || color};"></span>
+                  <strong style="color:${color}; font-size:0.92rem;">${r.name || ('Route ' + key)}</strong>
+                </div>
+                <div style="font-size:0.78rem; color:#334155; line-height:1.4;">
+                  <span style="color:${color}; font-weight:700;">● ${badgeText}</span><br>
+                  <b>Est. Queue:</b> ${wait} mins<br>
+                  <b>Walk Distance:</b> ${dist}m<br>
+                  <b>Density:</b> ${r.occupancy_percentage || 50}%
+                </div>
+              </div>
+            `);
+          }
+        });
 
-      const legEl = document.getElementById('legRoute' + key);
-      if (legEl) {
-        legEl.textContent = `Route ${key} (${r.estimated_wait_minutes || (key === 'C' ? 4 : key === 'B' ? 12 : 28)}m)`;
+        const legEl = document.getElementById('legRoute' + key);
+        if (legEl) {
+          legEl.textContent = `Route ${key} (${wait}m)`;
+        }
+      } catch (err) {
+        console.warn('[GoogleMaps] Error updating pathway metric:', err);
       }
     });
   },

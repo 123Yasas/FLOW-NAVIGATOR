@@ -107,10 +107,26 @@ const CadPlanner = {
     this.bindControls();
     this.bindPanZoom();
     this.bindImageUpload();
+
+    const gm = window.GoogleMapsManager;
+    const vid = gm ? (gm.currentVenueId || 'sona-college') : 'sona-college';
+    const v = gm && gm.venueConfigs ? (gm.venueConfigs[vid] || gm.venueConfigs['sona-college']) : null;
+    let savedMapRot = v && v.mapRotationDeg !== undefined ? v.mapRotationDeg : 0;
+    let savedCadRot = 0;
+    try {
+      const mr = localStorage.getItem('cad_map_rot_' + vid);
+      if (mr !== null) savedMapRot = parseInt(mr, 10) || 0;
+      const cr = localStorage.getItem('cad_layout_rot_' + vid);
+      if (cr !== null) savedCadRot = parseInt(cr, 10) || 0;
+    } catch(e) {}
+
+    this.state.mapRotationDeg = savedMapRot;
+    this.state.cadRotationDeg = savedCadRot;
+
     this.loadCadPathways();
     this.fetchOrComputePlan();
-    this.setCadRotation(0);
-    this.setMapRotation(0);
+    this.setCadRotation(savedCadRot, false);
+    this.setMapRotation(savedMapRot, false);
   },
 
   // -------------------------------------------------------------
@@ -1356,9 +1372,15 @@ const CadPlanner = {
     }
   },
 
-  setCadRotation: function(deg) {
+  setCadRotation: function(deg, autoSave = true) {
     deg = Math.round(((deg % 360) + 360) % 360);
     this.state.cadRotationDeg = deg;
+
+    const gm = window.GoogleMapsManager;
+    const vid = gm ? (gm.currentVenueId || 'sona-college') : 'sona-college';
+    try {
+      localStorage.setItem('cad_layout_rot_' + vid, String(deg));
+    } catch(e) {}
 
     // Apply rotation purely to the CAD SVG layer around center (700, 425)
     this.updateSvgTransform();
@@ -1371,16 +1393,26 @@ const CadPlanner = {
     if (slider && Number(slider.value) !== deg) slider.value = deg;
 
     this.updateTextControlsUi();
+
+    if (autoSave && this.state.cadPathways) {
+      this.saveCadPathways(false);
+    }
   },
 
   rotateCadBy: function(deltaDeg) {
-    this.setCadRotation((this.state.cadRotationDeg || 0) + deltaDeg);
+    this.setCadRotation((this.state.cadRotationDeg || 0) + deltaDeg, true);
     this.showToast(`Rotated CAD layout to ${this.state.cadRotationDeg}°`, 'info');
   },
 
-  setMapRotation: function(deg) {
+  setMapRotation: function(deg, autoSave = true) {
     deg = Math.round(((deg % 360) + 360) % 360);
     this.state.mapRotationDeg = deg;
+
+    const gm = window.GoogleMapsManager;
+    const vid = gm ? (gm.currentVenueId || 'sona-college') : 'sona-college';
+    try {
+      localStorage.setItem('cad_map_rot_' + vid, String(deg));
+    } catch(e) {}
 
     const mapDiv = document.getElementById('cadGoogleMapDiv');
     if (mapDiv) {
@@ -1407,10 +1439,14 @@ const CadPlanner = {
     if (slider && Number(slider.value) !== deg) slider.value = deg;
 
     this.updateTextControlsUi();
+
+    if (autoSave && this.state.cadPathways) {
+      this.saveCadPathways(false);
+    }
   },
 
   rotateMapBy: function(deltaDeg) {
-    this.setMapRotation((this.state.mapRotationDeg || 0) + deltaDeg);
+    this.setMapRotation((this.state.mapRotationDeg || 0) + deltaDeg, true);
     this.showToast(`Rotated Satellite Map to ${this.state.mapRotationDeg}°`, 'info');
   },
 
@@ -1645,18 +1681,7 @@ const CadPlanner = {
       const stage = layout.stage || { x: 100, y: 345, width: 75, height: 160 };
       const stageCenter = { x: stage.x + (stage.width || 75) / 2, y: stage.y + (stage.height || 160) / 2 };
 
-      const cadToGps = (cadX, cadY) => {
-        const relX = (cadX - 700) / 700;
-        const relY = (cadY - 425) / 425;
-        const netRot = ((this.state.cadRotationDeg || 0) - (this.state.mapRotationDeg || 0));
-        const rotRad = netRot * (Math.PI / 180);
-        const rotX = relX * Math.cos(-rotRad) - relY * Math.sin(-rotRad);
-        const rotY = relX * Math.sin(-rotRad) + relY * Math.cos(-rotRad);
-        const dist = Math.sqrt(rotX * rotX + rotY * rotY) * r;
-        const bearing = ((Math.atan2(rotX, -rotY) * 180 / Math.PI) + 360) % 360;
-        const pos = gm.getOffsetLatLng(lat, lng, dist, bearing);
-        return [pos.lat, pos.lng];
-      };
+      const cadToGps = (cadX, cadY) => this.cadToGps(cadX, cadY);
 
       const stageGps = cadToGps(stageCenter.x, stageCenter.y);
       const gates = layout.entry_gates || [];
@@ -1679,7 +1704,11 @@ const CadPlanner = {
       pathC = [gpsGC, [ (gpsGC[0] + corridorMid[0]) / 2, (gpsGC[1] + corridorMid[1]) / 2 ], corridorMid, stageGps];
       pathB = [gpsGB, [ (gpsGB[0] + stageGps[0]) / 2, (gpsGB[1] + stageGps[1]) / 2 ], stageGps];
       pathA = [gpsGA, [ (gpsGA[0] + stageGps[0]) / 2, (gpsGA[1] + stageGps[1]) / 2 ], stageGps];
-      pathSos = [stageGps, [ (stageGps[0] + gpsEx[0]) / 2, (stageGps[1] + gpsEx[1]) / 2 ], gpsEx];
+      const defaultPaths = this.getDefaultCadPathways();
+      const cadSos = (this.state.cadPathways && this.state.cadPathways['EMERGENCY'] && this.state.cadPathways['EMERGENCY'].length >= 3)
+        ? this.state.cadPathways['EMERGENCY']
+        : defaultPaths['EMERGENCY'];
+      pathSos = cadSos.map(pt => cadToGps(pt.x, pt.y));
     } else {
       pathC = [
         [gm.getOffsetLatLng(lat, lng, r * 1.05, 220).lat, gm.getOffsetLatLng(lat, lng, r * 1.05, 220).lng],
@@ -3122,10 +3151,10 @@ const CadPlanner = {
 
   gpsToCad: function(gpsLat, gpsLng) {
     const gm = window.GoogleMapsManager;
-    const v = gm ? (gm.venueConfigs[gm.currentVenueId] || gm.venueConfigs['sona-college']) : { lat: 11.677193, lng: 78.123532, groundRadius: 85 };
+    const v = gm ? (gm.venueConfigs[gm.currentVenueId] || gm.venueConfigs['sona-college']) : { lat: 11.677193, lng: 78.123532, groundRadius: 105 };
     const lat = v.lat;
     const lng = v.lng;
-    const r = v.groundRadius || 85;
+    const r = v.groundRadius || 105;
 
     const { distance, bearing } = this.getDistanceAndBearing(lat, lng, gpsLat, gpsLng);
     const brngRad = (bearing * Math.PI) / 180;
@@ -3135,8 +3164,8 @@ const CadPlanner = {
 
     const netRot = ((this.state.cadRotationDeg || 0) - (this.state.mapRotationDeg || 0));
     const rotRad = netRot * (Math.PI / 180);
-    const relX = rotX * Math.cos(rotRad) - rotY * Math.sin(rotRad);
-    const relY = rotX * Math.sin(rotRad) + rotY * Math.cos(rotRad);
+    const relX = rotX * Math.cos(-rotRad) - rotY * Math.sin(-rotRad);
+    const relY = rotX * Math.sin(-rotRad) + rotY * Math.cos(-rotRad);
 
     return {
       x: Math.round(700 + relX * 700),
@@ -3146,17 +3175,17 @@ const CadPlanner = {
 
   cadToGps: function(cadX, cadY) {
     const gm = window.GoogleMapsManager;
-    const v = gm ? (gm.venueConfigs[gm.currentVenueId] || gm.venueConfigs['sona-college']) : { lat: 11.677193, lng: 78.123532, groundRadius: 85 };
+    const v = gm ? (gm.venueConfigs[gm.currentVenueId] || gm.venueConfigs['sona-college']) : { lat: 11.677193, lng: 78.123532, groundRadius: 105 };
     const lat = v.lat;
     const lng = v.lng;
-    const r = v.groundRadius || 85;
+    const r = v.groundRadius || 105;
 
     const relX = (cadX - 700) / 700;
     const relY = (cadY - 425) / 425;
     const netRot = ((this.state.cadRotationDeg || 0) - (this.state.mapRotationDeg || 0));
     const rotRad = netRot * (Math.PI / 180);
-    const rotX = relX * Math.cos(-rotRad) - relY * Math.sin(-rotRad);
-    const rotY = relX * Math.sin(-rotRad) + relY * Math.cos(-rotRad);
+    const rotX = relX * Math.cos(rotRad) - relY * Math.sin(rotRad);
+    const rotY = relX * Math.sin(rotRad) + relY * Math.cos(rotRad);
     const dist = Math.sqrt(rotX * rotX + rotY * rotY) * r;
     const bearing = ((Math.atan2(rotX, -rotY) * 180 / Math.PI) + 360) % 360;
     if (gm && gm.getOffsetLatLng) {
@@ -3164,6 +3193,67 @@ const CadPlanner = {
       return [pos.lat, pos.lng];
     }
     return [lat, lng];
+  },
+
+  getGpsBoundary: function() {
+    const layout = this.state.plan && this.state.plan.layout;
+    const boundary = (layout && layout.boundary) || [
+      { x: 70, y: 60 }, { x: 1330, y: 60 }, { x: 1330, y: 790 }, { x: 70, y: 790 }
+    ];
+    return boundary.map(pt => this.cadToGps(pt.x, pt.y));
+  },
+
+  getGpsFacilities: function() {
+    const layout = this.state.plan && this.state.plan.layout;
+    const facs = {};
+    if (layout && layout.facilities && layout.facilities.length > 0) {
+      layout.facilities.forEach(f => {
+        facs[f.type] = {
+          id: f.id,
+          label: f.label,
+          pos: this.cadToGps(f.x + (f.width || 50) / 2, f.y + (f.height || 50) / 2)
+        };
+      });
+    } else {
+      // Default standard facility positions from CAD layout
+      facs['medical'] = { id: 'fac-medical', label: 'MEDICAL CENTER', pos: this.cadToGps(1110, 180) };
+      facs['food_court'] = { id: 'fac-food', label: 'FOOD COURT', pos: this.cadToGps(1110, 360) };
+      facs['water'] = { id: 'fac-water', label: 'WATER HYDRATION', pos: this.cadToGps(1110, 560) };
+      facs['restroom'] = { id: 'fac-restrooms', label: 'SANITATION & RESTROOMS', pos: this.cadToGps(1110, 700) };
+    }
+    return facs;
+  },
+
+  getGpsBarricades: function() {
+    const layout = this.state.plan && this.state.plan.layout;
+    if (!layout || !layout.barricade_pens || !layout.barricade_pens.length) {
+      return [];
+    }
+
+    return layout.barricade_pens.map(pen => {
+      const p1 = this.cadToGps(pen.x, pen.y);
+      const p2 = this.cadToGps(pen.x + pen.width, pen.y);
+      const p3 = this.cadToGps(pen.x + pen.width, pen.y + pen.height);
+      const p4 = this.cadToGps(pen.x, pen.y + pen.height);
+      const center = this.cadToGps(pen.x + pen.width / 2, pen.y + pen.height / 2);
+
+      const occ = pen.current_occupancy !== undefined ? pen.current_occupancy : 800;
+      const cap = pen.capacity || 1200;
+      const isExceeded = Boolean(pen.is_limit_exceeded || (occ > cap));
+
+      return {
+        id: pen.id,
+        label: pen.label || 'BARRICADE PEN',
+        polygon: [p1, p2, p3, p4],
+        center: center,
+        capacity: cap,
+        current_occupancy: occ,
+        is_limit_exceeded: isExceeded,
+        status: isExceeded ? 'ALTERED' : (pen.status || 'COMPLIANT'),
+        panel_count: pen.panel_count || 42,
+        specs: pen.specs || 'Steel Mojo Barricades'
+      };
+    });
   },
 
   clientToSvgPoint: function(clientX, clientY) {
@@ -3245,10 +3335,6 @@ const CadPlanner = {
     const gC = getCenter(gateC, { x: 1330, y: 160 });
     const gB = getCenter(gateB, { x: 1330, y: 350 });
     const gA = getCenter(gateA, { x: 1330, y: 540 });
-
-    // Exit Gate for SOS Evacuation
-    const emergencyExit = exits.find(e => e.type === 'emergency_exit' || (e.label || '').includes('EMERGENCY')) || exits[0];
-    const exSos = getCenter(emergencyExit, { x: 70, y: 320 });
 
     // Separate barricade pens: Top row (y < stageHub.y) and Bottom row (y >= stageHub.y)
     // Sorted from East (nearest entries) to West (nearest stage)
@@ -3341,13 +3427,45 @@ const CadPlanner = {
       stageHub
     ];
 
-    // ── EMERGENCY SOS EGRESS (RED DASHED): Stage Hub -> West Perimeter Exit Gate
-    const pathSos = [
-      stageHub,
-      { x: Math.round(stageHub.x - 60), y: Math.round(stageHub.y - 45) },
-      { x: Math.round((stageHub.x + exSos.x) / 2), y: exSos.y },
-      { x: exSos.x, y: exSos.y }
-    ];
+    // ── EXIT GATES SELECTION FOR SOS EVACUATION ──
+    // Sort exit gates along Y axis (top to bottom)
+    const sortedExits = [...exits].sort((a, b) => a.y - b.y);
+    // Select primary unobstructed exit gate (EXIT EX-1) clear of stage structure
+    const exTopGate = sortedExits.find(e => e.y < (stage.y || 275)) || sortedExits[0] || { x: 52, y: 195, width: 36, height: 45 };
+    const exTop = getCenter(exTopGate, { x: 52, y: 195 });
+
+    // ── EMERGENCY SOS EGRESS (RED DASHED): Stage Hub -> North Corridor -> EXIT EX-1 Portal -> Perimeter Road ──
+    let pathSos;
+    if (sp === 'west') {
+      const clearNorthY = Math.min(Math.round((stage.y || 265) - 35), Math.round(exTop.y));
+      const crossAisleX = Math.round(stage.x + (stage.width || 105) / 2);
+
+      pathSos = [
+        stageHub,
+        { x: Math.round(stageHub.x - 15), y: clearNorthY },
+        { x: crossAisleX, y: clearNorthY },
+        { x: Math.round(exTop.x + 48), y: exTop.y },
+        { x: exTop.x, y: exTop.y },
+        { x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y }
+      ];
+    } else if (sp === 'east') {
+      const clearNorthY = Math.min(Math.round((stage.y || 265) - 35), Math.round(exTop.y));
+      pathSos = [
+        stageHub,
+        { x: Math.round(stageHub.x + 15), y: clearNorthY },
+        { x: Math.round(stage.x + (stage.width || 105) / 2), y: clearNorthY },
+        { x: Math.round(exTop.x - 48), y: exTop.y },
+        { x: exTop.x, y: exTop.y },
+        { x: Math.min(1360, Math.round(exTop.x + 24)), y: exTop.y }
+      ];
+    } else {
+      pathSos = [
+        stageHub,
+        { x: Math.round((stageHub.x + exTop.x) / 2), y: Math.round((stageHub.y + exTop.y) / 2) },
+        { x: exTop.x, y: exTop.y },
+        { x: exTop.x, y: Math.max(30, exTop.y - 25) }
+      ];
+    }
 
     return {
       'C': pathC,
@@ -3389,6 +3507,14 @@ const CadPlanner = {
         }
       }
       if (isCadValid) {
+        if (loaded['EMERGENCY']) {
+          const sosPts = loaded['EMERGENCY'];
+          const lastPt = sosPts[sosPts.length - 1];
+          // If legacy emergency path is short or didn't reach perimeter exit (x > 80), use clean default
+          if (!Array.isArray(sosPts) || sosPts.length < 4 || (lastPt && lastPt.x > 80)) {
+            loaded['EMERGENCY'] = JSON.parse(JSON.stringify(defaults['EMERGENCY']));
+          }
+        }
         this.state.cadPathways = loaded;
       } else {
         try { localStorage.removeItem('cad_flow_pathways_' + vid); } catch(e) {}
@@ -3414,7 +3540,28 @@ const CadPlanner = {
       }
     }
 
+    // Extract GPS barricades based on CAD layout setting
+    const gpsBarricades = this.getGpsBarricades();
+    try {
+      localStorage.setItem('flow_barricades_' + vid, JSON.stringify(gpsBarricades));
+    } catch(e) {}
+
+    // Extract GPS facilities and boundary based on rotated CAD layout
+    const gpsFacilities = this.getGpsFacilities();
+    const gpsBoundary = this.getGpsBoundary();
+    try {
+      localStorage.setItem('flow_facilities_' + vid, JSON.stringify(gpsFacilities));
+      localStorage.setItem('flow_boundary_' + vid, JSON.stringify(gpsBoundary));
+    } catch(e) {}
+
     if (window.GoogleMapsManager) {
+      if (typeof window.GoogleMapsManager.setFacilities === 'function') {
+        window.GoogleMapsManager.setFacilities(gpsFacilities);
+      }
+      if (typeof window.GoogleMapsManager.setBoundary === 'function') {
+        window.GoogleMapsManager.setBoundary(gpsBoundary);
+      }
+      window.GoogleMapsManager.setBarricades(gpsBarricades, false);
       window.GoogleMapsManager.setCustomPathways(gpsPathways, true);
     } else {
       try {
@@ -3422,14 +3569,21 @@ const CadPlanner = {
         fetch(`/api/venues/${vid}/pathways`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pathways: gpsPathways })
+          body: JSON.stringify({ 
+            pathways: gpsPathways, 
+            barricades: gpsBarricades,
+            facilities: gpsFacilities,
+            boundary: gpsBoundary,
+            map_rotation: this.state.mapRotationDeg || 0,
+            cad_rotation: this.state.cadRotationDeg || 0
+          })
         }).catch(() => {});
       } catch(e) {}
     }
 
     this.updatePathwayBadgeCounts();
     if (notify) {
-      this.showToast('✅ Saved CAD pathways! Real-time synced from Entry Gates through Barricades to Stage.', 'success');
+      this.showToast('✅ Saved CAD pathways and barricades! Synced to Admin & Visitor maps.', 'success');
     }
   },
 
@@ -3503,7 +3657,12 @@ const CadPlanner = {
     }
     // Also repair any other routes that were distorted or missing
     for (const [k, pts] of Object.entries(defaults)) {
-      if (!this.state.cadPathways[k] || this.state.cadPathways[k].length < 2 || this.state.cadPathways[k][0].x < 850) {
+      if (k === 'EMERGENCY') {
+        const curSos = this.state.cadPathways['EMERGENCY'];
+        if (!curSos || curSos.length < 4 || (curSos[curSos.length - 1] && curSos[curSos.length - 1].x > 80) || k === key) {
+          this.state.cadPathways['EMERGENCY'] = JSON.parse(JSON.stringify(pts));
+        }
+      } else if (!this.state.cadPathways[k] || this.state.cadPathways[k].length < 2 || this.state.cadPathways[k][0].x < 850 || k === key) {
         this.state.cadPathways[k] = JSON.parse(JSON.stringify(pts));
       }
     }
@@ -3558,8 +3717,8 @@ const CadPlanner = {
       const startPt = pts[0];
       const rot = this.getTextRotationAngle();
       const startLabel = isSos ? '🚨 Evacuation Egress' : `${meta.icon} ${meta.gateLabel}`;
-      const badgeX = isSos ? startPt.x : (startPt.x - 70);
-      const badgeY = isSos ? (startPt.y - 28) : (startPt.y - 18);
+      const badgeX = isSos ? Math.round(startPt.x + 85) : (startPt.x - 70);
+      const badgeY = isSos ? Math.round(startPt.y - 28) : (startPt.y - 18);
 
       html += `
         <g class="cf-rotatable-text" data-cx="${badgeX}" data-cy="${badgeY}" transform="rotate(${rot}, ${badgeX}, ${badgeY})">
@@ -3573,11 +3732,13 @@ const CadPlanner = {
       // End Landmark Badges
       const endPt = pts[pts.length - 1];
       if (isSos) {
-        // SOS Exit Gate Landmark Badge on West perimeter!
+        // SOS Exit Gate Landmark Badge placed cleanly at the exit portal
+        const badgeEndX = Math.round(endPt.x + 75);
+        const badgeEndY = Math.round(endPt.y);
         html += `
-          <g class="cf-rotatable-text" data-cx="${endPt.x + 65}" data-cy="${endPt.y}" transform="rotate(${rot}, ${endPt.x + 65}, ${endPt.y})">
-            <rect x="${endPt.x}" y="${endPt.y - 11}" width="130" height="22" rx="11" fill="#b91c1c" stroke="#ffffff" stroke-width="2" filter="url(#cfShadowCard)" />
-            <text x="${endPt.x + 65}" y="${endPt.y + 4}" text-anchor="middle" font-size="9" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
+          <g class="cf-rotatable-text" data-cx="${badgeEndX}" data-cy="${badgeEndY}" transform="rotate(${rot}, ${badgeEndX}, ${badgeEndY})">
+            <rect x="${badgeEndX - 65}" y="${badgeEndY - 11}" width="130" height="22" rx="11" fill="#b91c1c" stroke="#ffffff" stroke-width="2" filter="url(#cfShadowCard)" />
+            <text x="${badgeEndX}" y="${badgeEndY + 4}" text-anchor="middle" font-size="9" font-weight="900" font-family="'Outfit', sans-serif" fill="#ffffff">
               🚨 SOS Exit (EX-1)
             </text>
           </g>

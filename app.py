@@ -24,6 +24,7 @@ load_dotenv()
 from database import db
 from ml.predictor import predictor
 from crowdflow_engine import crowdflow_engine
+from auth_service import auth_service, admin_required, role_required
 import uuid
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -57,115 +58,127 @@ def index():
 def kiosk():
     return render_template("index.html")
 
-# ==================== ADMIN AUTHENTICATION ====================
+# ==================== SECURE ADMIN AUTHENTICATION & RBAC ====================
 
 @app.route("/api/admin/login", methods=["POST"])
 def admin_login():
+    """
+    Secure Admin Authentication with:
+    - Scrypt password hash verification
+    - Signed JWT Bearer token generation
+    - Brute-force rate limiting (5 failed attempts -> 5 min lockout)
+    - Security audit logging
+    """
     data = request.get_json() or {}
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
+    client_ip = request.remote_addr or "127.0.0.1"
     
-    if username == "admin" and password == "admin123":
+    if not username or not password:
         return jsonify({
-            "success": True,
-            "role": "admin",
-            "token": "fn_admin_session_token_authenticated",
-            "message": "Authentication successful"
-        })
-# In-memory system user registry (synced with db DAO if available)
-SYSTEM_USERS = [
-    {
-        "id": "u-1",
-        "username": "admin",
-        "name": "System Administrator",
-        "email": "admin@flownavigator.org",
-        "role": "Super Admin",
-        "venue_scope": "All Venues & Grounds",
-        "status": "Active Session",
-        "last_active": "Just now",
-        "is_system": True
-    },
-    {
-        "id": "u-2",
-        "username": "dispatcher_palani",
-        "name": "Palani Operations Control",
-        "email": "palani.control@flownavigator.org",
-        "role": "Safety Dispatcher",
-        "venue_scope": "Palani Pilgrimage Grounds",
-        "status": "Active",
-        "last_active": "10 mins ago",
-        "is_system": False
-    },
-    {
-        "id": "u-3",
-        "username": "chennai_gate",
-        "name": "Nehru Stadium Turnstiles",
-        "email": "chennai.gates@flownavigator.org",
-        "role": "Gate Supervisor",
-        "venue_scope": "Jawaharlal Nehru Stadium",
-        "status": "Active",
-        "last_active": "2 hours ago",
-        "is_system": False
-    },
-    {
-        "id": "u-4",
-        "username": "event_coordinator",
-        "name": "College Event Operations",
-        "email": "events@college.edu",
-        "role": "Event Coordinator",
-        "venue_scope": "Custom Grounds & Halls",
-        "status": "Active",
-        "last_active": "1 day ago",
-        "is_system": False
-    }
-]
+            "success": False,
+            "message": "Both username and password are required"
+        }), 400
+
+    success, user, result = auth_service.authenticate(username, password, client_ip)
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": result
+        }), 401
+
+    return jsonify({
+        "success": True,
+        "role": user.get("role"),
+        "user": user,
+        "token": result,
+        "message": f"Authentication successful. Welcome, {user.get('name', username)}!"
+    })
+
+@app.route("/api/admin/verify", methods=["GET"])
+@admin_required
+def admin_verify_session():
+    """Validates active JWT bearer session and returns authenticated user profile."""
+    from flask import g
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "user": g.current_user,
+        "message": "Session token is active and valid"
+    })
+
+@app.route("/api/admin/logout", methods=["POST"])
+def admin_logout():
+    """Logs security audit event and terminates active session."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        valid, payload = auth_service.decode_token(auth_header[7:])
+        if valid:
+            auth_service.log_audit_event("LOGOUT", payload.get("username"), request.remote_addr, "Admin logged out")
+    return jsonify({
+        "success": True,
+        "message": "Signed out successfully from Admin Command Center"
+    })
+
+@app.route("/api/admin/change-password", methods=["POST"])
+@admin_required
+def admin_change_password():
+    """Allows authenticated user to securely update their own password."""
+    from flask import g
+    data = request.get_json() or {}
+    old_pw = data.get("current_password", "").strip()
+    new_pw = data.get("new_password", "").strip()
+    username = g.current_user.get("username")
+
+    if not old_pw or not new_pw:
+        return jsonify({"success": False, "message": "Current and new passwords are required"}), 400
+
+    success, message = auth_service.change_password(username, old_pw, new_pw)
+    if not success:
+        return jsonify({"success": False, "message": message}), 400
+
+    return jsonify({"success": True, "message": message})
 
 @app.route("/api/admin/users", methods=["GET"])
+@admin_required
 def get_admin_users():
-    return jsonify({"users": SYSTEM_USERS, "total": len(SYSTEM_USERS)})
+    """Returns system users from secure database (passwords omitted)."""
+    users = auth_service.get_all_users()
+    return jsonify({"users": users, "total": len(users)})
 
 @app.route("/api/admin/users", methods=["POST"])
+@role_required("Super Admin")
 def add_admin_user():
+    """Creates a new user account with cryptographic password hashing (Super Admin only)."""
     data = request.get_json() or {}
     name = data.get("name", "").strip()
-    username = data.get("username", "").strip().lower()
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip() or "operator123"
     email = data.get("email", "").strip()
     role = data.get("role", "Safety Dispatcher")
-    venue_scope = data.get("venue_scope", "All Venues")
-    
-    if not name or not username:
-        return jsonify({"success": False, "message": "Name and username are required"}), 400
-        
-    # Check duplicate
-    if any(u["username"] == username for u in SYSTEM_USERS):
-        return jsonify({"success": False, "message": f"Username '{username}' already exists"}), 409
-        
-    new_user = {
-        "id": f"u-{len(SYSTEM_USERS) + 1}",
-        "username": username,
-        "name": name,
-        "email": email or f"{username}@flownavigator.org",
-        "role": role,
-        "venue_scope": venue_scope,
-        "status": "Active",
-        "last_active": "Just created",
-        "is_system": False
-    }
-    
-    SYSTEM_USERS.append(new_user)
-    return jsonify({"success": True, "user": new_user, "message": "User created successfully"})
+    venue_scope = data.get("venue_scope", "All Venues & Grounds")
+
+    success, new_user, message = auth_service.create_user(name, username, password, email, role, venue_scope)
+    if not success:
+        return jsonify({"success": False, "message": message}), 400
+
+    return jsonify({"success": True, "user": new_user, "message": message})
 
 @app.route("/api/admin/users/<username>", methods=["DELETE"])
+@role_required("Super Admin")
 def delete_admin_user(username):
-    global SYSTEM_USERS
-    target = next((u for u in SYSTEM_USERS if u["username"] == username), None)
-    if not target:
-        return jsonify({"success": False, "message": "User not found"}), 404
-    if target.get("is_system"):
-        return jsonify({"success": False, "message": "Cannot delete primary Super Admin user"}), 403
-        
-    SYSTEM_USERS = [u for u in SYSTEM_USERS if u["username"] != username]
-    return jsonify({"success": True, "message": f"User '{username}' removed successfully"})
+    """Deletes user account (Super Admin only, root system account protected)."""
+    success, message = auth_service.delete_user(username)
+    if not success:
+        return jsonify({"success": False, "message": message}), 403 if "Super Admin" in message else 404
+    return jsonify({"success": True, "message": message})
+
+@app.route("/api/admin/audit-logs", methods=["GET"])
+@admin_required
+def get_admin_audit_logs():
+    """Retrieves security audit logs of authentication events."""
+    logs = auth_service.get_audit_logs(limit=50)
+    return jsonify({"success": True, "logs": logs, "total": len(logs)})
 
 # ==================== REST API ENDPOINTS ====================
 
@@ -289,13 +302,66 @@ def venue_pathways(venue_id):
     if request.method == "POST":
         data = request.get_json() or {}
         pathways = data.get("pathways", {})
-        db.update_venue(venue_id, {"custom_pathways": pathways})
-        return jsonify({"success": True, "message": "Custom pathways saved successfully", "pathways": pathways})
+        barricades = data.get("barricades", None)
+        facilities = data.get("facilities", None)
+        boundary = data.get("boundary", None)
+        map_rotation = data.get("map_rotation", None)
+        cad_rotation = data.get("cad_rotation", None)
+        
+        update_data = {"custom_pathways": pathways}
+        if barricades is not None:
+            update_data["barricades"] = barricades
+        if facilities is not None:
+            update_data["facilities"] = facilities
+        if boundary is not None:
+            update_data["boundary"] = boundary
+        if map_rotation is not None:
+            update_data["map_rotation"] = map_rotation
+        if cad_rotation is not None:
+            update_data["cad_rotation"] = cad_rotation
+            
+        db.update_venue(venue_id, update_data)
+        return jsonify({
+            "success": True, 
+            "message": "Custom pathways and layout orientation state saved successfully", 
+            "pathways": pathways,
+            "barricades": barricades,
+            "facilities": facilities,
+            "boundary": boundary,
+            "map_rotation": map_rotation,
+            "cad_rotation": cad_rotation
+        })
     else:
         venues = db.get_venues()
         v = next((item for item in venues if item.get("id") == venue_id), None)
         pathways = v.get("custom_pathways", {}) if v else {}
-        return jsonify({"success": True, "pathways": pathways})
+        barricades = v.get("barricades", []) if v else []
+        facilities = v.get("facilities", {}) if v else {}
+        boundary = v.get("boundary", []) if v else []
+        map_rotation = v.get("map_rotation", None) if v else None
+        cad_rotation = v.get("cad_rotation", None) if v else None
+        return jsonify({
+            "success": True, 
+            "pathways": pathways, 
+            "barricades": barricades,
+            "facilities": facilities,
+            "boundary": boundary,
+            "map_rotation": map_rotation,
+            "cad_rotation": cad_rotation
+        })
+
+@app.route("/api/venues/<venue_id>/barricades", methods=["GET", "POST"])
+def venue_barricades(venue_id):
+    if request.method == "POST":
+        data = request.get_json() or {}
+        barricades = data.get("barricades", [])
+        db.update_venue(venue_id, {"barricades": barricades})
+        return jsonify({"success": True, "message": "Barricades saved successfully", "barricades": barricades})
+    else:
+        venues = db.get_venues()
+        v = next((item for item in venues if item.get("id") == venue_id), None)
+        barricades = v.get("barricades", []) if v else []
+        return jsonify({"success": True, "barricades": barricades})
 
 # --- Zones & Live Predictions ---
 @app.route("/api/zones", methods=["GET"])
