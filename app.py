@@ -24,6 +24,7 @@ load_dotenv()
 from database import db
 from ml.predictor import predictor
 from crowdflow_engine import crowdflow_engine
+from auth_service import auth_service, admin_required, role_required
 import uuid
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -38,89 +39,14 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyAOVYRIgupAurZup5y1
 SYSTEM_STATE = {
     "emergency_mode": False,
     "emergency_message": "🚨 EMERGENCY EVACUATION ACTIVE - FOLLOW GREEN ILLUMINATED PATHWAYS TO PARKING & EXITS",
-    "active_venue_id": "palani-gathering",
-    "data_mode": "demo",  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
+    "active_venue_id": "sona-college",
+    "data_mode": "real",  # 'demo' (synthetic simulation) or 'real' (live ESP32 ToF hardware)
     "gate_status": "GATE_A_OPEN_GATE_B_CLOSED",
     "gate_a": "OPEN",
     "gate_b": "CLOSED",
     "gate_crowd": 0,
     "gate_capacity": 10
 }
-
-# --- BACKGROUND LIVE DEMO SIMULATION THREAD ---
-import threading
-import time
-import random
-
-def _bg_demo_simulation_worker():
-    while True:
-        try:
-            time.sleep(3.5)
-            if SYSTEM_STATE.get("data_mode") == "demo" and not SYSTEM_STATE.get("emergency_mode"):
-                if db.demo_db is not None:
-                    sensors = list(db.demo_db.sensors.find({}))
-                    for s in sensors:
-                        sid = s.get("id")
-                        if not sid:
-                            continue
-                        delta_in = random.randint(1, 4)
-                        delta_out = random.randint(1, 3)
-                        p_in = s.get("people_in", 500) + delta_in
-                        p_out = s.get("people_out", 250) + delta_out
-                        curr = max(0, p_in - p_out)
-                        tof_a = random.randint(340, 1150)
-                        tof_b = random.randint(340, 1150)
-                        
-                        db.demo_db.sensors.update_one(
-                            {"id": sid},
-                            {"$set": {
-                                "people_in": p_in,
-                                "people_out": p_out,
-                                "current_count": curr,
-                                "tof_distance_mm_a": tof_a,
-                                "tof_distance_mm_b": tof_b,
-                                "last_ping": datetime.datetime.now().isoformat(),
-                                "status": "ONLINE"
-                            }}
-                        )
-                    
-                    zones = list(db.demo_db.zones.find({}))
-                    for z in zones:
-                        zid = z.get("id")
-                        if not zid:
-                            continue
-                        cap = max(1, z.get("capacity", 800))
-                        old_c = z.get("current_count", 300)
-                        if z.get("status") == "CRITICAL" or z.get("access_restricted"):
-                            new_c = old_c
-                        else:
-                            fluc = random.randint(-4, 6)
-                            new_c = max(10, min(cap, old_c + fluc))
-                        
-                        ratio = new_c / cap
-                        if ratio >= 0.9:
-                            st = "CRITICAL"
-                        elif ratio >= 0.75:
-                            st = "HIGH"
-                        elif ratio >= 0.5:
-                            st = "MODERATE"
-                        else:
-                            st = "SAFE"
-                        
-                        db.demo_db.zones.update_one(
-                            {"id": zid},
-                            {"$set": {
-                                "current_count": new_c,
-                                "status": st,
-                                "entry_rate": random.randint(30, 65),
-                                "exit_rate": random.randint(25, 45)
-                            }}
-                        )
-        except Exception as e:
-            pass
-
-_sim_thread = threading.Thread(target=_bg_demo_simulation_worker, daemon=True)
-_sim_thread.start()
 
 # ==================== CORE FRONTEND ROUTES ====================
 
@@ -132,115 +58,127 @@ def index():
 def kiosk():
     return render_template("index.html")
 
-# ==================== ADMIN AUTHENTICATION ====================
+# ==================== SECURE ADMIN AUTHENTICATION & RBAC ====================
 
 @app.route("/api/admin/login", methods=["POST"])
 def admin_login():
+    """
+    Secure Admin Authentication with:
+    - Scrypt password hash verification
+    - Signed JWT Bearer token generation
+    - Brute-force rate limiting (5 failed attempts -> 5 min lockout)
+    - Security audit logging
+    """
     data = request.get_json() or {}
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
+    client_ip = request.remote_addr or "127.0.0.1"
     
-    if username == "admin" and password == "admin123":
+    if not username or not password:
         return jsonify({
-            "success": True,
-            "role": "admin",
-            "token": "fn_admin_session_token_authenticated",
-            "message": "Authentication successful"
-        })
-# In-memory system user registry (synced with db DAO if available)
-SYSTEM_USERS = [
-    {
-        "id": "u-1",
-        "username": "admin",
-        "name": "System Administrator",
-        "email": "admin@flownavigator.org",
-        "role": "Super Admin",
-        "venue_scope": "All Venues & Grounds",
-        "status": "Active Session",
-        "last_active": "Just now",
-        "is_system": True
-    },
-    {
-        "id": "u-2",
-        "username": "dispatcher_palani",
-        "name": "Palani Operations Control",
-        "email": "palani.control@flownavigator.org",
-        "role": "Safety Dispatcher",
-        "venue_scope": "Palani Pilgrimage Grounds",
-        "status": "Active",
-        "last_active": "10 mins ago",
-        "is_system": False
-    },
-    {
-        "id": "u-3",
-        "username": "chennai_gate",
-        "name": "Nehru Stadium Turnstiles",
-        "email": "chennai.gates@flownavigator.org",
-        "role": "Gate Supervisor",
-        "venue_scope": "Jawaharlal Nehru Stadium",
-        "status": "Active",
-        "last_active": "2 hours ago",
-        "is_system": False
-    },
-    {
-        "id": "u-4",
-        "username": "event_coordinator",
-        "name": "College Event Operations",
-        "email": "events@college.edu",
-        "role": "Event Coordinator",
-        "venue_scope": "Custom Grounds & Halls",
-        "status": "Active",
-        "last_active": "1 day ago",
-        "is_system": False
-    }
-]
+            "success": False,
+            "message": "Both username and password are required"
+        }), 400
+
+    success, user, result = auth_service.authenticate(username, password, client_ip)
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": result
+        }), 401
+
+    return jsonify({
+        "success": True,
+        "role": user.get("role"),
+        "user": user,
+        "token": result,
+        "message": f"Authentication successful. Welcome, {user.get('name', username)}!"
+    })
+
+@app.route("/api/admin/verify", methods=["GET"])
+@admin_required
+def admin_verify_session():
+    """Validates active JWT bearer session and returns authenticated user profile."""
+    from flask import g
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "user": g.current_user,
+        "message": "Session token is active and valid"
+    })
+
+@app.route("/api/admin/logout", methods=["POST"])
+def admin_logout():
+    """Logs security audit event and terminates active session."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        valid, payload = auth_service.decode_token(auth_header[7:])
+        if valid:
+            auth_service.log_audit_event("LOGOUT", payload.get("username"), request.remote_addr, "Admin logged out")
+    return jsonify({
+        "success": True,
+        "message": "Signed out successfully from Admin Command Center"
+    })
+
+@app.route("/api/admin/change-password", methods=["POST"])
+@admin_required
+def admin_change_password():
+    """Allows authenticated user to securely update their own password."""
+    from flask import g
+    data = request.get_json() or {}
+    old_pw = data.get("current_password", "").strip()
+    new_pw = data.get("new_password", "").strip()
+    username = g.current_user.get("username")
+
+    if not old_pw or not new_pw:
+        return jsonify({"success": False, "message": "Current and new passwords are required"}), 400
+
+    success, message = auth_service.change_password(username, old_pw, new_pw)
+    if not success:
+        return jsonify({"success": False, "message": message}), 400
+
+    return jsonify({"success": True, "message": message})
 
 @app.route("/api/admin/users", methods=["GET"])
+@admin_required
 def get_admin_users():
-    return jsonify({"users": SYSTEM_USERS, "total": len(SYSTEM_USERS)})
+    """Returns system users from secure database (passwords omitted)."""
+    users = auth_service.get_all_users()
+    return jsonify({"users": users, "total": len(users)})
 
 @app.route("/api/admin/users", methods=["POST"])
+@role_required("Super Admin")
 def add_admin_user():
+    """Creates a new user account with cryptographic password hashing (Super Admin only)."""
     data = request.get_json() or {}
     name = data.get("name", "").strip()
-    username = data.get("username", "").strip().lower()
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip() or "operator123"
     email = data.get("email", "").strip()
     role = data.get("role", "Safety Dispatcher")
-    venue_scope = data.get("venue_scope", "All Venues")
-    
-    if not name or not username:
-        return jsonify({"success": False, "message": "Name and username are required"}), 400
-        
-    # Check duplicate
-    if any(u["username"] == username for u in SYSTEM_USERS):
-        return jsonify({"success": False, "message": f"Username '{username}' already exists"}), 409
-        
-    new_user = {
-        "id": f"u-{len(SYSTEM_USERS) + 1}",
-        "username": username,
-        "name": name,
-        "email": email or f"{username}@flownavigator.org",
-        "role": role,
-        "venue_scope": venue_scope,
-        "status": "Active",
-        "last_active": "Just created",
-        "is_system": False
-    }
-    
-    SYSTEM_USERS.append(new_user)
-    return jsonify({"success": True, "user": new_user, "message": "User created successfully"})
+    venue_scope = data.get("venue_scope", "All Venues & Grounds")
+
+    success, new_user, message = auth_service.create_user(name, username, password, email, role, venue_scope)
+    if not success:
+        return jsonify({"success": False, "message": message}), 400
+
+    return jsonify({"success": True, "user": new_user, "message": message})
 
 @app.route("/api/admin/users/<username>", methods=["DELETE"])
+@role_required("Super Admin")
 def delete_admin_user(username):
-    global SYSTEM_USERS
-    target = next((u for u in SYSTEM_USERS if u["username"] == username), None)
-    if not target:
-        return jsonify({"success": False, "message": "User not found"}), 404
-    if target.get("is_system"):
-        return jsonify({"success": False, "message": "Cannot delete primary Super Admin user"}), 403
-        
-    SYSTEM_USERS = [u for u in SYSTEM_USERS if u["username"] != username]
-    return jsonify({"success": True, "message": f"User '{username}' removed successfully"})
+    """Deletes user account (Super Admin only, root system account protected)."""
+    success, message = auth_service.delete_user(username)
+    if not success:
+        return jsonify({"success": False, "message": message}), 403 if "Super Admin" in message else 404
+    return jsonify({"success": True, "message": message})
+
+@app.route("/api/admin/audit-logs", methods=["GET"])
+@admin_required
+def get_admin_audit_logs():
+    """Retrieves security audit logs of authentication events."""
+    logs = auth_service.get_audit_logs(limit=50)
+    return jsonify({"success": True, "logs": logs, "total": len(logs)})
 
 # ==================== REST API ENDPOINTS ====================
 
@@ -342,7 +280,7 @@ def single_venue(venue_id):
     elif request.method == "PUT":
         data = request.get_json() or {}
         update_fields = {}
-        for k in ["name", "city", "capacity", "category", "type", "area", "length", "width", "gates", "lat", "lng"]:
+        for k in ["name", "city", "capacity", "category", "type", "area", "length", "width", "gates", "lat", "lng", "custom_pathways"]:
             if k in data:
                 update_fields[k] = data[k]
         if "capacity" in update_fields:
@@ -359,13 +297,79 @@ def single_venue(venue_id):
         zones = db.get_zones(venue_id)
         return jsonify({"success": True, "venue": v, "zones": zones})
 
+@app.route("/api/venues/<venue_id>/pathways", methods=["GET", "POST"])
+def venue_pathways(venue_id):
+    if request.method == "POST":
+        data = request.get_json() or {}
+        pathways = data.get("pathways", {})
+        barricades = data.get("barricades", None)
+        facilities = data.get("facilities", None)
+        boundary = data.get("boundary", None)
+        map_rotation = data.get("map_rotation", None)
+        cad_rotation = data.get("cad_rotation", None)
+        
+        update_data = {"custom_pathways": pathways}
+        if barricades is not None:
+            update_data["barricades"] = barricades
+        if facilities is not None:
+            update_data["facilities"] = facilities
+        if boundary is not None:
+            update_data["boundary"] = boundary
+        if map_rotation is not None:
+            update_data["map_rotation"] = map_rotation
+        if cad_rotation is not None:
+            update_data["cad_rotation"] = cad_rotation
+            
+        db.update_venue(venue_id, update_data)
+        return jsonify({
+            "success": True, 
+            "message": "Custom pathways and layout orientation state saved successfully", 
+            "pathways": pathways,
+            "barricades": barricades,
+            "facilities": facilities,
+            "boundary": boundary,
+            "map_rotation": map_rotation,
+            "cad_rotation": cad_rotation
+        })
+    else:
+        venues = db.get_venues()
+        v = next((item for item in venues if item.get("id") == venue_id), None)
+        pathways = v.get("custom_pathways", {}) if v else {}
+        barricades = v.get("barricades", []) if v else []
+        facilities = v.get("facilities", {}) if v else {}
+        boundary = v.get("boundary", []) if v else []
+        map_rotation = v.get("map_rotation", None) if v else None
+        cad_rotation = v.get("cad_rotation", None) if v else None
+        return jsonify({
+            "success": True, 
+            "pathways": pathways, 
+            "barricades": barricades,
+            "facilities": facilities,
+            "boundary": boundary,
+            "map_rotation": map_rotation,
+            "cad_rotation": cad_rotation
+        })
+
+@app.route("/api/venues/<venue_id>/barricades", methods=["GET", "POST"])
+def venue_barricades(venue_id):
+    if request.method == "POST":
+        data = request.get_json() or {}
+        barricades = data.get("barricades", [])
+        db.update_venue(venue_id, {"barricades": barricades})
+        return jsonify({"success": True, "message": "Barricades saved successfully", "barricades": barricades})
+    else:
+        venues = db.get_venues()
+        v = next((item for item in venues if item.get("id") == venue_id), None)
+        barricades = v.get("barricades", []) if v else []
+        return jsonify({"success": True, "barricades": barricades})
+
 # --- Zones & Live Predictions ---
 @app.route("/api/zones", methods=["GET"])
 def get_zones():
     venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
     zones = db.get_zones(venue_id)
     
-    # If no zones found and venue is a custom venue, create dynamic mock zones on the fly
+    # If no zones found and venue is a custom venue, initialize real zone records
     if not zones and str(venue_id).startswith("custom-"):
         # Check if venue exists in db
         existing_venues = db.get_venues()
@@ -373,6 +377,8 @@ def get_zones():
         cap = v_match.get("capacity", 5000) if v_match else 5000
         z_count = v_match.get("zones_count", 5) if v_match else 5
         per_zone_cap = max(50, round(cap / z_count))
+        v_lat = float(v_match.get("lat", 11.677193)) if v_match else 11.6811
+        v_lng = float(v_match.get("lng", 78.123532)) if v_match else 78.1368
         
         default_names = [
             "Main Entry & Ticket Gate", "Central Field & Promenade", "North Stand & Egress Artery",
@@ -385,23 +391,22 @@ def get_zones():
             letter = chr(65 + i)
             zid = f"zone-{letter.lower()}-{venue_id}"
             zname = f"Zone {letter}: {default_names[i] if i < len(default_names) else f'Section {letter}'}"
-            cur_count = int(per_zone_cap * (0.35 + (i * 0.08) % 0.45))
             dynamic_zones.append({
                 "id": zid,
                 "code": f"ZONE {letter}",
                 "name": zname,
                 "venue_id": venue_id,
                 "capacity": per_zone_cap,
-                "current_count": cur_count,
-                "entry_rate": 32 + (i * 4) % 20,
-                "exit_rate": 28 + (i * 3) % 18,
-                "status": "SAFE" if cur_count < per_zone_cap * 0.65 else ("MODERATE" if cur_count < per_zone_cap * 0.85 else "HIGH"),
+                "current_count": 0,
+                "entry_rate": 0,
+                "exit_rate": 0,
+                "status": "SAFE",
                 "access_restricted": False,
                 "is_evacuation_path": (i % 2 == 1),
-                "bottleneck_proximity": 0.25 + (i * 0.1) % 0.5,
-                "description": f"Monitored live zone {letter}.",
-                "lat": 11.0168 + (i * 0.001),
-                "lng": 76.9558 + (i * 0.001)
+                "bottleneck_proximity": round(0.15 + (i * 0.1) % 0.6, 2),
+                "description": f"Live hardware monitored zone {letter}.",
+                "lat": v_lat + (i * 0.0005),
+                "lng": v_lng + (i * 0.0005)
             })
         for z in dynamic_zones:
             db.db.zones.update_one({"id": z["id"]}, {"$set": z}, upsert=True)
@@ -445,33 +450,17 @@ def get_routes():
 
 @app.route("/api/system/mode", methods=["GET", "POST"])
 def system_mode():
-    if request.method == "POST":
-        data = request.get_json() or {}
-        mode = data.get("mode", "demo").lower()
-        if mode in ["demo", "real"]:
-            SYSTEM_STATE["data_mode"] = mode
-            db.set_mode(mode)
-            if data.get("clear_real", False):
-                db.clear_real_data()
-            return jsonify({
-                "success": True, 
-                "data_mode": SYSTEM_STATE["data_mode"], 
-                "database_name": db.db.name if db.db is not None else "",
-                "message": f"System switched to {mode.upper()} mode using database '{db.db.name}'"
-            })
-        return jsonify({"error": "Invalid mode. Use 'demo' or 'real'"}), 400
     return jsonify({
-        "data_mode": SYSTEM_STATE["data_mode"],
+        "data_mode": "real",
         "database_name": db.db.name if db.db is not None else "",
         "database_status": db.get_status()
     })
 
 @app.route("/api/system/reset_real_db", methods=["POST"])
 def reset_real_db():
-    db.clear_real_data()
     return jsonify({
         "success": True,
-        "message": "Real database successfully purged of all demo data. Ready for live hardware integration."
+        "message": "Real database active. Ready for live hardware integration."
     })
 
 @app.route("/api/system/network_ip", methods=["GET"])
@@ -536,13 +525,9 @@ def delete_esp32_sensor(sensor_id):
 # --- Sensors (ESP32 + VL53L0X ToF) ---
 @app.route("/api/sensors", methods=["GET"])
 def get_sensors():
-    mode = SYSTEM_STATE.get("data_mode", "demo")
     venue_id = request.args.get("venue_id", SYSTEM_STATE["active_venue_id"])
     sensors = db.get_sensors(venue_id)
-    if mode == "real":
-        # Revoke all demo synthetic sensors in Real mode
-        sensors = [s for s in sensors if not s.get("is_demo", False) and not s.get("id", "").startswith("SENSOR-ESP32-00")]
-    return jsonify({"sensors": sensors, "data_mode": mode, "venue_id": venue_id})
+    return jsonify({"sensors": sensors, "data_mode": "real", "venue_id": venue_id})
 
 @app.route("/api/crowd", methods=["POST"])
 def receive_crowd():
@@ -664,10 +649,17 @@ def process_sensor_telemetry(data):
 
         db.update_zone_count(zone_id, current_count, status=st)
 
-    # Update dynamic routing for Sona College based on gate closure
+    # Sync venue current total crowd
+    if db.db is not None:
+        db.db.venues.update_one(
+            {"id": venue_id},
+            {"$set": {"current_total_crowd": current_count}}
+        )
+
+    # Update dynamic routing for Sona College based on gate closure (support all matching route IDs)
     if is_closed:
-        db.db.routes.update_one(
-            {"id": "route-sona-direct"},
+        db.db.routes.update_many(
+            {"id": {"$in": ["route-sona-direct", "route-sona-main"]}},
             {"$set": {
                 "status": "CRITICAL",
                 "tag": "CLOSED",
@@ -676,8 +668,8 @@ def process_sensor_telemetry(data):
                 "explainable_reason": "Gate A CLOSED: Venue A capacity reached (10/10). Automatic servo barrier locked. Divert to Gate B."
             }}
         )
-        db.db.routes.update_one(
-            {"id": "route-sona-venue-b"},
+        db.db.routes.update_many(
+            {"id": {"$in": ["route-sona-venue-b", "route-sona-diversion"]}},
             {"$set": {
                 "status": "SAFE",
                 "tag": "RECOMMENDED",
@@ -686,22 +678,23 @@ def process_sensor_telemetry(data):
             }}
         )
     else:
-        db.db.routes.update_one(
-            {"id": "route-sona-direct"},
+        occ_pct = min(95, int((current_count / max(1, capacity_limit)) * 100))
+        db.db.routes.update_many(
+            {"id": {"$in": ["route-sona-direct", "route-sona-main"]}},
             {"$set": {
                 "status": "SAFE",
                 "tag": "RECOMMENDED",
-                "color": "#3b82f6",
-                "occupancy_percentage": min(95, int((current_count / max(1, capacity_limit)) * 100)),
+                "color": "#10b981",
+                "occupancy_percentage": occ_pct,
                 "explainable_reason": "Gate A OPEN: Normal entry permitted. Monitored by ESP32 VL53L0X sensors."
             }}
         )
-        db.db.routes.update_one(
-            {"id": "route-sona-venue-b"},
+        db.db.routes.update_many(
+            {"id": {"$in": ["route-sona-venue-b", "route-sona-diversion"]}},
             {"$set": {
                 "status": "SAFE",
                 "tag": "ALTERNATIVE",
-                "color": "#10b981",
+                "color": "#0284c7",
                 "explainable_reason": "Gate B in standby. Ready for automatic diversion when Gate A reaches capacity."
             }}
         )
@@ -751,9 +744,9 @@ def simulate_sensor_tick():
     sensor = db.get_sensor(sensor_id)
     if not sensor:
         sensor = {
-            "people_in": 500,
-            "people_out": 250,
-            "current_count": 250,
+            "people_in": 0,
+            "people_out": 0,
+            "current_count": 0,
             "zone_id": "zone-a"
         }
 
@@ -856,6 +849,9 @@ def toggle_emergency():
     SYSTEM_STATE["emergency_mode"] = data.get("active", not SYSTEM_STATE["emergency_mode"])
     
     if SYSTEM_STATE["emergency_mode"]:
+        SYSTEM_STATE["gate_status"] = "EMERGENCY_EVACUATION_ALL_GATES_OPEN"
+        SYSTEM_STATE["gate_a"] = "OPEN"
+        SYSTEM_STATE["gate_b"] = "OPEN"
         new_alert = {
             "id": f"alert-emergency-{int(datetime.datetime.now().timestamp())}",
             "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
@@ -864,6 +860,20 @@ def toggle_emergency():
             "severity": "emergency",
             "read": False,
             "resolved": False
+        }
+        db.add_alert(new_alert)
+    else:
+        SYSTEM_STATE["gate_status"] = "GATE_A_OPEN_GATE_B_CLOSED"
+        SYSTEM_STATE["gate_a"] = "OPEN"
+        SYSTEM_STATE["gate_b"] = "CLOSED"
+        new_alert = {
+            "id": f"alert-emergency-clear-{int(datetime.datetime.now().timestamp())}",
+            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+            "title": "✅ EMERGENCY PROTOCOL DEACTIVATED",
+            "message": "Evacuation cleared by Ground Command. Normal gate operations and standard visitor pathways restored.",
+            "severity": "info",
+            "read": False,
+            "resolved": True
         }
         db.add_alert(new_alert)
 
@@ -934,8 +944,8 @@ def crowdflow_save_project():
         project["saved_at"] = datetime.datetime.now().isoformat()
         
         # Save to database
-        if db.demo_db is not None:
-            db.demo_db.crowdflow_projects.update_one(
+        if db.db is not None:
+            db.db.crowdflow_projects.update_one(
                 {"project_id": project_id},
                 {"$set": project},
                 upsert=True
@@ -998,8 +1008,8 @@ def get_venue_layout(venue_id):
 def crowdflow_get_projects():
     try:
         projects = []
-        if db.demo_db is not None:
-            for p in db.demo_db.crowdflow_projects.find({}, {"_id": 0}):
+        if db.db is not None:
+            for p in db.db.crowdflow_projects.find({}, {"_id": 0}):
                 projects.append(p)
         return jsonify({"success": True, "projects": projects, "total": len(projects)})
     except Exception as e:
@@ -1008,8 +1018,8 @@ def crowdflow_get_projects():
 @app.route("/api/crowdflow/projects/<project_id>", methods=["GET"])
 def crowdflow_get_project(project_id):
     try:
-        if db.demo_db is not None:
-            project = db.demo_db.crowdflow_projects.find_one({"project_id": project_id}, {"_id": 0})
+        if db.db is not None:
+            project = db.db.crowdflow_projects.find_one({"project_id": project_id}, {"_id": 0})
             if project:
                 return jsonify({"success": True, "project": project})
         return jsonify({"success": False, "error": "Project not found"}), 404
@@ -1019,8 +1029,8 @@ def crowdflow_get_project(project_id):
 @app.route("/api/crowdflow/projects/<project_id>", methods=["DELETE"])
 def crowdflow_delete_project(project_id):
     try:
-        if db.demo_db is not None:
-            res = db.demo_db.crowdflow_projects.delete_one({"project_id": project_id})
+        if db.db is not None:
+            res = db.db.crowdflow_projects.delete_one({"project_id": project_id})
             if res.deleted_count > 0:
                 return jsonify({"success": True, "message": "Project deleted successfully"})
         return jsonify({"success": False, "error": "Project not found"}), 404

@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>FlowNavigator | Intelligent Crowd Flow Management & Directional Guidance</title>
   <meta name="description" content="Intelligent crowd flow management, real-time safety monitoring, predictive queue forecasting, and directional routing.">
   
@@ -18,8 +21,11 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
+  <!-- Official Google Maps JavaScript API (Top-View Ground Planning Engine) -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&libraries=places,geometry" async defer></script>
+  
   <!-- Core Design System CSS -->
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=2.2">
 </head>
 <body>
 
@@ -27,7 +33,7 @@
   <div id="emergencyBanner" class="emergency-banner">
     <i data-lucide="flame" style="width:20px;height:20px;"></i>
     <span id="emergencyBannerText">🚨 CRITICAL EVACUATION PROTOCOL ACTIVE - MOVE CALMLY TOWARDS GREEN MARKED EXITS</span>
-    <button id="clearEmergencyBtn" class="btn btn-sm btn-outline" style="background:#fff;color:#dc2626;font-weight:800;margin-left:1rem;">
+    <button id="clearEmergencyBtn" class="btn btn-sm btn-outline" style="background:#fff;color:#dc2626;font-weight:800;margin-left:1rem;display:none;">
       Clear Emergency
     </button>
   </div>
@@ -36,103 +42,94 @@
   <header class="navbar">
     <div class="container nav-container">
       
-      <!-- Brand & Title -->
-      <div class="nav-brand" id="brandHomeBtn">
-        <div class="brand-icon">
-          <i data-lucide="compass"></i>
-        </div>
-        <div>
-          <div class="brand-title">
-            <span data-i18n="brand.title">FLOW NAVIGATOR</span>
-            <span class="brand-badge">LIVE OPERATIONS</span>
+      <!-- Primary Nav Row (Brand, Role Navigation Tabs, Global Actions) -->
+      <div class="nav-top-row">
+        <!-- Brand & Title -->
+        <div class="nav-brand" id="brandHomeBtn">
+          <div class="brand-icon">
+            <i data-lucide="compass"></i>
           </div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;" data-i18n="brand.subtitle">
-            Autonomous Crowd Telemetry & Dynamic Venue Routing
+          <div>
+            <div class="brand-title">
+              <span data-i18n="brand.title">FLOW NAVIGATOR</span>
+              <span class="brand-badge">LIVE OPERATIONS</span>
+            </div>
+            <div class="brand-subtitle" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;" data-i18n="brand.subtitle">
+              Autonomous Crowd Telemetry & Dynamic Venue Routing
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Venue Selector Dropdown -->
-      <div class="venue-select-box">
-        <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
-        <select id="venueSelect" class="venue-select">
-          <option value="palani-gathering">Palani Pilgrimage Grounds (Tamil Nadu)</option>
-          <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
-          <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
-          <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
-          <option value="sona-college">Sona College of Technology (Salem)</option>
-        </select>
-      </div>
-      <!-- CrowdFlow AI Direct Launcher Button -->
-      <button id="openCrowdFlowDirectBtn" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;" title="Open CrowdFlow AI Ground Planning System">
-        <i data-lucide="compass" style="width:15px;height:15px;"></i>
-        <span>🧭 CrowdFlow AI Planner</span>
-      </button>
-      <!-- Add Custom Venue Button -->
-      <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;" title="Add Custom Ground or Venue">
-        <i data-lucide="plus-circle" style="width:15px;height:15px;"></i>
-        <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
-      </button>
-
-      <!-- DATA MODE SWITCHER (DEMO SIMULATION VS REAL ESP32 IOT LIVE) -->
-      <div id="dataModeSwitcher" class="data-mode-toggle" title="Switch between Demo Simulation and Real ESP32 IoT Hardware Telemetry">
-        <button id="modeDemoBtn" class="mode-btn active" data-mode="demo">
-          <i data-lucide="sparkles" style="width:13px;height:13px;"></i>
-          <span data-i18n="nav.mode_demo">Demo Data Mode</span>
-        </button>
-        <button id="modeRealBtn" class="mode-btn" data-mode="real">
-          <i data-lucide="radio" style="width:13px;height:13px;"></i>
-          <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
-        </button>
-      </div>
-
-      <!-- Role Switcher & Controls -->
-      <div class="nav-actions">
-        <!-- Language Switcher (English / Tamil) -->
-        <div class="lang-switcher-box" title="Select Language / மொழியைத் தேர்ந்தெடுக்கவும்">
-          <i data-lucide="globe" style="width:14px;height:14px;color:#2563eb;"></i>
-          <select id="langSelect" class="lang-select">
-            <option value="en">English (EN)</option>
-            <option value="ta">தமிழ் (Tamil)</option>
-          </select>
-        </div>
-
-        <!-- Senior Citizen Accessibility Toggle -->
-        <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
-          <i data-lucide="accessibility"></i>
-        </button>
-
-        <!-- Role Selector Buttons -->
+        <!-- Role Selector Buttons (Desktop: Center/Tabs | Mobile: Full-width Segmented Bar) -->
         <div class="role-switcher">
-          <button id="roleLandingBtn" class="role-btn active" data-role="landing">
-            <i data-lucide="home" style="width:15px;height:15px;"></i>
+          <button id="roleLandingBtn" class="role-btn active" data-role="landing" title="Platform Overview & Home">
+            <i data-lucide="home" style="width:14px;height:14px;"></i>
             <span>Home</span>
           </button>
-          <button id="roleVisitorBtn" class="role-btn" data-role="visitor">
-            <i data-lucide="user" style="width:15px;height:15px;"></i>
+          <button id="roleVisitorBtn" class="role-btn" data-role="visitor" title="Visitor Route & Turn-by-Turn Guide">
+            <i data-lucide="user" style="width:14px;height:14px;"></i>
             <span data-i18n="nav.role_visitor">Visitor View</span>
           </button>
-          <button id="roleAdminBtn" class="role-btn" data-role="admin">
-            <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
-            <span data-i18n="nav.role_admin">Admin Control</span>
+          <button id="roleAdminBtn" class="role-btn" data-role="admin" title="Admin Operations & Command Center">
+            <i data-lucide="shield" style="width:14px;height:14px;"></i>
+            <span data-i18n="nav.role_admin">Admin Center</span>
           </button>
-          <button id="roleKioskBtn" class="role-btn" data-role="kiosk">
-            <i data-lucide="tv" style="width:15px;height:15px;"></i>
+          <button id="roleKioskBtn" class="role-btn" data-role="kiosk" title="Public Gate Kiosk Board">
+            <i data-lucide="tv" style="width:14px;height:14px;"></i>
             <span data-i18n="nav.role_kiosk">Public Kiosk</span>
           </button>
         </div>
 
-        <!-- Admin Sign Out Button (Visible when logged in as Admin) -->
-        <button id="navSignOutBtn" class="btn btn-outline btn-sm" style="display:none; align-items:center; gap:0.35rem; color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700;">
-          <i data-lucide="log-out" style="width:14px;height:14px;"></i>
-          <span data-i18n="nav.sign_out">Sign Out</span>
-        </button>
+        <!-- Global Actions (Language, Senior Citizen Accessibility, SOS Evacuation) -->
+        <div class="nav-actions">
+          <div class="lang-switcher-box" title="Select Language / மொழியை தேர்ந்தெடுக்கவும்">
+            <i data-lucide="globe" style="width:14px;height:14px;color:#2563eb;"></i>
+            <select id="langSelect" class="lang-select">
+              <option value="en">English (EN)</option>
+              <option value="ta">தமிழ் (Tamil)</option>
+            </select>
+          </div>
 
-        <!-- Emergency SOS Button -->
-        <button id="sosBtn" class="btn-sos">
-          <i data-lucide="alert-triangle" style="width:15px;height:15px;"></i>
-          <span>SOS</span>
-        </button>
+          <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
+            <i data-lucide="accessibility" style="width:18px;height:18px;"></i>
+          </button>
+
+          <button id="sosBtn" class="btn-sos" style="display:none;" title="Broadcast Emergency Evacuation Protocol (Admin Only)">
+            <i data-lucide="alert-triangle" style="width:15px;height:15px;"></i>
+            <span>SOS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Secondary Sub-Bar (Active Venue Selector & Direct Operation Launchers) -->
+      <div class="nav-sub-row">
+        <!-- Venue Selector Dropdown -->
+        <div class="venue-select-box">
+          <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
+          <select id="venueSelect" class="venue-select">
+            <option value="sona-college" selected>Sona College of Technology (Campus Ground)</option>
+            <option value="palani-gathering">Sona College of Technology (Campus Ground) (Tamil Nadu)</option>
+            <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
+            <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
+            <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
+          </select>
+        </div>
+
+        <!-- Quick Launchers Row -->
+        <div class="nav-quick-actions">
+          <button id="openCrowdFlowDirectBtn" class="btn btn-outline btn-sm" title="Open CrowdFlow AI Ground Planning System">
+            <i data-lucide="compass" style="width:14px;height:14px;"></i>
+            <span>🧭 CrowdFlow AI Planner</span>
+          </button>
+          <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" title="Add Custom Ground or Venue">
+            <i data-lucide="plus-circle" style="width:14px;height:14px;"></i>
+            <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
+          </button>
+          <div id="dataModeIndicator" class="live-hardware-badge" title="Live ESP32 IoT Hardware Telemetry Active">
+            <i data-lucide="radio" style="width:13px;height:13px;color:#059669;"></i>
+            <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -158,10 +155,6 @@
 
         <!-- Live System Metric Pills -->
         <div style="display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap; margin-bottom:2.5rem;">
-          <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.6rem 1.25rem; border-radius:30px; display:flex; align-items:center; gap:0.5rem; box-shadow:var(--shadow-sm); font-size:0.82rem; font-weight:700;">
-            <span style="width:8px;height:8px;border-radius:50%;background:#10b981;"></span>
-            <span>ML Model Accuracy: <strong style="color:#2563eb;">91.6%</strong></span>
-          </div>
           <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.6rem 1.25rem; border-radius:30px; display:flex; align-items:center; gap:0.5rem; box-shadow:var(--shadow-sm); font-size:0.82rem; font-weight:700;">
             <i data-lucide="map-pin" style="width:14px;height:14px;color:#0284c7;"></i>
             <span>Active Venues: <strong style="color:#0284c7;">4 Standard + Custom Grounds</strong></span>
@@ -214,7 +207,7 @@
             <!-- Admin Credentials Hint Box -->
             <div style="background:#ffffff; border:1px dashed #3b82f6; border-radius:8px; padding:0.75rem 1rem; margin-bottom:1.5rem; font-size:0.8rem; color:#1e40af;">
               <div style="font-weight:800; margin-bottom:0.2rem; display:flex; align-items:center; gap:0.4rem;">
-                <i data-lucide="key" style="width:14px;height:14px;"></i> Demo Admin Login Credentials:
+                <i data-lucide="key" style="width:14px;height:14px;"></i> Default Admin Login Credentials:
               </div>
               <div style="font-family:monospace; font-size:0.85rem; font-weight:700;">
                 Username: <strong style="color:#1d4ed8;">admin</strong> &nbsp;|&nbsp; Password: <strong style="color:#1d4ed8;">admin123</strong>
@@ -348,7 +341,7 @@
           <!-- Circle Meter -->
           <div>
             <div id="citizenMeterCircle" class="crowd-meter-circle safe">
-              <span id="citizenMeterValue" class="crowd-meter-val">48%</span>
+              <span id="citizenMeterValue" class="crowd-meter-val">0%</span>
               <span id="citizenMeterStatus" class="crowd-meter-label">Safe Flow</span>
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted);">Overall Venue Capacity Density</p>
@@ -359,9 +352,7 @@
             <div style="font-size:0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:700; margin-bottom:0.35rem;">
               Total People in Venue
             </div>
-            <div id="citizenTotalPeople" style="font-size:3.2rem; font-weight:900; font-family:var(--font-display); color:var(--accent-cyan); line-height:1;">
-              12,450
-            </div>
+            <div id="citizenTotalPeople" style="font-size:3.2rem; font-weight:900; font-family:var(--font-display); color:var(--accent-cyan); line-height:1;">0</div>
             <div style="font-size:0.85rem; color:var(--color-safe); margin-top:0.5rem; display:flex; align-items:center; justify-content:center; gap:0.35rem;">
               <i data-lucide="arrow-down-right" style="width:16px;height:16px;"></i> Flow is moving normally
             </div>
@@ -444,10 +435,22 @@
                 <span class="badge badge-moderate">● Route B: Moderate (15m)</span>
                 <span class="badge badge-critical">● Route A: Heavy Congestion (28m)</span>
               </div>
+              <!-- Visitor: read-only pathway filter pills -->
+              <div class="map-pathway-filter-bar" style="display:flex; align-items:center; gap:0.3rem; flex-wrap:wrap;">
+                <span style="font-size:0.68rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">Pathways:</span>
+                <button type="button" class="pathway-toggle-btn active" data-route="ALL" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer;" title="Show all venue pathways">🛣️ All</button>
+                <button type="button" class="pathway-toggle-btn" data-route="C" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #10b981; color:#047857; background:#ecfdf5; cursor:pointer;" title="Highlight Recommended Route C">🟢 Route C</button>
+                <button type="button" class="pathway-toggle-btn" data-route="B" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #f59e0b; color:#b45309; background:#fffbeb; cursor:pointer;" title="Highlight Route B">🟡 Route B</button>
+                <button type="button" class="pathway-toggle-btn" data-route="A" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #ef4444; color:#b91c1c; background:#fef2f2; cursor:pointer;" title="Highlight Route A">🔴 Route A</button>
+                <button type="button" class="pathway-toggle-btn" data-route="EMERGENCY" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #06b6d4; color:#0e7490; background:#ecfeff; cursor:pointer;" title="Highlight Emergency Evacuation Egress">🛡️ Egress</button>
+                <!-- Pathway editing is Admin-only — use Venue Map & Routing admin tab -->
+              </div>
               <div class="map-view-toggle-bar">
                 <button type="button" class="map-view-toggle-btn active" data-map-target="googleMapDiv" data-view-mode="satellite">🛰️ Top View</button>
                 <button type="button" class="map-view-toggle-btn" data-map-target="googleMapDiv" data-view-mode="hybrid">🗺️ Hybrid</button>
                 <button type="button" class="map-view-toggle-btn" data-map-target="googleMapDiv" data-view-mode="roadmap">📐 Map</button>
+                <button type="button" id="visitorColorBoostToggleBtn" class="btn btn-sm btn-outline active" style="font-size:0.7rem; padding:0.2rem 0.5rem; border-radius:9999px; background:#eff6ff; color:#1d4ed8; font-weight:700; border-color:#93c5fd;" title="Toggle High-Vibrancy Satellite Colors">🌈 Vivid Colors</button>
+                <button type="button" id="visitorMapOrientBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; background:#f8fafc; color:#0f172a; font-weight:700; border:1px solid #cbd5e1; cursor:pointer;" title="Orient Satellite Map with CAD Blueprint Direction">🔄 CAD Orientation</button>
               </div>
               <button id="openMapsKeyModalBtn" class="btn btn-outline btn-sm" style="display:none;">
                 <i data-lucide="key" style="width:13px;height:13px;"></i> Maps API Key
@@ -463,42 +466,138 @@
               <button id="visitorLocateMeBtn" type="button" class="btn btn-outline btn-sm" title="Use current GPS position" style="white-space:nowrap; padding:0.4rem 0.65rem;">
                 <i data-lucide="crosshair" style="width:13px;height:13px;"></i> My Location
               </button>
-            </div>
+                    <button id="visitorToggleGpsBtn" type="button" class="btn btn-outline btn-sm toggle-gps-bar-btn" title="Enter precise Latitude & Longitude" style="white-space:nowrap; padding:0.4rem 0.65rem; border-color:#93c5fd; color:#1d4ed8; background:#eff6ff;">
+                      <i data-lucide="map-pin" style="width:13px;height:13px;"></i> 📍 GPS Lat/Lng
+                    </button>
+                  </div>
+                  <!-- Exact GPS Latitude / Longitude Input Bar -->
+                  <div id="visitorGpsBar" class="gps-coords-toolbar" style="display:none; margin-top:0.5rem; padding:0.45rem 0.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <span style="font-size:0.7rem; font-weight:800; color:#1e40af; display:inline-flex; align-items:center; gap:0.25rem;">
+                      <i data-lucide="crosshair" style="width:12px;height:12px;"></i> EXACT GPS:
+                    </span>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lat:</label>
+                      <input type="number" step="0.000001" class="gps-lat-input" placeholder="11.677193" value="11.677193" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lng:</label>
+                      <input type="number" step="0.000001" class="gps-lng-input" placeholder="78.123532" value="78.123532" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary apply-gps-btn" style="font-size:0.72rem; padding:0.3rem 0.75rem; font-weight:800;">
+                      🎯 Set Map Accurately
+                    </button>
+                  </div>
             <div class="ground-preset-pills" id="visitorPresetPills">
               <span style="font-size:0.73rem; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:0.25rem;">
                 <i data-lucide="sparkles" style="width:12px;height:12px;color:#f59e0b;"></i> Presets:
               </span>
-              <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.6811" data-lng="78.1368" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
+              <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.677193" data-lng="78.123532" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
               <button type="button" class="ground-preset-pill" data-vid="chennai-stadium" data-lat="13.0827" data-lng="80.2707" data-name="Jawaharlal Nehru Stadium (Chennai)">🏟️ Nehru Stadium</button>
               <button type="button" class="ground-preset-pill" data-vid="chepauk" data-lat="13.0628" data-lng="80.2795" data-name="M. A. Chidambaram Stadium (Chepauk)">🏟️ Chepauk Stadium</button>
               <button type="button" class="ground-preset-pill" data-vid="wankhede" data-lat="18.9389" data-lng="72.8258" data-name="Wankhede Stadium (Mumbai)">🏟️ Wankhede Stadium</button>
               <button type="button" class="ground-preset-pill" data-vid="modi-stadium" data-lat="23.0917" data-lng="72.5973" data-name="Narendra Modi Stadium (Ahmedabad)">🏟️ Modi Stadium</button>
               <button type="button" class="ground-preset-pill" data-vid="eden-gardens" data-lat="22.5646" data-lng="88.3433" data-name="Eden Gardens (Kolkata)">🏟️ Eden Gardens</button>
-              <button type="button" class="ground-preset-pill" data-vid="palani-gathering" data-lat="10.4534" data-lng="77.5186" data-name="Palani Pilgrimage Grounds">🛕 Palani Grounds</button>
+              <button type="button" class="ground-preset-pill" data-vid="palani-gathering" data-lat="10.4534" data-lng="77.5186" data-name="Sona College of Technology (Campus Ground)">🛕 Palani Grounds</button>
+            </div>
+
+            <!-- Visitor Live Standing Spot Selector Toolbar -->
+            <div class="visitor-standing-toolbar" style="margin-top:0.6rem; padding:0.5rem 0.85rem; background:#f0fdf4; border:1.5px solid #86efac; border-radius:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display:flex; align-items:center; gap:0.4rem;">
+                <span class="standing-live-dot"></span>
+                <span style="font-size:0.75rem; font-weight:800; color:#166534; display:inline-flex; align-items:center; gap:0.25rem;">
+                  📍 WHERE ARE YOU STANDING?
+                </span>
+                <span style="font-size:0.68rem; color:#15803d; font-weight:600;">(Tap anywhere on map or choose spot)</span>
+              </div>
+              <div class="standing-spot-pills" style="display:flex; gap:0.35rem; flex-wrap:wrap; align-items:center;">
+                <button type="button" id="standGpsBtn" class="btn btn-sm standing-spot-btn" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#dcfce7; color:#166534; border:1px solid #86efac; cursor:pointer;" title="Detect live GPS coordinates and mark position">
+                  📡 My Live GPS
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn active" data-spot="gate-b" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#fef3c7; color:#92400e; border:1px solid #fde68a; cursor:pointer;" title="Place standing marker at Gate B Concourse">
+                  🟡 Gate B Concourse
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="gate-a" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; cursor:pointer;" title="Place standing marker at Gate A Entrance">
+                  🔴 Gate A Entrance
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="gate-c" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; cursor:pointer;" title="Place standing marker at Gate C Express">
+                  🟢 Gate C Express
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="pen-1" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc; cursor:pointer;" title="Place standing marker inside VIP Pen 1">
+                  🚧 Pen 1 (VIP)
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="pen-4" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; cursor:pointer;" title="Place standing marker in Pen 4">
+                  🚧 Pen 4 (South)
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="stage" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#eff6ff; color:#1e40af; border:1px solid #93c5fd; cursor:pointer;" title="Place standing marker near Main Stage">
+                  🏟️ Near Stage
+                </button>
+              </div>
+            </div>
+
+            <!-- Visitor Live Standing Guidance Panel (PLACED OUTSIDE MAP) -->
+            <div id="visitorStandingInfoCard" class="visitor-standing-guidance-card" style="margin-top:0.6rem; padding:0.65rem 0.9rem; background:#ffffff; border:1.5px solid #3b82f6; border-radius:10px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.65rem; box-shadow:0 2px 8px rgba(59,130,246,0.1);">
+              <!-- Spot Indicator -->
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <div style="display:inline-flex; align-items:center; gap:0.35rem; background:#eff6ff; border:1px solid #bfdbfe; padding:0.25rem 0.65rem; border-radius:9999px;">
+                  <span class="visitor-standing-pulse-mini"></span>
+                  <span style="font-size:0.75rem; font-weight:900; color:#1e40af; letter-spacing:0.3px;">YOU ARE HERE:</span>
+                </div>
+                <span id="visitorStandingSpotName" style="font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:9999px; background:#f0fdf4; color:#166534; border:1px solid #86efac; white-space:nowrap;">
+                  Gate B Concourse
+                </span>
+              </div>
+
+              <!-- Distance & Guidance Metrics Chips -->
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🚶 Gate:</span>
+                  <span id="visitorHudNearestGate" style="font-weight:800; color:#059669;">Gate B (35m)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🛣️ Safe Route:</span>
+                  <span id="visitorHudRecommendedRoute" style="font-weight:800; color:#d97706;">Route B (Secondary)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🚪 Nearest Exit:</span>
+                  <span id="visitorHudNearestExit" style="font-weight:800; color:#2563eb;">Exit EX-2 (62m)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🏟️ To Arena:</span>
+                  <span id="visitorHudDistanceStage" style="font-weight:800; color:#334155;">85m (1 min walk)</span>
+                </div>
+              </div>
+
+              <!-- Guide to Exit Button -->
+              <div>
+                <button type="button" id="visitorGuideToExitBtn" class="btn btn-sm btn-primary" style="font-size:0.75rem; font-weight:800; padding:0.35rem 0.85rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.35rem; box-shadow:0 2px 6px rgba(37,99,235,0.25); white-space:nowrap;">
+                  🧭 Guide Me to Nearest Exit
+                </button>
+              </div>
             </div>
           </div>
 
           <!-- Map Element -->
-          <div class="map-container-wrap visitor-map-wrap" style="position:relative;">
+          <div class="map-container-wrap visitor-map-wrap" style="position:relative; overflow:hidden;">
             <div id="googleMapDiv"></div>
 
-            <div class="map-top-view-badge" id="visitorTopViewBadge" style="display:none;">
+            <div class="map-top-view-badge" id="visitorTopViewBadge" style="display:flex;">
               <span class="map-top-view-pulse"></span>
-              <span id="visitorTopViewText">SATELLITE TOP VIEW • GROUND ARRANGEMENT ACTIVE</span>
+              <span id="visitorTopViewText">LIVE PATHWAYS ACTIVE • REAL-TIME VENUE NAVIGATION</span>
             </div>
 
-            <div class="map-badge-legend" style="display:none;">
-              <div><span style="color:#10b981; font-weight:900;">■</span> Route C (Express 6m)</div>
-              <div><span style="color:#f59e0b; font-weight:900;">■</span> Route B (Moderate 15m)</div>
-              <div><span style="color:#ef4444; font-weight:900;">■</span> Route A (Chokepoint 28m)</div>
-              <div><span style="color:#06b6d4; font-weight:900;">■</span> Evacuation Path</div>
+            <div class="map-badge-legend" style="display:flex;" id="visitorMapLegend">
+              <div class="map-legend-item" style="cursor:pointer;" onclick="if(window.GoogleMapsManager) window.GoogleMapsManager.highlightRoute('C')"><span style="color:#10b981; font-weight:900;">■</span> <span id="legRouteC">Route C (Express 4m)</span></div>
+              <div class="map-legend-item" style="cursor:pointer;" onclick="if(window.GoogleMapsManager) window.GoogleMapsManager.highlightRoute('B')"><span style="color:#f59e0b; font-weight:900;">■</span> <span id="legRouteB">Route B (Moderate 12m)</span></div>
+              <div class="map-legend-item" style="cursor:pointer;" onclick="if(window.GoogleMapsManager) window.GoogleMapsManager.highlightRoute('A')"><span style="color:#ef4444; font-weight:900;">■</span> <span id="legRouteA">Route A (Chokepoint 25m)</span></div>
+              <div class="map-legend-item" style="cursor:pointer;" onclick="if(window.GoogleMapsManager) window.GoogleMapsManager.highlightRoute('EMERGENCY')"><span style="color:#06b6d4; font-weight:900;">■</span> SOS Egress</div>
+              <div class="map-legend-item" title="CAD Barricade Pens"><span style="color:#0284c7; font-weight:900;">⬚</span> 🚧 Barricades</div>
             </div>
           </div>
           
-          <div class="visitor-map-footer" style="display:none;">
-            <span id="mapCoordDisplay" style="display:none;"></span>
+          <div class="visitor-map-footer" style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.85rem; background:#f8fafc; border-top:1px solid var(--border-subtle); flex-wrap:wrap; gap:0.5rem;">
+            <span id="mapCoordDisplay" style="display:inline-flex; align-items:center; gap:0.25rem; font-family:monospace; font-size:0.75rem; font-weight:700; color:#1e40af; background:#eff6ff; padding:0.2rem 0.55rem; border-radius:6px; border:1px solid #bfdbfe;">📍 GPS: 11.677193°, 78.123532°</span>
             <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-              <span id="currentVenueNameBadge" class="venue-name-badge-text">Palani Pilgrimage Grounds</span>
+              <span id="currentVenueNameBadge" class="venue-name-badge-text">Sona College of Technology (Campus Ground)</span>
               <span class="badge badge-safe" style="font-size:0.7rem; white-space:nowrap;">● Active Monitoring</span>
             </div>
           </div>
@@ -526,13 +625,26 @@
   <section id="adminView" class="view-section">
     <div class="container">
       
-      <div class="admin-vertical-layout">
+      <div class="admin-vertical-layout" id="adminVerticalLayout">
         
+        <!-- Floating Button to Restore / Show Sidebar When Collapsed -->
+        <button type="button" id="adminSidebarFloatingShowBtn" class="admin-sidebar-floating-show-btn" title="Show Command Center Sidebar (Alt+S)">
+          <i data-lucide="panel-left-open" style="width:16px;height:16px;"></i>
+          <span>Show Sidebar</span>
+          <span class="sidebar-tab-pill" id="sidebarCollapsedTabName">CAD</span>
+        </button>
+
         <!-- VERTICAL SIDEBAR NAVIGATION -->
-        <aside class="admin-sidebar">
+        <aside class="admin-sidebar" id="adminSidebar">
           <div class="admin-sidebar-header">
-            <div class="admin-sidebar-title">COMMAND CENTER</div>
-            <div class="admin-sidebar-sub" id="adminSidebarVenue">Palani Pilgrimage Grounds</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.4rem;">
+              <div class="admin-sidebar-title">COMMAND CENTER</div>
+              <button type="button" id="adminSidebarHideBtn" class="admin-sidebar-toggle-btn" title="Hide Sidebar (Expand to Full Width)">
+                <i data-lucide="panel-left-close" style="width:14px;height:14px;"></i>
+                <span>Hide</span>
+              </button>
+            </div>
+            <div class="admin-sidebar-sub" id="adminSidebarVenue">Sona College of Technology (Campus Ground)</div>
           </div>
 
           <button class="admin-nav-item active" data-tab="overview">
@@ -596,11 +708,23 @@
             <span>All gates reporting active</span>
           </div>
 
-          <!-- Admin Sidebar Sign Out Button -->
-          <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle);">
-            <button id="adminSidebarLogoutBtn" class="btn btn-outline btn-sm" style="width:100%; color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.4rem;">
+          <!-- Collapse Sidebar Footer Button -->
+          <div style="margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border-subtle);">
+            <button type="button" id="adminSidebarCollapseBottomBtn" class="btn btn-sm btn-outline" style="width:100%; color:#475569; border-color:#cbd5e1; background:#f8fafc; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.35rem 0.5rem; font-size:0.75rem;" title="Hide Sidebar to Expand Canvas">
+              <i data-lucide="panel-left-close" style="width:14px;height:14px;"></i>
+              <span>Hide Sidebar (Full Width)</span>
+            </button>
+          </div>
+
+          <!-- Admin Credentials & Security Options -->
+          <div style="margin-top:0.5rem; display:flex; flex-direction:column; gap:0.35rem;">
+            <button type="button" id="adminSidebarChangePasswordBtn" class="btn btn-outline btn-sm" style="width:100%; color:#1e40af; border-color:#bfdbfe; background:#eff6ff; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.35rem 0.5rem; font-size:0.75rem;">
+              <i data-lucide="key" style="width:14px;height:14px;"></i>
+              <span>Change Password</span>
+            </button>
+            <button type="button" id="adminSidebarLogoutBtn" class="btn btn-outline btn-sm" style="width:100%; color:#b91c1c; border-color:#fca5a5; background:#fef2f2; font-weight:700; display:flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.35rem 0.5rem; font-size:0.75rem;">
               <i data-lucide="log-out" style="width:14px;height:14px;"></i>
-              Sign Out of Admin Center
+              <span>Sign Out of Admin Center</span>
             </button>
           </div>
         </aside>
@@ -614,8 +738,8 @@
             <div class="grid-4" style="margin-bottom:1.5rem;">
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Total People in Venue</div>
-                <div id="adminStatHeadcount" style="font-size:2rem; font-weight:800; color:var(--accent-cyan); margin:0.35rem 0;">12,450</div>
-                <div style="font-size:0.75rem; color:var(--color-safe);" id="adminStatCapacityPct">49.8% of 25,000 Capacity</div>
+                <div id="adminStatHeadcount" style="font-size:2rem; font-weight:800; color:var(--accent-cyan); margin:0.35rem 0;">0</div>
+                <div style="font-size:0.75rem; color:var(--color-safe);" id="adminStatCapacityPct">0.0% of 10 Capacity</div>
               </div>
               <div class="card">
                 <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Active Counting Gates</div>
@@ -720,6 +844,7 @@
                     <button type="button" class="map-view-toggle-btn active" data-map-target="googleMapAdminDiv" data-view-mode="satellite">🛰️ Top View</button>
                     <button type="button" class="map-view-toggle-btn" data-map-target="googleMapAdminDiv" data-view-mode="hybrid">🗺️ Hybrid</button>
                     <button type="button" class="map-view-toggle-btn" data-map-target="googleMapAdminDiv" data-view-mode="roadmap">📐 Map</button>
+                    <button type="button" id="adminMapOrientBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; background:#f8fafc; color:#0f172a; font-weight:700; border:1px solid #cbd5e1; cursor:pointer;" title="Orient Satellite Map with CAD Blueprint Direction">🔄 CAD Orientation</button>
                   </div>
                   <!-- Quick venue switch buttons -->
                   <div id="adminVenuePillsContainer" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
@@ -732,6 +857,72 @@
                 </div>
               </div>
 
+              <!-- ── ADMIN PATHWAY FILTER BAR + EDITOR TOOLBAR ── -->
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.6rem;">
+                <!-- Route highlight pills (admin) -->
+                <div class="map-pathway-filter-bar" style="display:flex; align-items:center; gap:0.3rem; flex-wrap:wrap;">
+                  <span style="font-size:0.68rem; font-weight:800; color:var(--text-muted); text-transform:uppercase;">PATHWAYS:</span>
+                  <button type="button" class="pathway-toggle-btn active" data-route="ALL" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #cbd5e1; background:#ffffff; color:#334155; cursor:pointer;" title="Show all routes">🛣️ All</button>
+                  <button type="button" class="pathway-toggle-btn" data-route="C" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #10b981; color:#047857; background:#ecfdf5; cursor:pointer;" title="Route C">🟢 Route C</button>
+                  <button type="button" class="pathway-toggle-btn" data-route="B" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #f59e0b; color:#b45309; background:#fffbeb; cursor:pointer;" title="Route B">🟡 Route B</button>
+                  <button type="button" class="pathway-toggle-btn" data-route="A" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #ef4444; color:#b91c1c; background:#fef2f2; cursor:pointer;" title="Route A">🔴 Route A</button>
+                  <button type="button" class="pathway-toggle-btn" data-route="EMERGENCY" style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #06b6d4; color:#0e7490; background:#ecfeff; cursor:pointer;" title="Egress">🛡️ Egress</button>
+                  <span style="font-size:0.7rem; padding:0.2rem 0.55rem; border-radius:9999px; font-weight:700; border:1px solid #38bdf8; color:#0369a1; background:#f0f9ff;" title="CAD Barricade Pens">🚧 Barricades</span>
+                </div>
+                <!-- Admin edit pathway toggle -->
+                <button type="button" id="togglePathwayEditorBtn"
+                  style="font-size:0.72rem; padding:0.3rem 0.75rem; border-radius:9999px; font-weight:700; border:1.5px solid #93c5fd; background:#eff6ff; color:#1d4ed8; cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; transition:all 0.2s;"
+                  title="Toggle interactive pathway editing on this satellite map">
+                  ✏️ Edit / Set Pathway
+                </button>
+              </div>
+
+              <!-- Admin pathway editor toolbar (hidden until toggled) -->
+              <div id="pathwayEditorToolbar" style="display:none; flex-direction:column; gap:0.5rem; background:#1e293b; border-radius:10px; padding:0.75rem 1rem; margin-bottom:0.75rem; border:1.5px solid #334155;">
+                <!-- Row 1: route selector + gate + time -->
+                <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                  <label style="font-size:0.72rem; font-weight:800; color:#94a3b8; text-transform:uppercase;">ROUTE:</label>
+                  <select id="editRouteSelector" style="font-size:0.78rem; font-weight:700; padding:0.25rem 0.5rem; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f1f5f9; min-width:175px;">
+                    <option value="C">🟢 Route C (Express Walkway)</option>
+                    <option value="B">🟡 Route B (Secondary Arcade)</option>
+                    <option value="A">🔴 Route A (Chokepoint Bypass)</option>
+                    <option value="EMERGENCY">🛡️ Emergency Egress</option>
+                  </select>
+                  <span style="font-size:0.72rem; color:#64748b; font-weight:600;">Gate / Start:</span>
+                  <input id="editRouteGateName" type="text" placeholder="Gate C (Express)" style="width:140px; padding:0.25rem 0.45rem; font-size:0.75rem; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f1f5f9; font-weight:600;" />
+                  <span style="font-size:0.72rem; color:#64748b; font-weight:600;">Est. Time:</span>
+                  <input id="editRouteEstTime" type="text" placeholder="4-6 mins" style="width:90px; padding:0.25rem 0.45rem; font-size:0.75rem; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f1f5f9; font-weight:600;" />
+                </div>
+                <!-- Row 2: action buttons -->
+                <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+                  <button type="button" id="pwAddPointModeBtn"
+                    style="font-size:0.72rem; padding:0.3rem 0.7rem; border-radius:6px; border:1.5px solid #10b981; background:#10b981; color:#fff; font-weight:700; cursor:pointer;">
+                    ➕ Click Map to Add Points
+                  </button>
+                  <button type="button" id="pwClearPointsBtn"
+                    style="font-size:0.72rem; padding:0.3rem 0.7rem; border-radius:6px; border:1.5px solid #f59e0b; background:#fff; color:#b45309; font-weight:700; cursor:pointer;">
+                    ✂️ Clear Route
+                  </button>
+                  <button type="button" id="pwResetDefaultsBtn"
+                    style="font-size:0.72rem; padding:0.3rem 0.7rem; border-radius:6px; border:1.5px solid #6366f1; background:#fff; color:#4338ca; font-weight:700; cursor:pointer;">
+                    🔄 Reset Defaults
+                  </button>
+                  <button type="button" id="pwSavePathwayBtn"
+                    style="font-size:0.72rem; padding:0.3rem 0.9rem; border-radius:6px; border:1.5px solid #2563eb; background:#2563eb; color:#fff; font-weight:800; cursor:pointer;">
+                    💾 Save &amp; Display on Visitor View
+                  </button>
+                  <button type="button" id="pwCloseEditorBtn"
+                    style="font-size:0.72rem; padding:0.3rem 0.6rem; border-radius:6px; border:1.5px solid #64748b; background:#fff; color:#475569; font-weight:700; cursor:pointer;">
+                    ✕ Done
+                  </button>
+                </div>
+                <!-- Row 3: hints + waypoint count -->
+                <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                  <span style="font-size:0.72rem; color:#94a3b8;">👉 <strong style="color:#f1f5f9;">Interactive Pathway Editor:</strong> Click anywhere on the satellite ground to place a waypoint. Drag existing numbered handles (1, 2, 3...) to reshape corners. Changes display live on the visitor map!</span>
+                  <span id="pwPointCountBadge" style="font-size:0.72rem; font-weight:800; padding:0.15rem 0.6rem; border-radius:9999px; background:#fee2e2; color:#991b1b; white-space:nowrap;">0 Waypoints</span>
+                </div>
+              </div>
+
               <!-- Organizer Location Search Bar -->
               <div class="ground-search-container">
                 <div class="ground-search-input-wrap">
@@ -740,12 +931,32 @@
                   <button id="adminLocateMeBtn" type="button" class="btn btn-outline btn-sm" title="Use current GPS position" style="white-space:nowrap; padding:0.4rem 0.65rem;">
                     <i data-lucide="crosshair" style="width:13px;height:13px;"></i> My Location
                   </button>
-                </div>
+                    <button id="adminToggleGpsBtn" type="button" class="btn btn-outline btn-sm toggle-gps-bar-btn" title="Enter precise Latitude & Longitude" style="white-space:nowrap; padding:0.4rem 0.65rem; border-color:#93c5fd; color:#1d4ed8; background:#eff6ff;">
+                      <i data-lucide="map-pin" style="width:13px;height:13px;"></i> 📍 GPS Lat/Lng
+                    </button>
+                  </div>
+                  <!-- Exact GPS Latitude / Longitude Input Bar -->
+                  <div id="adminGpsBar" class="gps-coords-toolbar" style="display:none; margin-top:0.5rem; padding:0.45rem 0.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <span style="font-size:0.7rem; font-weight:800; color:#1e40af; display:inline-flex; align-items:center; gap:0.25rem;">
+                      <i data-lucide="crosshair" style="width:12px;height:12px;"></i> EXACT GPS:
+                    </span>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lat:</label>
+                      <input type="number" step="0.000001" class="gps-lat-input" placeholder="11.677193" value="11.677193" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lng:</label>
+                      <input type="number" step="0.000001" class="gps-lng-input" placeholder="78.123532" value="78.123532" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary apply-gps-btn" style="font-size:0.72rem; padding:0.3rem 0.75rem; font-weight:800;">
+                      🎯 Set Map Accurately
+                    </button>
+                  </div>
                 <div class="ground-preset-pills" id="adminPresetPills">
                   <span style="font-size:0.73rem; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:0.25rem;">
                     <i data-lucide="sparkles" style="width:12px;height:12px;color:#f59e0b;"></i> Presets:
                   </span>
-                  <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.6811" data-lng="78.1368" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
+                  <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.677193" data-lng="78.123532" data-name="Sona College Sports Ground (Salem)">🏟️ Sona College Ground</button>
                   <button type="button" class="ground-preset-pill" data-vid="chennai-stadium" data-lat="13.0827" data-lng="80.2707" data-name="Jawaharlal Nehru Stadium (Chennai)">🏟️ Nehru Stadium</button>
                   <button type="button" class="ground-preset-pill" data-vid="chepauk" data-lat="13.0628" data-lng="80.2795" data-name="M. A. Chidambaram Stadium (Chepauk)">🏟️ Chepauk Stadium</button>
                   <button type="button" class="ground-preset-pill" data-vid="wankhede" data-lat="18.9389" data-lng="72.8258" data-name="Wankhede Stadium (Mumbai)">🏟️ Wankhede Stadium</button>
@@ -837,7 +1048,7 @@
                 </div>
               </div>
               
-              <div class="map-container-wrap" style="height:560px; position:relative;">
+              <div class="map-container-wrap" style="height:560px; position:relative; overflow:hidden;">
                 <div id="googleMapAdminDiv" style="width:100%; height:100%;"></div>
 
                 <div class="map-top-view-badge" id="adminTopViewBadge" style="display:none;">
@@ -1157,7 +1368,7 @@
                     <span style="color:var(--text-muted);">Evacuation Time:</span> <strong id="cfStatEvac" style="color:var(--text-main);">14.1 mins</strong>
                   </div>
                   <div style="background:#ffffff; border:1px solid var(--border-subtle); padding:0.35rem 0.8rem; border-radius:var(--radius-sm); font-size:0.78rem;">
-                    <span style="color:var(--text-muted);">Est. Budget:</span> <strong id="cfStatBudget" style="color:var(--accent-blue);">$42,850</strong>
+                    <span style="color:var(--text-muted);">Est. Budget:</span> <strong id="cfStatBudget" style="color:var(--accent-blue);">₹36,42,250</strong>
                   </div>
                 </div>
 
@@ -1255,6 +1466,13 @@
                       <div style="font-size:0.78rem; font-weight:700; color:var(--text-main);">Upload Ground Photo / CAD Blueprint</div>
                       <div style="font-size:0.68rem; color:var(--text-muted);">Supports PNG, JPG site plan overlays</div>
                     </div>
+                    
+                    <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.4rem;">
+                      <button type="button" id="cfLoadGoogleMapsDirectBtn" class="btn btn-sm btn-outline" style="flex:1; display:flex; align-items:center; justify-content:center; gap:0.35rem; font-size:0.72rem; font-weight:700; color:#1d4ed8; background:#eff6ff; border-color:#93c5fd; padding:0.35rem 0.5rem;" title="Load high-resolution Google Maps Satellite top-view under CAD layout">
+                        <i data-lucide="satellite" style="width:14px;height:14px;"></i>
+                        <span>🛰️ Load Google Maps Ground</span>
+                      </button>
+                    </div>
 
                     <div id="cfBlueprintThumbWrap" style="display:none; align-items:center; justify-content:space-between; margin-top:0.5rem; background:#ffffff; border:1px solid var(--border-subtle); padding:0.4rem 0.6rem; border-radius:var(--radius-sm);">
                       <div style="display:flex; align-items:center; gap:0.5rem;">
@@ -1305,14 +1523,14 @@
                         <input type="number" id="cfInputCrowd" class="cad-input-field" value="12000" min="500" max="150000" step="500">
                       </div>
                       <div>
-                        <label id="cfBudgetLimitLabel" style="font-size:0.72rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.25rem;">BUDGET LIMIT (USD $)</label>
+                        <label id="cfBudgetLimitLabel" style="font-size:0.72rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.25rem;">BUDGET LIMIT (INR ₹)</label>
                         <div style="display:flex; gap:0.35rem;">
                           <select id="cfCurrencySelect" class="cad-input-field" style="width:85px; padding:0.45rem 0.25rem; font-weight:700; flex-shrink:0;">
-                            <option value="INR">INR (₹)</option>
-                            <option value="USD" selected>USD ($)</option>
+                            <option value="INR" selected>INR (₹)</option>
+                            <option value="USD">USD ($)</option>
                             <option value="EUR">EUR (€)</option>
                           </select>
-                          <input type="number" id="cfBudgetLimit" class="cad-input-field" value="50000" min="500" step="500" style="flex:1;">
+                          <input type="number" id="cfBudgetLimit" class="cad-input-field" value="4250000" min="5000" step="5000" style="flex:1;">
                         </div>
                       </div>
                     </div>
@@ -1343,6 +1561,140 @@
                     <div id="cfLayerAmenities" class="cad-preset-pill active" title="Toggle Medical, Restrooms, Water">🏥 Facilities</div>
                     <div id="cfLayerFlow" class="cad-preset-pill active" title="Toggle Crowd Flow Vectors">🟢 Flow Vectors</div>
                     <div id="cfLayerBlueprint" class="cad-preset-pill active" title="Toggle Uploaded Blueprint Image">🖼️ Blueprint</div>
+                    <div id="cfLayerGoogleMaps" class="cad-preset-pill active" title="Toggle Google Maps Satellite Underlay" style="background:#1d4ed8; border-color:#1e40af; color:#ffffff; font-weight:800; cursor:pointer;">🛰️ Google Maps API</div>
+                    <div id="cfLayerPathways" class="cad-preset-pill active" title="Toggle Visitor Navigation Pathways Layer on CAD" style="background:#059669; border-color:#047857; color:#ffffff; font-weight:800; cursor:pointer;">🛤️ Pathways</div>
+                    <button type="button" id="cfSyncToVisitorPathwaysBtn" class="cad-preset-pill" style="background:#0284c7; border-color:#0369a1; color:#ffffff; font-weight:800; cursor:pointer;" title="Convert CAD gates, stage, and corridors into Visitor Navigation Pathways">🛣️ Sync All to Visitor</button>
+                  </div>
+
+                  <!-- Google Maps Mode, Rotation, Color & Opacity Controls Bar -->
+                  <div id="cfGoogleMapsControls" style="display:flex; align-items:center; gap:0.45rem; padding:0.35rem 0.65rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; flex-wrap:wrap;">
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af;">MAP:</span>
+                    <button type="button" class="btn btn-sm btn-outline map-view-toggle-btn active" data-map-target="cadGoogleMapDiv" data-view-mode="satellite" id="cfMapModeSat" style="font-size:0.68rem; padding:0.18rem 0.45rem;">🛰️ Top View</button>
+                    <button type="button" class="btn btn-sm btn-outline map-view-toggle-btn" data-map-target="cadGoogleMapDiv" data-view-mode="hybrid" id="cfMapModeHyb" style="font-size:0.68rem; padding:0.18rem 0.45rem;">🌍 Hybrid</button>
+                    <button type="button" class="btn btn-sm btn-outline map-view-toggle-btn" data-map-target="cadGoogleMapDiv" data-view-mode="roadmap" id="cfMapModeRoad" style="font-size:0.68rem; padding:0.18rem 0.45rem;">🗺️ Road</button>
+                    
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">MODE:</span>
+                    <div style="display:inline-flex; background:#dbeafe; border-radius:6px; padding:2px; gap:2px;">
+                      <button type="button" id="cfModeEditCadBtn" class="btn btn-sm active" style="font-size:0.68rem; padding:0.2rem 0.55rem; font-weight:700; border:none; background:#ffffff; color:#1e40af; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.08);" title="Edit CAD gates, pens, amenities & layout">
+                        ✏️ Edit CAD
+                      </button>
+                      <button type="button" id="cfModeDragMapBtn" class="btn btn-sm" style="font-size:0.68rem; padding:0.2rem 0.55rem; font-weight:700; border:none; background:transparent; color:#1e40af; border-radius:4px;" title="Drag and reposition the Google Satellite Map (Shortcut: Hold Spacebar)">
+                        ✋ Drag Google Map
+                      </button>
+                      <button type="button" id="cfModePathwayBtn" class="btn btn-sm" style="font-size:0.68rem; padding:0.2rem 0.55rem; font-weight:700; border:none; background:transparent; color:#1e40af; border-radius:4px;" title="Draw and edit visitor navigation pathways directly on CAD canvas">
+                        🛤️ Draw / Edit Pathway
+                      </button>
+                      <button type="button" id="cfSimulateBarricadeLimitBtn" class="btn btn-sm" style="font-size:0.68rem; padding:0.2rem 0.55rem; font-weight:700; border:none; background:transparent; color:#b45309; border-radius:4px;" title="Test barricade capacity limit: trigger limit exceeded to alter barricade & dynamically divert pathway">
+                        ⚡ Barricade Limit: Normal
+                      </button>
+                    </div>
+
+                    <!-- ROTATE MAP CONTROLS -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">ROTATE MAP:</span>
+                    <div style="display:inline-flex; align-items:center; gap:2px;">
+                      <button type="button" id="cfMapRotateCcwBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Rotate Satellite Map 90° Counter-Clockwise">⟲ -90°</button>
+                      <button type="button" id="cfMapRotateCwBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Rotate Satellite Map 90° Clockwise">⟳ +90°</button>
+                      <button type="button" id="cfMapRotateResetBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.38rem; font-weight:800;" title="Reset Map Rotation to 0°">0°</button>
+                      <span id="cfMapRotationBadge" style="font-size:0.68rem; font-weight:800; color:#1d4ed8; background:#dbeafe; padding:0.18rem 0.45rem; border-radius:4px; min-width:34px; text-align:center;">0°</span>
+                      <input type="range" id="cfMapRotationContinuousSlider" min="0" max="360" step="5" value="0" style="width:55px; cursor:pointer;" title="Continuous Satellite Map Rotation (0° - 360°)">
+                    </div>
+
+                    <!-- ROTATE CAD CONTROLS -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">ROTATE CAD:</span>
+                    <div style="display:inline-flex; align-items:center; gap:2px;">
+                      <button type="button" id="cfRotateCcwBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Rotate CAD Layer 90° Counter-Clockwise">⟲ -90°</button>
+                      <button type="button" id="cfRotateCwBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Rotate CAD Layer 90° Clockwise">⟳ +90°</button>
+                      <button type="button" id="cfRotateResetBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.38rem; font-weight:800;" title="Reset CAD Rotation to 0°">0°</button>
+                      <span id="cfRotationBadge" style="font-size:0.68rem; font-weight:800; color:#1d4ed8; background:#dbeafe; padding:0.18rem 0.45rem; border-radius:4px; min-width:34px; text-align:center;">0°</span>
+                      <input type="range" id="cfMapRotationSlider" min="0" max="360" step="5" value="0" style="width:55px; cursor:pointer;" title="Continuous CAD Layout Rotation (0° - 360°)">
+                    </div>
+
+                    <!-- TEXT ORIENTATION CONTROLS -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">TEXT ORIENTATION:</span>
+                    <div style="display:inline-flex; align-items:center; gap:2px;">
+                      <button type="button" id="cfTextAutoBtn" class="btn btn-sm btn-outline active" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:800; background:#2563eb; color:#fff;" title="Automatically turn texts based on CAD rotation so they remain upright & readable">🔤 Upright (Auto)</button>
+                      <button type="button" id="cfTextTurn90Btn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Turn texts by +90°">⟳ Turn 90°</button>
+                      <button type="button" id="cfTextCadLockBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Lock texts aligned with CAD layout">CAD-Aligned</button>
+                      <span id="cfTextAngleBadge" style="font-size:0.68rem; font-weight:800; color:#059669; background:#d1fae5; padding:0.18rem 0.45rem; border-radius:4px; text-align:center;" title="Active Text Angle">Upright (0°)</span>
+                    </div>
+
+                    <!-- SATELLITE COLOR VIBRANCY BOOST -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">COLOR:</span>
+                    <div style="display:inline-flex; align-items:center; gap:2px;">
+                      <button type="button" id="cfColorNormalBtn" class="btn btn-sm btn-outline cad-color-btn" data-color-mode="normal" style="font-size:0.68rem; padding:0.18rem 0.4rem;" title="Standard Color Saturation (100%)">Normal</button>
+                      <button type="button" id="cfColorVividBtn" class="btn btn-sm btn-outline cad-color-btn active" data-color-mode="vivid" style="font-size:0.68rem; padding:0.18rem 0.45rem; background:#2563eb; color:#ffffff; font-weight:700; border-color:#1d4ed8;" title="Enhanced Vivid Ground Saturation (160% Vibrancy)">🌈 Vivid</button>
+                      <button type="button" id="cfColorUltraBtn" class="btn btn-sm btn-outline cad-color-btn" data-color-mode="ultra" style="font-size:0.68rem; padding:0.18rem 0.45rem;" title="Ultra Rich Satellite Contrast & Vibrancy (200%)">🔥 Ultra</button>
+                      <input type="range" id="cfColorSaturationSlider" min="1.0" max="2.5" step="0.1" value="1.6" style="width:55px; cursor:pointer;" title="Satellite Color Vibrancy / Saturation (100% - 250%)">
+                      <span id="cfColorValBadge" style="font-size:0.68rem; font-weight:800; color:#1d4ed8; background:#dbeafe; padding:0.18rem 0.4rem; border-radius:4px; min-width:36px; text-align:center;">160%</span>
+                    </div>
+
+                    <!-- NUDGE CONTROLS -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">NUDGE:</span>
+                    <div style="display:inline-flex; gap:2px;">
+                      <button type="button" id="cfPanMapUpBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:800;" title="Nudge Map North (Screen Up)">▲</button>
+                      <button type="button" id="cfPanMapDownBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:800;" title="Nudge Map South (Screen Down)">▼</button>
+                      <button type="button" id="cfPanMapLeftBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:800;" title="Nudge Map West (Screen Left)">◀</button>
+                      <button type="button" id="cfPanMapRightBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:800;" title="Nudge Map East (Screen Right)">▶</button>
+                    </div>
+
+                    <!-- CAD DARKNESS CONTROLS -->
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">CAD DARKNESS:</span>
+                    <div style="display:inline-flex; align-items:center; gap:2px;">
+                      <button type="button" id="cfDarknessDeepBtn" class="btn btn-sm btn-outline cad-dark-btn" data-dark-val="0.70" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Deep Contrast Blueprint (70% Darkness)">🌑 Deep</button>
+                      <button type="button" id="cfDarknessDarkBtn" class="btn btn-sm btn-outline cad-dark-btn active" data-dark-val="0.55" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800; background:#1e293b; color:#fff; border-color:#0f172a;" title="High Contrast Dark CAD (55% Darkness)">🌙 Dark</button>
+                      <button type="button" id="cfDarknessMediumBtn" class="btn btn-sm btn-outline cad-dark-btn" data-dark-val="0.30" style="font-size:0.68rem; padding:0.18rem 0.42rem; font-weight:800;" title="Medium Dark Tint (30% Darkness)">🌓 Medium</button>
+                      <input type="range" id="cfSvgDarknessSlider" min="0.0" max="0.85" step="0.05" value="0.55" style="width:55px; cursor:pointer;" title="CAD SVG Layer Darkness & Underlay Contrast (0% - 85%)">
+                      <span id="cfSvgDarknessBadge" style="font-size:0.68rem; font-weight:800; color:#ffffff; background:#0f172a; padding:0.18rem 0.4rem; border-radius:4px; min-width:32px; text-align:center;">55%</span>
+                    </div>
+
+                    <span style="font-size:0.68rem; font-weight:800; color:#1e40af; margin-left:0.25rem;">CAD BLEND:</span>
+                    <input type="range" id="cfCadBlendSlider" min="0.1" max="1.0" step="0.05" value="0.75" style="width:55px; cursor:pointer;" title="Adjust CAD Overlay Opacity">
+                    <button type="button" id="cfSyncVenueMapBtn" class="btn btn-sm btn-outline" style="font-size:0.68rem; padding:0.18rem 0.45rem; font-weight:700;" title="Center satellite view on current venue ground">🎯 Center Ground</button>
+                  </div>
+
+                  <!-- DEDICATED CAD PATHWAY DRAWING & EDITING TOOLBAR -->
+                  <div id="cfCadPathwayToolbar" style="display:none; align-items:center; justify-content:space-between; gap:0.6rem; padding:0.55rem 0.95rem; background:#0f172a; border:1px solid #0284c7; border-radius:10px; margin-top:0.65rem; margin-bottom:0.35rem; box-shadow:0 4px 14px rgba(2,132,199,0.25); flex-wrap:wrap; width:100%;">
+                    <!-- Left: Route Selector -->
+                    <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                      <span style="font-size:0.7rem; font-weight:900; color:#38bdf8; letter-spacing:0.5px; text-transform:uppercase;">🛤️ ROUTE TO EDIT:</span>
+                      <button type="button" class="btn btn-sm cf-pw-route-btn active" data-route="C" id="cfPwRouteCBtn" style="font-size:0.7rem; padding:0.25rem 0.6rem; font-weight:800; background:#059669; color:#fff; border:1px solid #10b981; border-radius:6px; cursor:pointer;">
+                        🟢 Route C (Express Walkway) <span id="cfPwCountC" class="badge" style="background:#047857; color:#fff; font-size:0.65rem; margin-left:2px;">4 pts</span>
+                      </button>
+                      <button type="button" class="btn btn-sm cf-pw-route-btn" data-route="B" id="cfPwRouteBBtn" style="font-size:0.7rem; padding:0.25rem 0.6rem; font-weight:800; background:transparent; color:#fbbf24; border:1px solid #d97706; border-radius:6px; cursor:pointer;">
+                        🟡 Route B (Secondary Concourse) <span id="cfPwCountB" class="badge" style="background:#78350f; color:#fbbf24; font-size:0.65rem; margin-left:2px;">4 pts</span>
+                      </button>
+                      <button type="button" class="btn btn-sm cf-pw-route-btn" data-route="A" id="cfPwRouteABtn" style="font-size:0.7rem; padding:0.25rem 0.6rem; font-weight:800; background:transparent; color:#f87171; border:1px solid #dc2626; border-radius:6px; cursor:pointer;">
+                        🔴 Route A (Main Entrance) <span id="cfPwCountA" class="badge" style="background:#7f1d1d; color:#f87171; font-size:0.65rem; margin-left:2px;">3 pts</span>
+                      </button>
+                      <button type="button" class="btn btn-sm cf-pw-route-btn" data-route="EMERGENCY" id="cfPwRouteSosBtn" style="font-size:0.7rem; padding:0.25rem 0.6rem; font-weight:800; background:transparent; color:#f43f5e; border:1px dashed #e11d48; border-radius:6px; cursor:pointer;">
+                        🚨 SOS Emergency Egress <span id="cfPwCountSos" class="badge" style="background:#881337; color:#f43f5e; font-size:0.65rem; margin-left:2px;">3 pts</span>
+                      </button>
+                    </div>
+
+                    <!-- Right: Drawing & Editing Tools -->
+                    <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                      <button type="button" id="cfPwAddPointBtn" class="btn btn-sm active" style="font-size:0.7rem; padding:0.25rem 0.65rem; font-weight:800; background:#2563eb; color:#fff; border:1px solid #3b82f6; border-radius:6px; cursor:pointer;" title="Click on CAD Canvas to append waypoint">
+                        ➕ Click Canvas to Add: ON
+                      </button>
+                      <button type="button" id="cfPwUndoPointBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.25rem 0.55rem; font-weight:700; color:#94a3b8; border-color:#475569; cursor:pointer;" title="Remove the last added waypoint">
+                        ↩️ Undo Point
+                      </button>
+                      <button type="button" id="cfPwClearRouteBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.25rem 0.55rem; font-weight:700; color:#f87171; border-color:#991b1b; cursor:pointer;" title="Clear all points for active route">
+                        🗑️ Clear Route
+                      </button>
+                      <button type="button" id="cfPwAutoRouteBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.25rem 0.55rem; font-weight:700; color:#38bdf8; border-color:#0284c7; cursor:pointer;" title="Automatically route from CAD gates to destination stage">
+                        ⚡ Auto-Route
+                      </button>
+                      <button type="button" id="cfPwSimLimitBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.25rem 0.55rem; font-weight:700; color:#f59e0b; border-color:#d97706; cursor:pointer;" title="Simulate Barricade Capacity Limit Exceeded to test dynamic pathway alteration">
+                        ⚠️ Alter Barricade (Limit Exceeded)
+                      </button>
+                      <button type="button" id="cfPwSaveSyncBtn" class="btn btn-sm" style="font-size:0.7rem; padding:0.25rem 0.75rem; font-weight:900; background:#059669; color:#fff; border:1px solid #10b981; border-radius:6px; cursor:pointer;" title="Save and immediately reflect on Visitor Navigation View">
+                        💾 Save & Apply to Visitor View
+                      </button>
+                      <button type="button" id="cfPwCloseBtn" class="btn btn-sm btn-outline" style="font-size:0.7rem; padding:0.25rem 0.5rem; font-weight:700; color:#cbd5e1; border-color:#475569; cursor:pointer;" title="Exit Pathway Editor Mode">
+                        ✕ Done
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Toolbox -->
@@ -1363,10 +1715,67 @@
               </div>
 
               <!-- SECTION 2: INTERACTIVE 2D GROUND CANVAS VIEWPORT -->
-              <div id="cfViewportWrap" class="cad-viewport-canvas-wrap">
+              <!-- Organizer CAD Ground & Stadium Search Bar with Presets directly above Map Viewport -->
+              <div style="background:#f8fafc; border-bottom:1px solid var(--border-subtle); padding:0.65rem 1.75rem;">
+                <div class="ground-search-container" style="background:#ffffff; border:1px solid #bfdbfe; box-shadow:0 1px 4px rgba(37,99,235,0.06); padding:0.6rem 0.85rem; border-radius:10px;">
+                  <div class="ground-search-input-wrap">
+                    <i data-lucide="search" class="ground-search-icon"></i>
+                    <input id="cadGroundSearch" class="ground-search-input" type="text" placeholder="🔍 Search any Stadium, College Ground, Arena (e.g. Wankhede, Chepauk, Sona Ground)..." />
+                    <button id="cadLocateMeBtn" type="button" class="btn btn-outline btn-sm" title="Use current GPS position" style="white-space:nowrap; padding:0.4rem 0.65rem;">
+                      <i data-lucide="crosshair" style="width:13px;height:13px;"></i> My Location
+                    </button>
+                    <button id="cadToggleGpsBtn" type="button" class="btn btn-outline btn-sm toggle-gps-bar-btn" title="Enter precise Latitude & Longitude" style="white-space:nowrap; padding:0.4rem 0.65rem; border-color:#93c5fd; color:#1d4ed8; background:#eff6ff;">
+                      <i data-lucide="map-pin" style="width:13px;height:13px;"></i> 📍 GPS Lat/Lng
+                    </button>
+                  </div>
+                  <!-- Exact GPS Latitude / Longitude Input Bar -->
+                  <div id="cadGpsBar" class="gps-coords-toolbar" style="display:none; margin-top:0.5rem; padding:0.45rem 0.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <span style="font-size:0.7rem; font-weight:800; color:#1e40af; display:inline-flex; align-items:center; gap:0.25rem;">
+                      <i data-lucide="crosshair" style="width:12px;height:12px;"></i> EXACT GPS:
+                    </span>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lat:</label>
+                      <input type="number" step="0.000001" class="gps-lat-input" placeholder="11.677193" value="11.677193" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.3rem;">
+                      <label style="font-size:0.7rem; font-weight:700; color:#1e40af;">Lng:</label>
+                      <input type="number" step="0.000001" class="gps-lng-input" placeholder="78.123532" value="78.123532" style="width:115px; padding:0.25rem 0.45rem; font-size:0.78rem; font-weight:600; border:1px solid #cbd5e1; border-radius:6px; background:#fff;" />
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary apply-gps-btn" style="font-size:0.72rem; padding:0.3rem 0.75rem; font-weight:800;">
+                      🎯 Set Map Accurately
+                    </button>
+                  </div>
+                  <div class="ground-preset-pills" id="cadPresetPills">
+                    <span style="font-size:0.73rem; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:0.25rem;">
+                      <i data-lucide="sparkles" style="width:12px;height:12px;color:#f59e0b;"></i> Presets:
+                    </span>
+                    <button type="button" class="ground-preset-pill active" data-vid="sona-college" data-lat="11.677193" data-lng="78.123532" data-name="Sona College Sports Ground (Campus Ground)">🏟️ Sona College Ground</button>
+                    <button type="button" class="ground-preset-pill" data-vid="chennai-stadium" data-lat="13.0827" data-lng="80.2707" data-name="Jawaharlal Nehru Stadium">🏟️ Nehru Stadium</button>
+                    <button type="button" class="ground-preset-pill" data-vid="chepauk" data-lat="13.0628" data-lng="80.2795" data-name="M. A. Chidambaram Stadium (Chepauk)">🏟️ Chepauk Stadium</button>
+                    <button type="button" class="ground-preset-pill" data-vid="wankhede" data-lat="18.9389" data-lng="72.8258" data-name="Wankhede Stadium">🏟️ Wankhede Stadium</button>
+                    <button type="button" class="ground-preset-pill" data-vid="modi-stadium" data-lat="23.0917" data-lng="72.5973" data-name="Narendra Modi Stadium">🏟️ Modi Stadium</button>
+                    <button type="button" class="ground-preset-pill" data-vid="eden-gardens" data-lat="22.5646" data-lng="88.3433" data-name="Eden Gardens Stadium">🏟️ Eden Gardens</button>
+                    <button type="button" class="ground-preset-pill" data-vid="palani-gathering" data-lat="10.4534" data-lng="77.5186" data-name="Palani Pilgrimage Grounds">🛕 Palani Grounds</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="cfViewportWrap" class="cad-viewport-canvas-wrap" style="position:relative; width:100%; height:660px; overflow:hidden;">
+                <!-- Real Google Maps Satellite Underlay Container -->
+                <div id="cadGoogleMapDiv" class="cad-google-map-layer"></div>
+
                 <!-- Floating HUD Info -->
-                <div class="cad-floating-hud">
-                  <span class="cad-badge" style="background:rgba(15,23,42,0.9); color:#fff; border:1px solid rgba(255,255,255,0.15);">
+                <div class="cad-floating-hud" style="z-index:10;">
+                  <button type="button" id="cfHudMapToggleBtn" class="cad-badge" style="background:#1d4ed8; color:#fff; border:1px solid rgba(255,255,255,0.4); cursor:pointer; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,0.25);" title="Toggle Satellite Map underlay">
+                    🛰️ Google Maps Satellite: ON
+                  </button>
+                  <button type="button" id="cfHudDragMapBtn" class="cad-badge" style="background:#475569; color:#fff; border:1px solid rgba(255,255,255,0.4); cursor:pointer; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,0.25);" title="Toggle Drag Google Map Mode (or hold Spacebar)">
+                    ✋ Drag Map: OFF
+                  </button>
+                  <span id="cfHudRotationBadge" class="cad-badge" style="background:#0284c7; color:#fff; border:1px solid rgba(255,255,255,0.3); display:none;" title="Satellite Map Rotation Angle">
+                    🔄 ROTATION: 0°
+                  </span>
+                  <span id="cfHudStatusText" class="cad-badge" style="background:rgba(15,23,42,0.9); color:#fff; border:1px solid rgba(255,255,255,0.15);">
                     DRAG CANVAS TO PAN • SCROLL TO ZOOM • DRAG OBJECTS TO EDIT
                   </span>
                   <span class="cad-badge" style="background:rgba(34,197,94,0.15); color:#047857; border:1px solid rgba(34,197,94,0.3);">
@@ -1374,15 +1783,20 @@
                   </span>
                 </div>
 
-                <!-- Floating Zoom Controls -->
-                <div class="cad-zoom-controls">
+                <!-- Floating Zoom & Map Drag Controls -->
+                <div class="cad-zoom-controls" style="z-index:10;">
                   <button id="cfZoomInBtn" class="cad-zoom-btn" title="Zoom In">+</button>
                   <button id="cfZoomOutBtn" class="cad-zoom-btn" title="Zoom Out">−</button>
                   <button id="cfZoomResetBtn" class="cad-zoom-btn" title="Reset View" style="font-size:0.7rem;">↺</button>
+                  <button id="cfFloatingMapRotateBtn" class="cad-zoom-btn" title="Rotate Satellite Map (+90°)" style="font-size:0.85rem; margin-top:0.2rem;">🌍</button>
+                  <button id="cfFloatingRotateBtn" class="cad-zoom-btn" title="Rotate CAD Layer (+90°)" style="font-size:0.85rem; margin-top:0.2rem;">🔄</button>
+                  <button id="cfFloatingTextRotateBtn" class="cad-zoom-btn" title="Turn Texts (+90°)" style="font-size:0.85rem; margin-top:0.2rem;">🔤</button>
+                  <button id="cfFloatingPathwayBtn" class="cad-zoom-btn" title="Toggle CAD Pathway Drawing / Editor" style="font-size:0.85rem; margin-top:0.2rem;">🛤️</button>
+                  <button id="cfFloatingDragMapBtn" class="cad-zoom-btn" title="Toggle Drag Google Map Mode" style="font-size:0.85rem; margin-top:0.2rem;">✋</button>
                 </div>
 
                 <!-- High-Precision SVG Canvas -->
-                <svg id="cfSvgViewport" viewBox="0 0 1400 850" style="width:100%; height:100%; user-select:none;">
+                <svg id="cfSvgViewport" viewBox="0 0 1400 850" style="position:relative; z-index:2; width:100%; height:100%; user-select:none; pointer-events:auto;">
                   <!-- Dynamically rendered by CadPlanner -->
                 </svg>
               </div>
@@ -1428,7 +1842,7 @@
                       <span>💱</span> CURRENCY:
                     </label>
                     <select id="cfCurrencySelectHeader" class="cad-input-field" style="padding:0.25rem 0.5rem; font-size:0.8rem; font-weight:700; width:auto; min-width:130px; cursor:pointer;">
-                      <option value="INR">INR (₹)</option>
+                      <option value="INR" selected>INR (₹)</option>
                       <option value="USD">USD ($)</option>
                       <option value="EUR">EUR (€)</option>
                     </select>
@@ -1652,6 +2066,20 @@
                   </div>
 
                   <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <label class="av-label">Password <span style="color:#b91c1c;">*</span></label>
+                      <button type="button" id="generateUserPasswordBtn" style="background:none; border:none; font-size:0.72rem; color:#2563eb; font-weight:700; cursor:pointer; padding:0;">⚡ Auto-Generate</button>
+                    </div>
+                    <div style="position:relative;">
+                      <i data-lucide="lock" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--text-muted);"></i>
+                      <input id="newUserPassword" type="password" class="av-input" style="padding-left:2.4rem; padding-right:2.4rem;" placeholder="Minimum 6 characters" required>
+                      <button type="button" id="toggleNewUserPasswordBtn" style="position:absolute; right:0.85rem; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); padding:0;">
+                        <i data-lucide="eye" id="toggleNewUserPasswordIcon" style="width:16px;height:16px;"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
                     <label class="av-label">Email Address</label>
                     <input id="newUserEmail" type="email" class="av-input" placeholder="rajesh@flownavigator.org">
                   </div>
@@ -1670,7 +2098,7 @@
                     <label class="av-label">Assigned Venue Access</label>
                     <select id="newUserVenueScope" class="av-input">
                       <option value="All Venues & Grounds">All Venues &amp; Grounds</option>
-                      <option value="Palani Pilgrimage Grounds">Palani Pilgrimage Grounds</option>
+                      <option value="Sona College of Technology (Campus Ground)">Sona College of Technology (Campus Ground)</option>
                       <option value="Meenakshi Temple Complex">Meenakshi Temple Complex</option>
                       <option value="Jawaharlal Nehru Stadium">Jawaharlal Nehru Stadium</option>
                       <option value="Custom Event Grounds">Custom Event Grounds</option>
@@ -2125,7 +2553,7 @@ void loop() {
           <div style="font-size:1.2rem; font-weight:800; color:var(--accent-cyan); letter-spacing:0.05em; text-transform:uppercase;">
             FlowNavigator Public Directional Display
           </div>
-          <h1 style="font-size:2.8rem; margin:0.25rem 0;" id="kioskVenueTitle">Palani Gathering Grounds</h1>
+          <h1 style="font-size:2.8rem; margin:0.25rem 0;" id="kioskVenueTitle">Sona College of Technology</h1>
         </div>
         <div style="text-align:right;">
           <div style="font-size:2.5rem; font-weight:900; font-family:var(--font-display);" id="kioskClock">19:30</div>
@@ -2314,14 +2742,14 @@ void loop() {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
         <div style="display:flex; align-items:center; gap:0.6rem;">
           <div style="width:36px;height:36px;background:#1e40af;border-radius:8px;display:flex;align-items:center;justify-content:center;">
-            <i data-lucide="shield-alert" style="width:18px;height:18px;color:#fff;"></i>
+            <i data-lucide="shield-check" style="width:18px;height:18px;color:#fff;"></i>
           </div>
           <div>
             <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main);">Admin Command Center Login</h3>
-            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Security & Operational Dispatch Authentication</p>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Encrypted JWT Session &amp; RBAC Protection</p>
           </div>
         </div>
-        <button id="closeAdminLoginModalBtn" style="color:var(--text-muted); font-size:1.2rem; line-height:1;">✕</button>
+        <button id="closeAdminLoginModalBtn" style="color:var(--text-muted); font-size:1.2rem; line-height:1; background:none; border:none; cursor:pointer;">✕</button>
       </div>
 
       <hr style="border:none;border-top:1px solid var(--border-subtle);margin:1rem 0;">
@@ -2341,19 +2769,37 @@ void loop() {
           <label class="av-label">Password</label>
           <div style="position:relative;">
             <i data-lucide="lock" style="position:absolute; left:0.85rem; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--text-muted);"></i>
-            <input type="password" id="adminPasswordInput" class="av-input" style="padding-left:2.4rem;" placeholder="••••••••" required autocomplete="current-password">
+            <input type="password" id="adminPasswordInput" class="av-input" style="padding-left:2.4rem; padding-right:2.4rem;" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" id="toggleAdminPasswordBtn" style="position:absolute; right:0.85rem; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); padding:0; display:flex; align-items:center;" title="Show/Hide Password">
+              <i data-lucide="eye" id="toggleAdminPasswordIcon" style="width:16px;height:16px;"></i>
+            </button>
           </div>
         </div>
 
-        <!-- Demo credentials hint box -->
-        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:0.75rem; font-size:0.8rem; color:#1d4ed8; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-weight:700;">🔑 Demo Credentials:</div>
-            <div>Username: <strong>admin</strong> | Password: <strong>admin123</strong></div>
+        <!-- Role Quick-Login Selector -->
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:0.75rem; font-size:0.8rem; color:#1d4ed8;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+            <span style="font-weight:700;">🔑 Authorized System Roles:</span>
+            <span style="font-size:0.7rem; color:#2563eb;">Click to Quick-Fill</span>
           </div>
-          <button type="button" id="autoFillDemoAdminBtn" class="btn btn-outline btn-sm" style="font-size:0.72rem; padding:0.3rem 0.6rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd; white-space:nowrap;">
-            ⚡ Auto-Fill
-          </button>
+          <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm auth-quick-role-btn" data-user="admin" data-pw="admin123" style="font-size:0.7rem; padding:0.25rem 0.55rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd;">
+              🛡️ Super Admin
+            </button>
+            <button type="button" class="btn btn-outline btn-sm auth-quick-role-btn" data-user="dispatcher_palani" data-pw="dispatcher123" style="font-size:0.7rem; padding:0.25rem 0.55rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd;">
+              📡 Dispatcher
+            </button>
+            <button type="button" class="btn btn-outline btn-sm auth-quick-role-btn" data-user="chennai_gate" data-pw="gatepass123" style="font-size:0.7rem; padding:0.25rem 0.55rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd;">
+              🚪 Gate Supervisor
+            </button>
+            <button type="button" class="btn btn-outline btn-sm auth-quick-role-btn" data-user="event_coordinator" data-pw="events123" style="font-size:0.7rem; padding:0.25rem 0.55rem; background:#ffffff; color:#1d4ed8; border-color:#93c5fd;">
+              🎪 Event Coord
+            </button>
+          </div>
+          <div style="font-size:0.7rem; color:#64748b; margin-top:0.45rem; display:flex; align-items:center; gap:0.35rem;">
+            <i data-lucide="shield-check" style="width:12px;height:12px;color:#059669;"></i>
+            <span>Encrypted with Scrypt hashing &amp; signed Bearer JWT tokens.</span>
+          </div>
         </div>
 
         <!-- Error Feedback Container -->
@@ -2370,6 +2816,50 @@ void loop() {
 
       </form>
 
+    </div>
+  </div>
+
+  <!-- ==================== CHANGE PASSWORD MODAL ==================== -->
+  <div id="changePasswordModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width:420px; width:100%;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <div style="width:36px;height:36px;background:#059669;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="key" style="width:18px;height:18px;color:#fff;"></i>
+          </div>
+          <div>
+            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main);">Change Admin Password</h3>
+            <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Update your account credentials securely</p>
+          </div>
+        </div>
+        <button id="closeChangePasswordModalBtn" style="color:var(--text-muted); font-size:1.2rem; line-height:1; background:none; border:none; cursor:pointer;">✕</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border-subtle);margin:1rem 0;">
+
+      <form id="changePasswordForm" onsubmit="return false;" style="display:flex; flex-direction:column; gap:0.85rem;">
+        <div>
+          <label class="av-label">Current Password</label>
+          <input type="password" id="currentPasswordInput" class="av-input" placeholder="Enter current password" required autocomplete="current-password">
+        </div>
+        <div>
+          <label class="av-label">New Password (min 6 characters)</label>
+          <input type="password" id="newPasswordInput" class="av-input" placeholder="Enter strong new password" required autocomplete="new-password">
+        </div>
+        <div>
+          <label class="av-label">Confirm New Password</label>
+          <input type="password" id="confirmNewPasswordInput" class="av-input" placeholder="Repeat new password" required autocomplete="new-password">
+        </div>
+
+        <div id="changePasswordFeedback" style="display:none; font-size:0.8rem; font-weight:600; padding:0.6rem 0.85rem; border-radius:6px;"></div>
+
+        <div style="display:flex; gap:0.6rem; justify-content:flex-end; margin-top:0.5rem;">
+          <button type="button" id="cancelChangePasswordBtn" class="btn btn-outline btn-sm">Cancel</button>
+          <button type="submit" id="submitChangePasswordBtn" class="btn btn-primary btn-sm" style="background:#059669; border-color:#047857; font-weight:800;">
+            Update Password
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -2482,6 +2972,18 @@ void loop() {
           <div>
             <label class="av-label">Event Date (optional)</label>
             <input id="avDate" type="date" class="av-input">
+          </div>
+        </div>
+
+        <!-- Row 4b: Exact GPS Coordinates (Latitude & Longitude) -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:0.65rem 0.85rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
+          <div>
+            <label class="av-label" style="color:#1e40af;">Latitude (GPS) <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(optional)</span></label>
+            <input id="avLat" type="number" step="0.000001" class="av-input" placeholder="e.g. 11.677193" style="background:#fff;">
+          </div>
+          <div>
+            <label class="av-label" style="color:#1e40af;">Longitude (GPS) <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(optional)</span></label>
+            <input id="avLng" type="number" step="0.000001" class="av-input" placeholder="e.g. 78.123532" style="background:#fff;">
           </div>
         </div>
 

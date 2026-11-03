@@ -187,6 +187,8 @@ const AddVenueManager = {
     const zones    = parseInt(document.getElementById('avZones')?.value  || 5);
     const city     = document.getElementById('avCity')?.value.trim() || '';
     const date     = document.getElementById('avDate')?.value || '';
+    const lat      = parseFloat(document.getElementById('avLat')?.value) || 11.677193;
+    const lng      = parseFloat(document.getElementById('avLng')?.value) || 78.123532;
 
     if (!name) { 
       this.flashError('avName', 'Please enter a venue name'); 
@@ -217,9 +219,9 @@ const AddVenueManager = {
       zones, 
       city, 
       date, 
+      lat,
+      lng,
       label,
-      lat: 11.0168 + (Math.random() - 0.5) * 0.05,
-      lng: 76.9558 + (Math.random() - 0.5) * 0.05,
       addedAt: new Date().toISOString()
     };
 

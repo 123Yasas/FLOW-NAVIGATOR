@@ -10,14 +10,18 @@ const FlowApp = {
   activeVenueId: localStorage.getItem('flow_active_venue_id') || 'sona-college',
   isSeniorMode: false,
   emergencyActive: false,
-  dataMode: 'demo', // 'demo' or 'real'
+  dataMode: 'real', // 'demo' or 'real'
   isAdminLoggedIn: Boolean(sessionStorage.getItem('fn_admin_token')),
+  adminUser: (function() {
+    try { return JSON.parse(sessionStorage.getItem('fn_admin_user') || 'null'); } catch(e) { return null; }
+  })(),
   pollTimer: null,
   cachedAnalyticsData: [],
 
   init: function() {
     this.bindRoleNavigation();
     this.bindAdminAuth();
+    this.verifyAdminSession();
     this.bindAdminSidebar();
     this.bindDataModeToggle();
     this.bindEsp32HardwareManager();
@@ -63,7 +67,21 @@ const FlowApp = {
     // Initial data fetch and start background polling
     this.refreshData();
     this.generateAnalyticsData();
-    this.pollTimer = setInterval(() => this.refreshData(), 4000);
+    this.pollTimer = setInterval(() => this.refreshData(), 2000);
+
+    // Instant cross-tab emergency broadcast listener (0ms latency across tabs)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'flow_emergency_event' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && parsed.active !== undefined && parsed.active !== this.emergencyActive) {
+            this.emergencyActive = Boolean(parsed.active);
+            this.updateEmergencyUI(this.emergencyActive);
+            this.refreshData();
+          }
+        } catch(err) {}
+      }
+    });
   },
 
   // -------------------- ROLE NAVIGATION & ADMIN AUTH --------------------
@@ -112,12 +130,62 @@ const FlowApp = {
     }
   },
 
+  getAuthHeaders: function() {
+    const token = sessionStorage.getItem('fn_admin_token') || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = 'Bearer ' + token;
+    }
+    return headers;
+  },
+
+  verifyAdminSession: async function() {
+    const token = sessionStorage.getItem('fn_admin_token');
+    if (!token) {
+      this.isAdminLoggedIn = false;
+      this.adminUser = null;
+      this.updateAdminNavBadge();
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api/admin/verify', {
+        headers: this.getAuthHeaders()
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success && data.user) {
+        this.isAdminLoggedIn = true;
+        this.adminUser = data.user;
+        sessionStorage.setItem('fn_admin_user', JSON.stringify(data.user));
+        this.updateAdminNavBadge();
+      } else {
+        // Token expired or invalid
+        sessionStorage.removeItem('fn_admin_token');
+        sessionStorage.removeItem('fn_admin_user');
+        this.isAdminLoggedIn = false;
+        this.adminUser = null;
+        this.updateAdminNavBadge();
+        if (this.currentRole === 'admin') {
+          this.switchRole('landing');
+          this.openAdminLoginModal();
+          const err = document.getElementById('adminLoginError');
+          if (err) {
+            err.textContent = 'Your session has expired. Please log in again.';
+            err.style.display = 'block';
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[AdminSession] Verify offline/check:', e);
+    }
+  },
+
   bindAdminAuth: function() {
     const modal = document.getElementById('adminLoginModal');
     const closeBtn = document.getElementById('closeAdminLoginModalBtn');
     const cancelBtn = document.getElementById('cancelAdminLoginBtn');
     const form = document.getElementById('adminLoginForm');
-    const autoFillBtn = document.getElementById('autoFillDemoAdminBtn');
 
     if (closeBtn) closeBtn.addEventListener('click', () => this.closeAdminLoginModal());
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.closeAdminLoginModal());
@@ -128,12 +196,31 @@ const FlowApp = {
       });
     }
 
-    if (autoFillBtn) {
-      autoFillBtn.addEventListener('click', () => {
+    // Role Quick-Fill Buttons
+    document.querySelectorAll('.auth-quick-role-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
         const u = document.getElementById('adminUsernameInput');
         const p = document.getElementById('adminPasswordInput');
-        if (u) u.value = 'admin';
-        if (p) p.value = 'admin123';
+        if (u) u.value = btn.dataset.user || 'admin';
+        if (p) p.value = btn.dataset.pw || 'admin123';
+        const err = document.getElementById('adminLoginError');
+        if (err) err.style.display = 'none';
+      });
+    });
+
+    // Password Show/Hide Toggle
+    const togglePwBtn = document.getElementById('toggleAdminPasswordBtn');
+    if (togglePwBtn) {
+      togglePwBtn.addEventListener('click', () => {
+        const pwInput = document.getElementById('adminPasswordInput');
+        const icon = document.getElementById('toggleAdminPasswordIcon');
+        if (!pwInput) return;
+        const isPassword = pwInput.type === 'password';
+        pwInput.type = isPassword ? 'text' : 'password';
+        if (icon) {
+          icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+          if (window.lucide) lucide.createIcons();
+        }
       });
     }
 
@@ -152,6 +239,28 @@ const FlowApp = {
     if (navSignOut) navSignOut.addEventListener('click', () => this.adminLogout());
     if (sidebarSignOut) sidebarSignOut.addEventListener('click', () => this.adminLogout());
     if (tabSignOut) tabSignOut.addEventListener('click', () => this.adminLogout());
+
+    // Bind Change Password Modal
+    const changePwBtn = document.getElementById('adminSidebarChangePasswordBtn');
+    const changePwModal = document.getElementById('changePasswordModal');
+    const closeChangePwBtn = document.getElementById('closeChangePasswordModalBtn');
+    const cancelChangePwBtn = document.getElementById('cancelChangePasswordBtn');
+    const changePwForm = document.getElementById('changePasswordForm');
+
+    if (changePwBtn) changePwBtn.addEventListener('click', () => this.openChangePasswordModal());
+    if (closeChangePwBtn) closeChangePwBtn.addEventListener('click', () => this.closeChangePasswordModal());
+    if (cancelChangePwBtn) cancelChangePwBtn.addEventListener('click', () => this.closeChangePasswordModal());
+    if (changePwModal) {
+      changePwModal.addEventListener('click', (e) => {
+        if (e.target === changePwModal) this.closeChangePasswordModal();
+      });
+    }
+    if (changePwForm) {
+      changePwForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.submitChangePassword();
+      });
+    }
 
     this.bindUserManagement();
     this.updateAdminNavBadge();
@@ -174,6 +283,103 @@ const FlowApp = {
     if (modal) modal.classList.remove('active');
   },
 
+  openChangePasswordModal: function() {
+    const modal = document.getElementById('changePasswordModal');
+    const fb = document.getElementById('changePasswordFeedback');
+    if (fb) fb.style.display = 'none';
+    const cur = document.getElementById('currentPasswordInput');
+    const np = document.getElementById('newPasswordInput');
+    const cnp = document.getElementById('confirmNewPasswordInput');
+    if (cur) cur.value = '';
+    if (np) np.value = '';
+    if (cnp) cnp.value = '';
+    if (modal) {
+      modal.classList.add('active');
+      if (cur) cur.focus();
+      if (window.lucide) lucide.createIcons();
+    }
+  },
+
+  closeChangePasswordModal: function() {
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) modal.classList.remove('active');
+  },
+
+  submitChangePassword: async function() {
+    const cur = document.getElementById('currentPasswordInput')?.value.trim();
+    const np = document.getElementById('newPasswordInput')?.value.trim();
+    const cnp = document.getElementById('confirmNewPasswordInput')?.value.trim();
+    const fb = document.getElementById('changePasswordFeedback');
+    const btn = document.getElementById('submitChangePasswordBtn');
+
+    if (!cur || !np || !cnp) {
+      if (fb) {
+        fb.textContent = 'Please fill in all password fields';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    if (np.length < 6) {
+      if (fb) {
+        fb.textContent = 'New password must be at least 6 characters long';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    if (np !== cnp) {
+      if (fb) {
+        fb.textContent = 'New passwords do not match';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      if (btn) btn.disabled = true;
+
+      const resp = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ current_password: cur, new_password: np })
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        if (fb) {
+          fb.textContent = '✅ ' + data.message;
+          fb.style.background = '#ecfdf5';
+          fb.style.color = '#047857';
+          fb.style.display = 'block';
+        }
+        setTimeout(() => this.closeChangePasswordModal(), 1500);
+      } else {
+        if (fb) {
+          fb.textContent = data.message || 'Error updating password';
+          fb.style.background = '#fef2f2';
+          fb.style.color = '#b91c1c';
+          fb.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      if (fb) {
+        fb.textContent = 'Network error while updating password';
+        fb.style.background = '#fef2f2';
+        fb.style.color = '#b91c1c';
+        fb.style.display = 'block';
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
   performAdminLogin: async function() {
     const u = document.getElementById('adminUsernameInput')?.value.trim();
     const p = document.getElementById('adminPasswordInput')?.value.trim();
@@ -189,7 +395,11 @@ const FlowApp = {
     }
 
     try {
-      if (submitBtn) submitBtn.disabled = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i data-lucide="loader" style="width:14px;height:14px;"></i> Authenticating...';
+        if (window.lucide) lucide.createIcons();
+      }
 
       const resp = await fetch('/api/admin/login', {
         method: 'POST',
@@ -199,38 +409,48 @@ const FlowApp = {
 
       const data = await resp.json();
 
-      if (resp.ok && data.success) {
+      if (resp.ok && data.success && data.token) {
         this.isAdminLoggedIn = true;
+        this.adminUser = data.user;
         sessionStorage.setItem('fn_admin_token', data.token);
+        sessionStorage.setItem('fn_admin_user', JSON.stringify(data.user));
         this.closeAdminLoginModal();
         this.updateAdminNavBadge();
         this.switchRole('admin');
+        this.showToast(`🛡️ ${data.message}`, 'success');
       } else {
         if (err) {
-          err.textContent = data.message || 'Invalid username or password (use admin / admin123)';
+          err.textContent = data.message || 'Invalid username or password';
           err.style.display = 'block';
         }
       }
     } catch (e) {
       console.error('[AdminLogin] Error:', e);
-      if (u === 'admin' && p === 'admin123') {
-        this.isAdminLoggedIn = true;
-        sessionStorage.setItem('fn_admin_token', 'fn_admin_session_token_authenticated');
-        this.closeAdminLoginModal();
-        this.updateAdminNavBadge();
-        this.switchRole('admin');
-      } else if (err) {
-        err.textContent = 'Login failed. Please verify credentials (admin / admin123)';
+      if (err) {
+        err.textContent = 'Connection error. Unable to reach authentication server.';
         err.style.display = 'block';
       }
     } finally {
-      if (submitBtn) submitBtn.disabled = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i data-lucide="log-in" style="width:14px;height:14px;"></i> Login to Admin Center';
+        if (window.lucide) lucide.createIcons();
+      }
     }
   },
 
-  adminLogout: function() {
+  adminLogout: async function() {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        headers: this.getAuthHeaders()
+      });
+    } catch (e) {}
+
     this.isAdminLoggedIn = false;
+    this.adminUser = null;
     sessionStorage.removeItem('fn_admin_token');
+    sessionStorage.removeItem('fn_admin_user');
     this.updateAdminNavBadge();
     this.switchRole('landing');
 
@@ -247,23 +467,39 @@ const FlowApp = {
     const adminBtn = document.getElementById('roleAdminBtn');
     const navSignOut = document.getElementById('navSignOutBtn');
 
-    if (this.isAdminLoggedIn) {
+    if (this.isAdminLoggedIn && this.adminUser) {
       if (adminBtn) {
+        const adminName = this.adminUser.name ? this.adminUser.name.split(' ')[0] : 'Active';
         adminBtn.innerHTML = `
-          <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
-          <span>Admin (Active)</span>
+          <i data-lucide="shield-check" style="width:14px;height:14px;color:#10b981;"></i>
+          <span>Admin (${adminName})</span>
         `;
       }
       if (navSignOut) navSignOut.style.display = 'inline-flex';
     } else {
       if (adminBtn) {
         adminBtn.innerHTML = `
-          <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
-          <span>Admin Center</span>
+          <i data-lucide="shield" style="width:14px;height:14px;"></i>
+          <span data-i18n="nav.role_admin">Admin Center</span>
         `;
       }
       if (navSignOut) navSignOut.style.display = 'none';
     }
+    if (window.lucide) {
+      try { lucide.createIcons(); } catch(e) {}
+    }
+
+    // SOS Button: keep only in admin page only
+    const sosBtn = document.getElementById('sosBtn');
+    if (sosBtn) {
+      sosBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+    }
+
+    const clearEmergBtn = document.getElementById('clearEmergencyBtn');
+    if (clearEmergBtn) {
+      clearEmergBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn && this.emergencyActive) ? 'inline-block' : 'none';
+    }
+
     if (window.lucide) lucide.createIcons();
   },
 
@@ -280,6 +516,18 @@ const FlowApp = {
     const target = document.getElementById(`${role}View`);
     if (target) target.classList.add('active');
 
+    // SOS button: ONLY in admin page and only if admin is logged in (removed from home page)
+    const sosBtn = document.getElementById('sosBtn');
+    if (sosBtn) {
+      sosBtn.style.display = (role === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+    }
+
+    // Clear emergency button on banner: only visible to logged-in admin
+    const clearEmergBtn = document.getElementById('clearEmergencyBtn');
+    if (clearEmergBtn) {
+      clearEmergBtn.style.display = (role === 'admin' && this.isAdminLoggedIn && this.emergencyActive) ? 'inline-block' : 'none';
+    }
+
     // Add Venue button: always accessible from navbar
     const addVenueBtn = document.getElementById('openAddVenueModalBtn');
     if (addVenueBtn) {
@@ -292,13 +540,17 @@ const FlowApp = {
     // Trigger map resize if switching to admin or visitor
     if (window.GoogleMapsManager) {
       if (role === 'visitor') {
-        window.GoogleMapsManager.mountSingleMap('googleMapDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+        const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+        window.GoogleMapsManager.mountSingleMap('googleMapDiv', v);
+        window.GoogleMapsManager.renderVisitorPathways(v);
         setTimeout(() => {
           try { window.GoogleMapsManager.mapInstances['googleMapDiv']?.invalidateSize(); } catch(e) {}
         }, 150);
       }
       if (role === 'admin') {
-        window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+        const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+        window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', v);
+        window.GoogleMapsManager.renderVisitorPathways(v);
         setTimeout(() => {
           try { window.GoogleMapsManager.mapInstances['googleMapAdminDiv']?.invalidateSize(); } catch(e) {}
         }, 150);
@@ -311,10 +563,43 @@ const FlowApp = {
         this.updateKioskView(this.cachedZones, []);
       }
     }
+
+    // Update admin floating sidebar button visibility
+    const floatingSidebarBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    const adminLayout = document.getElementById('adminVerticalLayout');
+    if (floatingSidebarBtn) {
+      const isCollapsed = adminLayout && adminLayout.classList.contains('sidebar-collapsed');
+      floatingSidebarBtn.style.display = (role === 'admin' && isCollapsed) ? 'inline-flex' : 'none';
+    }
   },
 
-  // -------------------- VERTICAL ADMIN SIDEBAR --------------------
+  // -------------------- VERTICAL ADMIN SIDEBAR & TOGGLE --------------------
   bindAdminSidebar: function() {
+    // Hide/Show Sidebar Toggle Controls
+    const hideBtn = document.getElementById('adminSidebarHideBtn');
+    if (hideBtn) hideBtn.addEventListener('click', () => this.toggleAdminSidebar(true));
+
+    const collapseBottomBtn = document.getElementById('adminSidebarCollapseBottomBtn');
+    if (collapseBottomBtn) collapseBottomBtn.addEventListener('click', () => this.toggleAdminSidebar(true));
+
+    const floatingShowBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    if (floatingShowBtn) floatingShowBtn.addEventListener('click', () => this.toggleAdminSidebar(false));
+
+    // Keyboard shortcut (Alt+S) to quickly toggle sidebar
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (this.currentRole === 'admin' && e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        this.toggleAdminSidebar();
+      }
+    });
+
+    // Restore saved sidebar collapsed state
+    const savedSidebarState = localStorage.getItem('adminSidebarCollapsed');
+    if (savedSidebarState === 'true') {
+      this.toggleAdminSidebar(true, true);
+    }
+
     document.querySelectorAll('.admin-nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -352,7 +637,7 @@ const FlowApp = {
     }
 
     const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
-    if (evacBtn) evacBtn.addEventListener('click', () => this.triggerEmergency(true));
+    if (evacBtn) evacBtn.addEventListener('click', () => this.triggerEmergency(!this.emergencyActive));
 
     const simBurstBtn = document.getElementById('adminSimulateTickBtn');
     if (simBurstBtn) {
@@ -365,6 +650,40 @@ const FlowApp = {
     if (refreshZonesBtn) refreshZonesBtn.addEventListener('click', () => this.refreshData());
   },
 
+  toggleAdminSidebar: function(collapse, silent = false) {
+    const layout = document.getElementById('adminVerticalLayout') || document.querySelector('.admin-vertical-layout');
+    if (!layout) return;
+
+    const isCollapsed = collapse !== undefined ? collapse : !layout.classList.contains('sidebar-collapsed');
+    layout.classList.toggle('sidebar-collapsed', isCollapsed);
+    localStorage.setItem('adminSidebarCollapsed', isCollapsed ? 'true' : 'false');
+
+    const floatingBtn = document.getElementById('adminSidebarFloatingShowBtn');
+    if (floatingBtn) {
+      floatingBtn.style.display = (this.currentRole === 'admin' && isCollapsed) ? 'inline-flex' : 'none';
+      const activeNav = document.querySelector('.admin-nav-item.active span');
+      const badge = document.getElementById('sidebarCollapsedTabName');
+      if (badge && activeNav) {
+        badge.textContent = activeNav.textContent.trim().replace('CrowdFlow AI — ', '').slice(0, 15);
+      }
+    }
+
+    if (!silent && window.lucide) {
+      lucide.createIcons();
+    }
+
+    // Trigger map & CAD canvas re-layout to take 100% full expanded width
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      if (window.GoogleMapsManager && window.GoogleMapsManager.cadGoogleMap) {
+        window.GoogleMapsManager.cadGoogleMap.invalidateSize();
+      }
+      if (window.CadPlanner && typeof window.CadPlanner.updateSvgTransform === 'function') {
+        window.CadPlanner.updateSvgTransform();
+      }
+    }, 280);
+  },
+
   switchAdminTab: function(tab) {
     this.currentAdminTab = tab;
     document.querySelectorAll('.admin-nav-item').forEach(b => {
@@ -374,10 +693,19 @@ const FlowApp = {
     const target = document.getElementById(`tab-${tab}`);
     if (target) target.classList.add('active');
 
+    // Update tab badge on floating sidebar show button
+    const activeNav = document.querySelector('.admin-nav-item.active span');
+    const badge = document.getElementById('sidebarCollapsedTabName');
+    if (badge && activeNav) {
+      badge.textContent = activeNav.textContent.trim().replace('CrowdFlow AI — ', '').slice(0, 15);
+    }
+
     if (window.lucide) lucide.createIcons();
 
     if (tab === 'google-maps-tab' && window.GoogleMapsManager) {
-      window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+      const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+      window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', v);
+      window.GoogleMapsManager.renderVisitorPathways(v);
       setTimeout(() => {
         try {
           if (window.GoogleMapsManager.mapInstances['googleMapAdminDiv']) {
@@ -387,8 +715,33 @@ const FlowApp = {
       }, 150);
     }
 
-    if (tab === 'event-planner' && window.CadPlanner) {
-      window.CadPlanner.render();
+    if (tab === 'event-planner') {
+      if (window.CadPlanner) {
+        window.CadPlanner.render();
+      }
+      if (window.GoogleMapsManager) {
+        window.GoogleMapsManager.mountCadGoogleMap();
+      }
+      setTimeout(() => {
+        try {
+          if (window.CadPlanner) {
+            window.CadPlanner.setMapRotation(window.CadPlanner.state.mapRotationDeg || 0);
+          }
+          if (window.GoogleMapsManager && window.GoogleMapsManager.mapInstances['cadGoogleMapDiv']) {
+            window.GoogleMapsManager.mapInstances['cadGoogleMapDiv'].invalidateSize();
+          }
+        } catch(e) {}
+      }, 100);
+      setTimeout(() => {
+        try {
+          if (window.CadPlanner) {
+            window.CadPlanner.setMapRotation(window.CadPlanner.state.mapRotationDeg || 0);
+          }
+          if (window.GoogleMapsManager && window.GoogleMapsManager.mapInstances['cadGoogleMapDiv']) {
+            window.GoogleMapsManager.mapInstances['cadGoogleMapDiv'].invalidateSize();
+          }
+        } catch(e) {}
+      }, 350);
     }
 
     if (tab === 'user-management') {
@@ -402,17 +755,18 @@ const FlowApp = {
     if (tab === 'venue-management-tab' && window.VenueCrudManager) {
       window.VenueCrudManager.loadVenues();
     }
+
+    if (tab === 'digital-twin') {
+      if (this.cachedZones && this.cachedZones.length) {
+        this.updateAdminView(this.cachedZones, [], {});
+      } else {
+        this.refreshData();
+      }
+    }
   },
 
-  // -------------------- DATA MODE SWITCHER (DEMO VS REAL ESP32) --------------------
+  // -------------------- HARDWARE DATA MODE --------------------
   bindDataModeToggle: function() {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
-
-    if (demoBtn) demoBtn.addEventListener('click', () => this.setDataMode('demo'));
-    if (realBtn) realBtn.addEventListener('click', () => this.setDataMode('real'));
-
-    // Check backend current mode
     this.fetchDataMode();
   },
 
@@ -420,70 +774,36 @@ const FlowApp = {
     try {
       const resp = await fetch('/api/system/mode');
       const data = await resp.json();
-      if (data.data_mode) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-      }
+      this.dataMode = data.data_mode || 'real';
+      this.updateDataModeUI(this.dataMode);
     } catch (e) {
       console.warn('[DataMode] Error fetching mode:', e);
+      this.updateDataModeUI('real');
     }
   },
 
-  setDataMode: async function(mode) {
-    try {
-      const resp = await fetch('/api/system/mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode })
-      });
-      const data = await resp.json();
-      if (resp.ok && data.success) {
-        this.dataMode = data.data_mode;
-        this.updateDataModeUI(this.dataMode);
-        
-        // Show toast
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed;bottom:2rem;right:2rem;z-index:99999;background:${mode === 'real' ? '#047857' : '#1d4ed8'};color:#fff;padding:0.85rem 1.25rem;border-radius:10px;font-size:0.85rem;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:flex;align-items:center;gap:0.5rem;`;
-        toast.innerHTML = `<i data-lucide="${mode === 'real' ? 'radio' : 'sparkles'}"></i> System switched to ${mode === 'real' ? 'Real ESP32 IoT Live Mode' : 'Demo Simulation Mode'}`;
-        document.body.appendChild(toast);
-        if (window.lucide) lucide.createIcons();
-        setTimeout(() => toast.remove(), 3500);
-
-        this.refreshData();
-        this.fetchEsp32Sensors();
-      }
-    } catch (e) {
-      console.error('[DataMode] Error setting mode:', e);
-    }
+  setDataMode: async function(mode = 'real') {
+    this.dataMode = 'real';
+    this.updateDataModeUI('real');
   },
 
-  updateDataModeUI: function(mode) {
-    const demoBtn = document.getElementById('modeDemoBtn');
-    const realBtn = document.getElementById('modeRealBtn');
+  updateDataModeUI: function(mode = 'real') {
     const modeBadge = document.getElementById('esp32ModeBadge');
     const modeDisplay = document.getElementById('esp32CurrentModeDisplay');
 
-    if (demoBtn) demoBtn.classList.toggle('active', mode === 'demo');
-    if (realBtn) realBtn.classList.toggle('active', mode === 'real');
-
     if (modeBadge) {
-      modeBadge.textContent = mode === 'real' ? '● LIVE ESP32 HARDWARE ACTIVE' : '● DEMO SIMULATION MODE';
-      modeBadge.className = `badge ${mode === 'real' ? 'badge-safe' : 'badge-moderate'}`;
+      modeBadge.textContent = '● LIVE ESP32 HARDWARE ACTIVE';
+      modeBadge.className = 'badge badge-safe';
     }
 
     if (modeDisplay) {
-      modeDisplay.textContent = mode === 'real' ? 'REAL IOT MODE' : 'DEMO MODE';
-      modeDisplay.style.color = mode === 'real' ? '#059669' : '#2563eb';
+      modeDisplay.textContent = 'REAL IOT MODE';
+      modeDisplay.style.color = '#059669';
     }
 
-    // Toggle simulator
     if (window.SensorSimulator) {
-      window.SensorSimulator.isPaused = (mode === 'real');
-      if (mode === 'demo') {
-        window.SensorSimulator.startAutoSimulation();
-      } else {
-        window.SensorSimulator.stopAutoSimulation();
-      }
+      window.SensorSimulator.isPaused = true;
+      window.SensorSimulator.stopAutoSimulation();
     }
   },
 
@@ -757,12 +1077,42 @@ const FlowApp = {
   bindUserManagement: function() {
     const refreshBtn = document.getElementById('refreshUsersBtn');
     const form = document.getElementById('addUserForm');
+    const genPwBtn = document.getElementById('generateUserPasswordBtn');
+    const togglePwBtn = document.getElementById('toggleNewUserPasswordBtn');
 
     if (refreshBtn) refreshBtn.addEventListener('click', () => this.fetchUsers());
     if (form) {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         this.createUser();
+      });
+    }
+
+    if (genPwBtn) {
+      genPwBtn.addEventListener('click', () => {
+        const charset = 'abcdefghijkmnpqrstuvwxyz23456789!@#$%';
+        let pw = '';
+        for (let i = 0; i < 10; i++) pw += charset.charAt(Math.floor(Math.random() * charset.length));
+        const inp = document.getElementById('newUserPassword');
+        if (inp) {
+          inp.value = pw;
+          inp.type = 'text';
+          const icon = document.getElementById('toggleNewUserPasswordIcon');
+          if (icon) icon.setAttribute('data-lucide', 'eye-off');
+          if (window.lucide) lucide.createIcons();
+        }
+      });
+    }
+
+    if (togglePwBtn) {
+      togglePwBtn.addEventListener('click', () => {
+        const inp = document.getElementById('newUserPassword');
+        const icon = document.getElementById('toggleNewUserPasswordIcon');
+        if (!inp) return;
+        const isPw = inp.type === 'password';
+        inp.type = isPw ? 'text' : 'password';
+        if (icon) icon.setAttribute('data-lucide', isPw ? 'eye-off' : 'eye');
+        if (window.lucide) lucide.createIcons();
       });
     }
   },
@@ -773,10 +1123,17 @@ const FlowApp = {
     if (!tbody) return;
 
     try {
-      const resp = await fetch('/api/admin/users');
+      const resp = await fetch('/api/admin/users', {
+        headers: this.getAuthHeaders()
+      });
       const data = await resp.json();
-      const users = data.users || [];
 
+      if (resp.status === 401) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:#b91c1c; font-weight:700;">🔒 Session expired. Please log in to view system users.</td></tr>';
+        return;
+      }
+
+      const users = data.users || [];
       if (totalCountEl) totalCountEl.textContent = `${users.length} Users`;
 
       tbody.innerHTML = users.map(u => `
@@ -792,7 +1149,7 @@ const FlowApp = {
           </td>
           <td style="font-size:0.8rem; color:var(--text-muted); font-weight:600;">${u.venue_scope}</td>
           <td>
-            <span class="badge ${u.status === 'Active Session' ? 'badge-safe' : 'badge-safe'}" style="font-size:0.72rem;">
+            <span class="badge ${u.status === 'Active' ? 'badge-safe' : 'badge-moderate'}" style="font-size:0.72rem;">
               ● ${u.status}
             </span>
           </td>
@@ -815,6 +1172,7 @@ const FlowApp = {
   createUser: async function() {
     const nameInput = document.getElementById('newUserName');
     const usernameInput = document.getElementById('newUserUsername');
+    const passwordInput = document.getElementById('newUserPassword');
     const emailInput = document.getElementById('newUserEmail');
     const roleInput = document.getElementById('newUserRole');
     const venueInput = document.getElementById('newUserVenueScope');
@@ -823,13 +1181,24 @@ const FlowApp = {
 
     const name = nameInput?.value.trim();
     const username = usernameInput?.value.trim();
+    const password = passwordInput?.value.trim();
     const email = emailInput?.value.trim();
     const role = roleInput?.value;
     const venue = venueInput?.value;
 
-    if (!name || !username) {
+    if (!name || !username || !password) {
       if (feedback) {
-        feedback.textContent = 'Please fill in Name and Username';
+        feedback.textContent = 'Please fill in Name, Username, and Initial Password';
+        feedback.style.background = '#fef2f2';
+        feedback.style.color = '#b91c1c';
+        feedback.style.display = 'block';
+      }
+      return;
+    }
+
+    if (password.length < 6) {
+      if (feedback) {
+        feedback.textContent = 'Password must be at least 6 characters long';
         feedback.style.background = '#fef2f2';
         feedback.style.color = '#b91c1c';
         feedback.style.display = 'block';
@@ -842,24 +1211,25 @@ const FlowApp = {
 
       const resp = await fetch('/api/admin/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, username, email, role, venue_scope: venue })
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ name, username, password, email, role, venue_scope: venue })
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.success) {
         if (feedback) {
-          feedback.textContent = `✅ User @${username} created successfully`;
+          feedback.textContent = `✅ User @${username} created with secure hashed credentials`;
           feedback.style.background = '#ecfdf5';
           feedback.style.color = '#047857';
           feedback.style.display = 'block';
         }
         if (nameInput) nameInput.value = '';
         if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
         if (emailInput) emailInput.value = '';
         this.fetchUsers();
-        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3000);
+        setTimeout(() => { if (feedback) feedback.style.display = 'none'; }, 3500);
       } else {
         if (feedback) {
           feedback.textContent = data.message || 'Error creating user account';
@@ -869,9 +1239,30 @@ const FlowApp = {
         }
       }
     } catch (e) {
-      console.error('[UserManagement] Create error:', e);
+      console.error('[UserManagement] Create user error:', e);
     } finally {
       if (btn) btn.disabled = false;
+    }
+  },
+
+  deleteUser: async function(username) {
+    if (!confirm(`Are you sure you want to permanently revoke access for @${username}?`)) return;
+
+    try {
+      const resp = await fetch(`/api/admin/users/${username}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders()
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.success) {
+        this.showToast(`User @${username} access revoked`, 'info');
+        this.fetchUsers();
+      } else {
+        alert(data.message || 'Error deleting user');
+      }
+    } catch (e) {
+      console.error('[UserManagement] Delete user error:', e);
     }
   },
 
@@ -927,35 +1318,78 @@ const FlowApp = {
   },
 
   speakText: function(text) {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.SpeechSynthesisUtterance) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      } catch(e) {}
     } else {
-      alert(text);
+      console.log('[FlowApp Voice Broadcast]:', text);
     }
   },
 
   // -------------------- EMERGENCY EVACUATION --------------------
   bindEmergencyProtocol: function() {
-    const sosBtn = document.getElementById('sosBtn');
-    if (sosBtn) sosBtn.addEventListener('click', () => this.triggerEmergency(true));
+    const sosBtn = document.getElementById('sosBtn') || document.getElementById('emergencyBtn');
+    if (sosBtn) {
+      sosBtn.addEventListener('click', () => {
+        // Only authenticated admins can trigger evacuation protocol
+        if (!this.isAdminLoggedIn) {
+          this.openAdminLoginModal();
+          return;
+        }
+        this.triggerEmergency(!this.emergencyActive);
+      });
+    }
 
     const clearBtn = document.getElementById('clearEmergencyBtn');
-    if (clearBtn) clearBtn.addEventListener('click', () => this.triggerEmergency(false));
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (!this.isAdminLoggedIn) {
+          this.openAdminLoginModal();
+          return;
+        }
+        this.triggerEmergency(false);
+      });
+    }
+
+    const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
+    if (evacBtn) {
+      evacBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerEmergency(!this.emergencyActive);
+      });
+    }
   },
 
   triggerEmergency: async function(active) {
+    // 1. Optimistic immediate local reflection (0ms latency across UI components)
+    this.emergencyActive = Boolean(active);
+    this.updateEmergencyUI(this.emergencyActive);
+
+    // 2. Broadcast immediately across open tabs via localStorage event (0ms)
+    try {
+      localStorage.setItem('flow_emergency_event', JSON.stringify({ active: this.emergencyActive, time: Date.now() }));
+    } catch(e) {}
+
+    // 3. Immediately send to backend
     try {
       const resp = await fetch('/api/emergency/toggle', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: active })
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.getAuthHeaders ? this.getAuthHeaders() : {})
+        },
+        body: JSON.stringify({ active: this.emergencyActive })
       });
       const data = await resp.json();
-      this.emergencyActive = data.emergency_mode;
+      if (data && data.emergency_mode !== undefined) {
+        this.emergencyActive = Boolean(data.emergency_mode);
+      }
       this.updateEmergencyUI(this.emergencyActive);
       this.refreshData();
     } catch (e) {
@@ -966,15 +1400,137 @@ const FlowApp = {
   updateEmergencyUI: function(active) {
     const banner = document.getElementById('emergencyBanner');
     const statEmergency = document.getElementById('adminStatEmergency');
+    const clearBtn = document.getElementById('clearEmergencyBtn');
+    const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
+    const sosBtn = document.getElementById('sosBtn');
     
-    if (banner) banner.classList.toggle('active', active);
+    // 1. Top emergency banner
+    if (banner) {
+      banner.classList.toggle('active', active);
+    }
+
+    // 2. Clear button on banner: only visible when emergency is active AND admin is logged in
+    if (clearBtn) {
+      clearBtn.style.display = (this.isAdminLoggedIn && active) ? 'inline-block' : 'none';
+    }
+
+    // 3. Admin status widget
     if (statEmergency) {
       statEmergency.textContent = active ? 'EVACUATING' : 'NORMAL';
       statEmergency.style.color = active ? 'var(--color-critical)' : 'var(--color-safe)';
     }
 
+    // 4. Admin center evacuation trigger button state
+    if (evacBtn) {
+      if (active) {
+        evacBtn.style.borderColor = '#dc2626';
+        evacBtn.style.background = '#fef2f2';
+        evacBtn.innerHTML = `
+          <i data-lucide="alert-octagon" style="color:#dc2626; width:22px; height:22px;"></i>
+          <div>
+            <div style="font-weight:800; color:#dc2626;">⚠️ EVACUATION ACTIVE (Click to Reset/Clear Protocol)</div>
+            <div style="font-size:0.75rem; color:#991b1b;">All outward egress gates active. Click here to restore normal operations.</div>
+          </div>
+        `;
+      } else {
+        evacBtn.style.borderColor = 'rgba(239,68,68,0.4)';
+        evacBtn.style.background = 'rgba(239,68,68,0.06)';
+        evacBtn.innerHTML = `
+          <i data-lucide="alert-octagon" style="color:var(--color-critical); width:22px; height:22px;"></i>
+          <div>
+            <div style="font-weight:700; color:var(--color-critical);">Trigger Venue Evacuation Protocol</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Opens all emergency gates outward and highlights green exit corridors.</div>
+          </div>
+        `;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // 5. SOS Nav Button state (in admin view only)
+    if (sosBtn) {
+      sosBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+      if (active) {
+        sosBtn.style.background = '#dc2626';
+        sosBtn.style.color = '#ffffff';
+        sosBtn.innerHTML = '<i data-lucide="alert-octagon" style="width:15px;height:15px;"></i><span>RESET SOS</span>';
+      } else {
+        sosBtn.style.background = '';
+        sosBtn.style.color = '';
+        sosBtn.innerHTML = '<i data-lucide="alert-triangle" style="width:15px;height:15px;"></i><span>SOS</span>';
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // 6. Real-time Map Pathway Synchronization: highlight emergency evacuation route
+    if (window.GoogleMapsManager && typeof window.GoogleMapsManager.highlightRoute === 'function') {
+      window.GoogleMapsManager.highlightRoute(active ? 'EMERGENCY' : 'ALL');
+    }
+
+    // 7. Visitor Standing Guidance Card & HUD
+    const hudCard = document.getElementById('visitorStandingInfoCard');
+    const hudRoute = document.getElementById('visitorHudRecommendedRoute');
+    const hudExit = document.getElementById('visitorHudNearestExit');
+    const hudSpotName = document.getElementById('visitorStandingSpotName');
+    const guideToExitBtn = document.getElementById('visitorGuideToExitBtn');
+
+    if (hudCard) {
+      if (active) {
+        hudCard.style.borderColor = '#dc2626';
+        hudCard.style.boxShadow = '0 0 16px rgba(220,38,38,0.35)';
+        if (hudSpotName) {
+          hudSpotName.textContent = '🚨 EVACUATION ACTIVE';
+          hudSpotName.style.background = '#fee2e2';
+          hudSpotName.style.color = '#dc2626';
+          hudSpotName.style.borderColor = '#fca5a5';
+        }
+        if (hudRoute) {
+          hudRoute.innerHTML = `<span style="color:#06b6d4; font-weight:800;">🚨 EMERGENCY EGRESS (Route SOS to Exit EX-1/EX-2)</span>`;
+        }
+        if (hudExit) {
+          hudExit.innerHTML = `<span style="color:#dc2626; font-weight:800;">⚡ PROCEED IMMEDIATELY TO NEAREST UNBLOCKED EXIT</span>`;
+        }
+        if (guideToExitBtn) {
+          guideToExitBtn.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
+          guideToExitBtn.innerHTML = '🚨 Guide Me Out Now (Emergency Egress)';
+        }
+      } else {
+        hudCard.style.borderColor = '#3b82f6';
+        hudCard.style.boxShadow = '0 2px 8px rgba(59,130,246,0.1)';
+        if (guideToExitBtn) {
+          guideToExitBtn.style.background = 'linear-gradient(135deg, #1d4ed8, #2563eb)';
+          guideToExitBtn.innerHTML = '🧭 Guide Me to Nearest Exit';
+        }
+      }
+    }
+
+    // 8. Visitor Gate Status Card
+    const gateTitle = document.getElementById('visitorGateTitle');
+    const gateDesc = document.getElementById('visitorGateDesc');
+    const servoBadge = document.getElementById('visitorGateServoBadge');
+    const badgeA = document.getElementById('visitorGateBadgeA');
+    const badgeB = document.getElementById('visitorGateBadgeB');
+
     if (active) {
-      this.speakText('Attention! Emergency evacuation initiated. All turnstiles are open outwards. Follow green illuminated bypass pathways immediately to parking grounds.');
+      if (gateTitle) gateTitle.innerHTML = '<span style="color:#dc2626; font-weight:800;">🚨 EMERGENCY EVACUATION — ALL GATES OPENED</span>';
+      if (gateDesc) gateDesc.textContent = 'Hardware safety override active. All turnstiles and gates unlocked and swung outward for unhindered emergency egress. Follow green lighted pathways immediately.';
+      if (servoBadge) {
+        servoBadge.textContent = '🔓 SERVO MOTOR OVERRIDE: 90° OUTWARD EVACUATION CLEAR';
+        servoBadge.style.color = '#dc2626';
+        servoBadge.style.background = '#fee2e2';
+      }
+      if (badgeA) {
+        badgeA.textContent = '🟢 Gate A: Outward Egress Active';
+        badgeA.className = 'badge badge-safe';
+      }
+      if (badgeB) {
+        badgeB.textContent = '🟢 Gate B: Outward Egress Active';
+        badgeB.className = 'badge badge-safe';
+      }
+    }
+
+    // 9. Voice evacuation broadcast
+    if (active) {
+      this.speakText('Attention all visitors! Emergency evacuation protocol has been activated. All turnstiles and perimeter gates are open outward. Please proceed calmly along the illuminated emergency routes to the nearest exit portal.');
     }
   },
 
@@ -1133,50 +1689,33 @@ const FlowApp = {
     }
 
     const records = [];
-    const timeSlots = [
-      '19:45 - 20:00', '19:30 - 19:45', '19:15 - 19:30', '19:00 - 19:15',
-      '18:45 - 19:00', '18:30 - 18:45', '18:15 - 18:30', '18:00 - 18:15',
-      '17:45 - 18:00', '17:30 - 17:45', '17:15 - 17:30', '17:00 - 17:15'
-    ];
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    timeSlots.forEach((slot, slotIdx) => {
-      const decay = 1.0 - (slotIdx * 0.03);
-      zones.forEach(z => {
-        let isChoke = (z.status === 'CRITICAL' || z.id.includes('zone-c') || z.id.includes('zone-h'));
-        let count = Math.min(z.cap, Math.round((isChoke ? z.cap * 0.92 : z.cap * 0.42) * decay + (Math.random() * 25)));
-        let occPct = Math.round((count / z.cap) * 100);
-        let influx = Math.round((isChoke ? 65 : 35) * decay);
-        let egress = Math.round((isChoke ? 25 : 32) * decay);
-        let netFlow = influx - egress;
-        let wait = isChoke ? Math.round(28 * decay) : Math.round(5 * decay);
+    zones.forEach(z => {
+      let count = z.current_count || 0;
+      let cap = z.cap || 10;
+      let occPct = cap > 0 ? Math.round((count / cap) * 100) : 0;
+      let influx = z.entry_rate || 0;
+      let egress = z.exit_rate || 0;
+      let netFlow = influx - egress;
+      let wait = occPct >= 90 ? 15 : (occPct >= 50 ? 5 : 0);
+      let status = z.status || (occPct >= 90 ? 'CRITICAL' : occPct >= 75 ? 'HIGH' : occPct >= 50 ? 'MODERATE' : 'SAFE');
+      let directive = occPct >= 90 ? 'Divert traffic to recommended bypass; choke risk' : 'Normal circulation flowing smoothly';
 
-        let status = 'SAFE';
-        let directive = 'Normal circulation flowing smoothly';
-        if (occPct >= 90) {
-          status = 'CRITICAL';
-          directive = 'Divert traffic to recommended bypass; choke risk';
-        } else if (occPct >= 75) {
-          status = 'HIGH';
-          directive = 'Monitor doorway velocity closely';
-        } else if (occPct >= 50) {
-          status = 'MODERATE';
-          directive = 'Steady moving queue';
-        }
-
-        records.push({
-          time: slot,
-          zoneId: z.id,
-          zoneName: z.name,
-          influx: influx,
-          egress: egress,
-          count: count,
-          capacity: z.cap,
-          occPct: occPct,
-          netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
-          wait: `${wait} mins`,
-          status: status,
-          directive: directive
-        });
+      records.push({
+        time: timeStr,
+        zoneId: z.id,
+        zoneName: z.name,
+        influx: influx,
+        egress: egress,
+        count: count,
+        capacity: cap,
+        occPct: occPct,
+        netFlow: (netFlow >= 0 ? `+${netFlow}` : `${netFlow}`) + ' /min',
+        wait: `${wait} mins`,
+        status: status,
+        directive: directive
       });
     });
 
@@ -1386,10 +1925,10 @@ const FlowApp = {
         this.updateEmergencyUI(this.emergencyActive);
       }
 
-      this.updateCitizenView(zonesData.zones || [], routesData.routes || [], healthData.system || {});
-      this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData);
-      this.updateKioskView(zonesData.zones || [], routesData.routes || []);
-      this.updateAlerts(alertsData.alerts || []);
+      try { this.updateCitizenView(zonesData.zones || [], routesData.routes || [], healthData.system || {}); } catch(err) { console.error('[FlowApp] Citizen view update error:', err); }
+      try { this.updateAdminView(zonesData.zones || [], routesData.routes || [], healthData); } catch(err) { console.error('[FlowApp] Admin view update error:', err); }
+      try { this.updateKioskView(zonesData.zones || [], routesData.routes || []); } catch(err) { console.error('[FlowApp] Kiosk view update error:', err); }
+      try { this.updateAlerts(alertsData.alerts || []); } catch(err) { console.error('[FlowApp] Alerts update error:', err); }
     } catch (e) {
       console.warn('[FlowApp] Polling error:', e);
     }
@@ -1400,12 +1939,30 @@ const FlowApp = {
 
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || 800);
-    });
 
-    const pct = totalCap > 0 ? Math.min(100, Math.round((totalCount / totalCap) * 100)) : 48;
+    if (this.activeVenueId === 'sona-college') {
+      // In live ESP32 hardware mode, venue ground capacity matches prototype hardware limit (10 max)
+      totalCap = (systemState.gate_capacity !== undefined && systemState.gate_capacity > 0)
+        ? systemState.gate_capacity
+        : (this.currentVenue && this.currentVenue.total_capacity ? this.currentVenue.total_capacity : 10);
+
+      const espSensor = (this.cachedSensors || []).find(s => s.id && (s.id.includes('GATE') || s.id.includes('ESP32')));
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college' || (z.name && z.name.toLowerCase().includes('gate')));
+
+      totalCount = (systemState.gate_crowd !== undefined)
+        ? systemState.gate_crowd
+        : (espSensor ? (espSensor.current_count || 0) : (gateZone ? (gateZone.current_count || 0) : 0));
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
+
+    const pct = totalCap > 0 ? Math.min(100, Math.round((totalCount / totalCap) * 100)) : 0;
     const meterVal = document.getElementById('citizenMeterValue');
     const meterCircle = document.getElementById('citizenMeterCircle');
     const meterStatus = document.getElementById('citizenMeterStatus');
@@ -1427,7 +1984,7 @@ const FlowApp = {
         meterStatus.textContent = 'Heavy Congestion';
       } else {
         meterCircle.classList.add('critical');
-        meterStatus.textContent = 'Critical Density';
+        meterStatus.textContent = (pct >= 100) ? 'Maximum Capacity' : 'Critical Density';
       }
     }
 
@@ -1474,6 +2031,11 @@ const FlowApp = {
     }
 
     // Keep header route status badges synced with active venue routes
+    // Synchronize pathway popups and metrics on visitor Google Map
+    if (window.GoogleMapsManager && typeof window.GoogleMapsManager.updateVisitorPathwayMetrics === 'function') {
+      window.GoogleMapsManager.updateVisitorPathwayMetrics(routes);
+    }
+
     const mapBadgesEl = document.getElementById('mapHeaderRouteBadges');
     if (mapBadgesEl && routes.length) {
       mapBadgesEl.innerHTML = routes.map(r => {
@@ -1520,6 +2082,33 @@ const FlowApp = {
 
     if (countDisplay) {
       countDisplay.textContent = `${liveCrowd} / ${capacityLimit}`;
+    }
+
+    // Emergency Evacuation Override across Gate Display
+    if (this.emergencyActive || (systemState && systemState.emergency_mode)) {
+      card.style.borderLeft = '6px solid #dc2626';
+      card.style.background = '#fef2f2';
+      card.style.boxShadow = '0 0 24px rgba(220, 38, 38, 0.3)';
+      if (iconWrap) {
+        iconWrap.style.background = '#fee2e2';
+        iconWrap.style.color = '#dc2626';
+        iconWrap.innerHTML = '<i data-lucide="alert-octagon" style="width:26px; height:26px;"></i>';
+      }
+      if (title) title.innerHTML = '<span style="color:#dc2626; font-weight:800;">🚨 CRITICAL EVACUATION PROTOCOL ENGAGED</span>';
+      if (desc) desc.textContent = 'Hardware safety override active. All turnstiles and perimeter gates are open outward for rapid egress. Follow illuminated green bypass pathways to safe parking grounds.';
+      if (servoBadge) {
+        servoBadge.textContent = '🔓 90° SERVO OVERRIDE: OUTWARD EVACUATION CLEAR';
+        servoBadge.style.color = '#dc2626';
+        servoBadge.style.background = '#fee2e2';
+      }
+      if (badgeA) { badgeA.textContent = '🟢 Gate A: Outward Egress Open'; badgeA.className = 'badge badge-safe'; }
+      if (badgeB) { badgeB.textContent = '🟢 Gate B: Outward Egress Open'; badgeB.className = 'badge badge-safe'; }
+      if (boxA) { boxA.style.borderColor = '#22c55e'; boxA.style.background = '#f0fdf4'; }
+      if (boxB) { boxB.style.borderColor = '#22c55e'; boxB.style.background = '#f0fdf4'; }
+      if (indicatorA) { indicatorA.innerHTML = '<span style="color:#16a34a; font-weight:800;">● OUTWARD EGRESS ONLY</span>'; }
+      if (indicatorB) { indicatorB.innerHTML = '<span style="color:#16a34a; font-weight:800;">● OUTWARD EGRESS ONLY</span>'; }
+      if (window.lucide) lucide.createIcons();
+      return;
     }
 
     if (isGateAClosed) {
@@ -1639,17 +2228,28 @@ const FlowApp = {
   updateAdminView: function(zones, routes, health) {
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || 800);
-    });
+    if (this.activeVenueId === 'sona-college') {
+      const sys = (health && health.system) ? health.system : {};
+      totalCap = (sys.gate_capacity !== undefined && sys.gate_capacity > 0) ? sys.gate_capacity : 10;
+      const espSensor = (this.cachedSensors || []).find(s => s.id && (s.id.includes('GATE') || s.id.includes('ESP32')));
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college' || (z.name && z.name.toLowerCase().includes('gate')));
+      totalCount = (sys.gate_crowd !== undefined) ? sys.gate_crowd : (espSensor ? (espSensor.current_count || 0) : (gateZone ? (gateZone.current_count || 0) : 0));
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
 
     const statHeadcount = document.getElementById('adminStatHeadcount');
     if (statHeadcount) statHeadcount.textContent = totalCount.toLocaleString();
 
     const capPctEl = document.getElementById('adminStatCapacityPct');
     if (capPctEl) {
-      const pct = totalCap > 0 ? ((totalCount / totalCap) * 100).toFixed(1) : 49.8;
+      const pct = totalCap > 0 ? ((totalCount / totalCap) * 100).toFixed(1) : '0.0';
       capPctEl.textContent = `${pct}% of ${totalCap.toLocaleString()} Capacity`;
     }
 
@@ -1671,41 +2271,51 @@ const FlowApp = {
 
     // Render human-friendly zone occupancy cards
     const grid = document.getElementById('adminZoneGrid');
-    if (grid && zones.length) {
-      grid.innerHTML = zones.map(z => {
-        const occ = Math.round(((z.current_count || 0) / (z.capacity || 800)) * 100);
-        const status = z.status || 'SAFE';
-        const net = (z.entry_rate || 35) - (z.exit_rate || 30);
-        const statusLabel = status === 'CRITICAL' ? 'CRITICAL CHOKEPOINT' : status === 'HIGH' ? 'HEAVY CONGESTION' : status === 'MODERATE' ? 'MODERATE QUEUE' : 'FREE FLOWING';
+    if (grid) {
+      if (zones && zones.length) {
+        grid.innerHTML = zones.map(z => {
+          const occ = Math.round(((z.current_count || 0) / (z.capacity || 800)) * 100);
+          const status = z.status || 'SAFE';
+          const net = (z.entry_rate || 35) - (z.exit_rate || 30);
+          const statusLabel = status === 'CRITICAL' ? 'CRITICAL CHOKEPOINT' : status === 'HIGH' ? 'HEAVY CONGESTION' : status === 'MODERATE' ? 'MODERATE QUEUE' : 'FREE FLOWING';
 
-        return `
-          <div class="zone-card ${status}">
-            <div class="zone-header">
-              <span class="zone-code">${z.code}</span>
-              <span class="badge badge-${status.toLowerCase()}">${statusLabel}</span>
-            </div>
-            <div class="zone-name">${z.name}</div>
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">
-              ${z.description}
-            </div>
+          return `
+            <div class="zone-card ${status}">
+              <div class="zone-header">
+                <span class="zone-code">${z.code || 'ZONE'}</span>
+                <span class="badge badge-${(status || 'safe').toLowerCase()}">${statusLabel}</span>
+              </div>
+              <div class="zone-name">${z.name || 'Monitoring Sector'}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">
+                ${z.description || 'Live hardware telemetry sector'}
+              </div>
 
-            <div class="zone-progress-bg">
-              <div class="zone-progress-fill" style="width:${Math.min(100, occ)}%; background:${status === 'CRITICAL' ? 'var(--color-critical)' : status === 'HIGH' ? 'var(--color-high)' : status === 'MODERATE' ? 'var(--color-moderate)' : 'var(--color-safe)'};"></div>
-            </div>
+              <div class="zone-progress-bg">
+                <div class="zone-progress-fill" style="width:${Math.min(100, occ)}%; background:${status === 'CRITICAL' ? 'var(--color-critical)' : status === 'HIGH' ? 'var(--color-high)' : status === 'MODERATE' ? 'var(--color-moderate)' : 'var(--color-safe)'};"></div>
+              </div>
 
-            <div class="zone-stats-row">
-              <span>Present: <strong>${z.current_count} / ${z.capacity} (${occ}%)</strong></span>
-              <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : 'var(--text-main)'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
-            </div>
+              <div class="zone-stats-row">
+                <span>Present: <strong>${z.current_count || 0} / ${z.capacity || 800} (${occ}%)</strong></span>
+                <span>Net Change: <strong style="color:${net > 15 ? 'var(--color-critical)' : 'var(--text-main)'};">${net >= 0 ? '+' : ''}${net}/min</strong></span>
+              </div>
 
-            <div style="display:flex; justify-content:space-between; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-muted);">
-              <span>Entering: <strong>+${z.entry_rate || 35}/min</strong></span>
-              <span>Exiting: <strong>-${z.exit_rate || 30}/min</strong></span>
-              <span>Wait: <strong style="color:var(--text-main);">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
+              <div style="display:flex; justify-content:space-between; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-muted);">
+                <span>Entering: <strong>+${z.entry_rate || 0}/min</strong></span>
+                <span>Exiting: <strong>-${z.exit_rate || 0}/min</strong></span>
+                <span>Wait: <strong style="color:var(--text-main);">${z.prediction ? z.prediction.predicted_wait_minutes : 5}m</strong></span>
+              </div>
             </div>
+          `;
+        }).join('');
+      } else {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1.5rem; background: var(--bg-card); border: 1.5px dashed var(--border-subtle); border-radius: var(--radius-lg);">
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">No Zones Configured for this Venue</div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Live occupancy telemetry zones have not been linked to this ground yet.</p>
+            <button class="btn btn-primary btn-sm" onclick="FlowApp.refreshData()">🔄 Refresh Counts</button>
           </div>
         `;
-      }).join('');
+      }
     }
 
     // Render Dynamic Hourly Venue Footfall & Movement Velocity Chart
@@ -1767,10 +2377,19 @@ const FlowApp = {
     // 1. Calculate live totals
     let totalCount = 0;
     let totalCap = 0;
-    zones.forEach(z => {
-      totalCount += (z.current_count || 0);
-      totalCap += (z.capacity || (this.activeVenueId === 'sona-college' ? 10 : 800));
-    });
+    if (this.activeVenueId === 'sona-college') {
+      totalCap = 10;
+      const gateZone = zones.find(z => z.id === 'zone-a-sona-college');
+      totalCount = gateZone ? (gateZone.current_count || 0) : 0;
+    } else {
+      zones.forEach(z => {
+        totalCount += (z.current_count || 0);
+        totalCap += (z.capacity || 800);
+      });
+      if (this.currentVenue && this.currentVenue.total_capacity) {
+        totalCap = this.currentVenue.total_capacity;
+      }
+    }
 
     const occPct = totalCap > 0 ? Math.round((totalCount / totalCap) * 100) : 0;
 

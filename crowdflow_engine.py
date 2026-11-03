@@ -37,8 +37,9 @@ class CrowdFlowEngine:
         stage_d = float(params.get("stage_depth", 20 if unit == "m" else 65))
         entry_gates_count = max(2, int(params.get("entry_gates_count", 4)))
         exit_gates_count = max(2, int(params.get("exit_gates_count", 4)))
-        budget_limit = float(params.get("budget_limit", 50000))
-        currency = params.get("currency", "USD")
+        currency = params.get("currency", "INR")
+        default_limit = 4250000 if currency == "INR" else 50000
+        budget_limit = float(params.get("budget_limit", default_limit))
         alt_mode = params.get("alternative_mode", "balanced").lower() # 'safety_priority', 'balanced', 'budget_optimized'
         
         # Handle "Area Only" input if length/width not given
@@ -235,6 +236,8 @@ class CrowdFlowEngine:
                 "width": single_pen_w,
                 "height": single_pen_h,
                 "capacity": cap_per_box,
+                "current_occupancy": int(cap_per_box * 0.72),
+                "is_limit_exceeded": False,
                 "panel_count": int(math.ceil(((2 * single_pen_w) + (2 * single_pen_h)) / 14)),
                 "status": "COMPLIANT",
                 "specs": f"Capacity: {cap_per_box:,} ppl. Dual surge relief exits facing central corridor."
@@ -252,6 +255,8 @@ class CrowdFlowEngine:
                 "width": single_pen_w,
                 "height": single_pen_h,
                 "capacity": cap_per_box,
+                "current_occupancy": int(cap_per_box * 0.72),
+                "is_limit_exceeded": False,
                 "panel_count": int(math.ceil(((2 * single_pen_w) + (2 * single_pen_h)) / 14)),
                 "status": "COMPLIANT",
                 "specs": f"Capacity: {cap_per_box:,} ppl. Dual surge relief exits facing central corridor."
@@ -332,44 +337,80 @@ class CrowdFlowEngine:
             }
         ]
 
-        # Ingress & Egress Gates
+        # ── Ingress & Egress Gates ───────────────────────────────────────────────
+        # Entry gates are placed OPPOSITE to the stage (NFPA 101 directional flow).
+        # Exit / emergency egress gates are on the SAME side as the stage so that
+        # post-show dispersal moves away from the densest crowd zone.
+        if stage_pos == "east":
+            entry_gate_x, exit_gate_x, gate_axis = margin_x - 18, margin_x + field_w - 18, "vertical"
+        elif stage_pos == "north":
+            entry_gate_y_base, exit_gate_y_base, gate_axis = margin_y + field_h - 18, margin_y - 18, "horizontal"
+        elif stage_pos == "south":
+            entry_gate_y_base, exit_gate_y_base, gate_axis = margin_y - 18, margin_y + field_h - 18, "horizontal"
+        else:  # west (default) — entries go to the EAST (right) side
+            entry_gate_x, exit_gate_x, gate_axis = margin_x + field_w - 18, margin_x - 18, "vertical"
+
         entry_gates = []
         for i in range(entry_gates_count):
-            gy = margin_y + 80 + (i * ((field_h - 160) / max(1, entry_gates_count - 1)))
+            if gate_axis == "vertical":
+                gx = entry_gate_x
+                gy = margin_y + 80 + (i * ((field_h - 160) / max(1, entry_gates_count - 1)))
+                gw, gh = 36, 45
+            else:
+                gx = margin_x + 80 + (i * ((field_w - 160) / max(1, entry_gates_count - 1)))
+                gy = entry_gate_y_base
+                gw, gh = 45, 36
             entry_gates.append({
                 "id": f"gate-in-{i+1}",
                 "type": "entry_gate",
-                "label": f"ENTRY GATE {chr(65+i)}",
-                "x": margin_x - 18,
+                "label": f'ENTRY GATE {(["C","B","A","D","E","F"][i] if i < 6 else chr(65+i))}',
+                "x": gx,
                 "y": gy,
-                "width": 36,
-                "height": 45,
+                "width": gw,
+                "height": gh,
                 "throughput_rate": int(total_entry_throughput_ppl_min / entry_gates_count),
                 "specs": "Equipped with dual VL53L0X ToF optical beam counters & walk-through metal detectors."
             })
 
         exit_gates = []
         for i in range(exit_gates_count):
-            gy = margin_y + 70 + (i * ((field_h - 140) / max(1, exit_gates_count - 1)))
+            if gate_axis == "vertical":
+                gx = exit_gate_x
+                gy = margin_y + 70 + (i * ((field_h - 140) / max(1, exit_gates_count - 1)))
+                gw, gh = 36, 45
+            else:
+                gx = margin_x + 70 + (i * ((field_w - 140) / max(1, exit_gates_count - 1)))
+                gy = exit_gate_y_base
+                gw, gh = 45, 36
             exit_gates.append({
                 "id": f"gate-out-{i+1}",
                 "type": "emergency_exit" if i % 2 == 1 else "exit_gate",
                 "label": f"EMERGENCY EGRESS {i+1}" if i % 2 == 1 else f"EXIT GATE {i+1}",
-                "x": margin_x + field_w - 18,
+                "x": gx,
                 "y": gy,
-                "width": 36,
-                "height": 45,
+                "width": gw,
+                "height": gh,
                 "throughput_rate": int(total_exit_throughput_ppl_min / exit_gates_count),
                 "specs": "Outward swing with panic hardware. Directly links to secondary evacuation perimeter."
             })
 
-        # Directional Flow Vectors
-        flow_vectors = [
-            {"from_x": margin_x + 20, "from_y": margin_y + 35, "to_x": margin_x + field_w - 50, "to_y": margin_y + 35, "label": "Perimeter Ingress Lane (North)"},
-            {"from_x": margin_x + 20, "from_y": margin_y + field_h - 35, "to_x": margin_x + field_w - 50, "to_y": margin_y + field_h - 35, "label": "Perimeter Ingress Lane (South)"},
-            {"from_x": pen_start_x + 50, "from_y": margin_y + (field_h * 0.48), "to_x": pen_start_x + pen_total_w, "to_y": margin_y + (field_h * 0.48), "label": "Arterial Safety Corridor Egress"},
-            {"from_x": facility_x + 40, "from_y": margin_y + 100, "to_x": margin_x + field_w, "to_y": margin_y + 100, "label": "Rapid Ambulance Egress Highway"}
-        ]
+        # Directional Flow Vectors (Flow from Entry Gates toward Stage)
+        if stage_pos == "east":
+            # Ingress from West (entries) to East (stage)
+            flow_vectors = [
+                {"from_x": margin_x + 30, "from_y": margin_y + 35, "to_x": margin_x + field_w - 60, "to_y": margin_y + 35, "label": "Perimeter Ingress Lane (North)"},
+                {"from_x": margin_x + 30, "from_y": margin_y + field_h - 35, "to_x": margin_x + field_w - 60, "to_y": margin_y + field_h - 35, "label": "Perimeter Ingress Lane (South)"},
+                {"from_x": pen_start_x + 50, "from_y": margin_y + (field_h * 0.48), "to_x": pen_start_x + pen_total_w, "to_y": margin_y + (field_h * 0.48), "label": "Arterial Safety Corridor"},
+                {"from_x": margin_x + 60, "from_y": margin_y + 100, "to_x": margin_x + field_w, "to_y": margin_y + 100, "label": "Rapid Ambulance Egress Highway"}
+            ]
+        else:
+            # Default (stage west): Ingress flows from East (entries) to West (stage)
+            flow_vectors = [
+                {"from_x": margin_x + field_w - 30, "from_y": margin_y + 35, "to_x": margin_x + 60, "to_y": margin_y + 35, "label": "Perimeter Ingress Lane (North)"},
+                {"from_x": margin_x + field_w - 30, "from_y": margin_y + field_h - 35, "to_x": margin_x + 60, "to_y": margin_y + field_h - 35, "label": "Perimeter Ingress Lane (South)"},
+                {"from_x": pen_start_x + pen_total_w, "from_y": margin_y + (field_h * 0.48), "to_x": pen_start_x + 30, "to_y": margin_y + (field_h * 0.48), "label": "Central Arterial Corridor to Stage"},
+                {"from_x": facility_x + 40, "from_y": margin_y + 100, "to_x": margin_x + field_w, "to_y": margin_y + 100, "label": "Rapid Ambulance Egress Highway"}
+            ]
 
         # 8. Deterministic Equipment Quantities & Itemized Budget
         # Currency rates relative to USD (USD: 1.0, INR: 86.0, EUR: 0.92)
