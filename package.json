@@ -4,10 +4,10 @@
   "version": "2.0.0",
   "description": "FlowNavigator - AI + IoT Crowd Management & Guidance System",
   "scripts": {
-    "start": "python app.py",
-    "dev": "python app.py",
-    "dev:ui": "tsx server.ts",
-    "dev:vite": "vite",
+    "start": "node init && python app.py",
+    "dev": "node init && python app.py",
+    "dev:ui": "node init && tsx server.ts",
+    "dev:vite": "node init && vite",
     "train-ml": "python ml/train_model.py"
   },
   "dependencies": {
@@ -18,6 +18,7 @@
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "node-fetch": "^3.3.2",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
