@@ -314,9 +314,9 @@ const GoogleMapsManager = {
       map.setView([venue.lat, venue.lng], venue.zoom || 18);
     }
 
-    // Render marked point markers and diagram
+    // Render marked point markers, barricades and pathways
     ['googleMapDiv', 'googleMapAdminDiv'].forEach(id => this.clearOverlays(id));
-    if (elemId === 'googleMapDiv') {
+    if (elemId === 'googleMapDiv' || elemId === 'googleMapAdminDiv') {
       this.renderVisitorPathways(venue);
     }
   },
@@ -954,7 +954,15 @@ const GoogleMapsManager = {
         });
       }
     };
-    setupLocate('visitorLocateMeBtn');
+    // Visitor Locate Me specifically tracks standing location
+    const visitorLocBtn = document.getElementById('visitorLocateMeBtn');
+    if (visitorLocBtn) {
+      visitorLocBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.requestVisitorLiveGps();
+      });
+    }
     setupLocate('adminLocateMeBtn');
     setupLocate('cadLocateMeBtn');
   },
@@ -1477,7 +1485,7 @@ const GoogleMapsManager = {
     const ptExitB = this.getOffsetLatLng(lat, lng, r * 1.02, 285); // West Mid Exit EX-2
     const ptExitA = this.getOffsetLatLng(lat, lng, r * 1.05, 240); // Southwest Exit EX-4
 
-    // Default Route C - Express Ingress (Gate C) -> Arena Front -> Northwest Exit EX-1
+    // Default Route C - Express Ingress (Gate C) -> Barricades -> Northwest Exit EX-1 (NEVER to Stage)
     const ptGateC = this.getOffsetLatLng(lat, lng, r * 1.05, 220);
     const ptC1 = this.getOffsetLatLng(lat, lng, r * 0.70, 195);
     const ptC2 = this.getOffsetLatLng(lat, lng, r * 0.38, 150);
@@ -1485,11 +1493,10 @@ const GoogleMapsManager = {
       [ptGateC.lat, ptGateC.lng],
       [ptC1.lat, ptC1.lng],
       [ptC2.lat, ptC2.lng],
-      [destPt.lat, destPt.lng],
       [ptExitC.lat, ptExitC.lng]
     ];
 
-    // Default Route B - Secondary Concourse (Gate B) -> Arena Front -> West Mid Exit EX-2
+    // Default Route B - Secondary Concourse (Gate B) -> Central Safety Corridor -> West Mid Exit EX-2 (NEVER to Stage)
     const ptGateB = this.getOffsetLatLng(lat, lng, r * 1.02, 305);
     const ptB1 = this.getOffsetLatLng(lat, lng, r * 0.75, 335);
     const ptB2 = this.getOffsetLatLng(lat, lng, r * 0.42, 20);
@@ -1497,21 +1504,19 @@ const GoogleMapsManager = {
       [ptGateB.lat, ptGateB.lng],
       [ptB1.lat, ptB1.lng],
       [ptB2.lat, ptB2.lng],
-      [destPt.lat, destPt.lng],
       [ptExitB.lat, ptExitB.lng]
     ];
 
-    // Default Route A - Main Walkway (Gate A) -> Arena Front -> Southwest Exit EX-4
+    // Default Route A - Main Walkway (Gate A) -> Barricades -> Southwest Exit EX-4 (NEVER to Stage)
     const ptGateA = this.getOffsetLatLng(lat, lng, r * 1.0, 175);
     const ptA1 = this.getOffsetLatLng(lat, lng, r * 0.58, 140);
     let pathA = [
       [ptGateA.lat, ptGateA.lng],
       [ptA1.lat, ptA1.lng],
-      [destPt.lat, destPt.lng],
       [ptExitA.lat, ptExitA.lng]
     ];
 
-    // Default Emergency Evacuation Safety Egress (Arena -> North SOS Egress EX-1)
+    // Default Emergency Evacuation Safety Egress (Arena Front -> North SOS Egress EX-1)
     const ptSos1 = this.getOffsetLatLng(lat, lng, r * 0.65, 80);
     const ptSosGate = this.getOffsetLatLng(lat, lng, r * 1.15, 90);
     let pathSos = [
@@ -1520,7 +1525,33 @@ const GoogleMapsManager = {
       [ptSosGate.lat, ptSosGate.lng]
     ];
 
-    // Apply custom pathways if set (Ensuring fallback to clean defaults if legacy truncated path found)
+    // Check custom pathways or sync directly from CAD Ground Planner
+    let cadGpsPaths = null;
+    if (window.CadPlanner && typeof window.CadPlanner.getGpsPathways === 'function') {
+      try {
+        cadGpsPaths = window.CadPlanner.getGpsPathways();
+      } catch(e) {}
+    }
+
+    if (cadGpsPaths && cadGpsPaths['C'] && cadGpsPaths['A']) {
+      this.customPathways = JSON.parse(JSON.stringify(cadGpsPaths));
+    } else if (this.customPathways) {
+      // Invalidate any legacy pathways where visitor routes collided with destPt/stage knot
+      const hasStageCollision = ['C', 'B', 'A'].some(k => {
+        const pts = this.customPathways[k];
+        if (!Array.isArray(pts) || pts.length < (k === 'B' ? 5 : 8)) return true;
+        return pts.some(pt => {
+          const dLat = Math.abs(pt[0] - destPt.lat);
+          const dLng = Math.abs(pt[1] - destPt.lng);
+          return (dLat < 0.0002 && dLng < 0.0002);
+        });
+      });
+      if (hasStageCollision) {
+        this.customPathways = null;
+      }
+    }
+
+    // Apply custom pathways if set
     if (this.customPathways) {
       if (this.customPathways['C'] && this.customPathways['C'].length >= 2) pathC = this.customPathways['C'];
       if (this.customPathways['B'] && this.customPathways['B'].length >= 2) pathB = this.customPathways['B'];
@@ -1553,6 +1584,15 @@ const GoogleMapsManager = {
         const stageGps = window.CadPlanner.cadToGps(238, 420);
         if (stageGps && stageGps.length === 2 && !isNaN(stageGps[0])) {
           posDest = stageGps;
+        }
+      } catch(e) {}
+    }
+
+    if (window.CadPlanner && typeof window.CadPlanner.getGpsFacilities === 'function') {
+      try {
+        const cadFacs = window.CadPlanner.getGpsFacilities();
+        if (cadFacs && Object.keys(cadFacs).length > 0) {
+          this.facilities = cadFacs;
         }
       } catch(e) {}
     }
@@ -1658,12 +1698,17 @@ const GoogleMapsManager = {
     });
 
     // Render CAD Venue Perimeter Boundary Polygon
-    let boundaryPts = this.boundary;
-    if ((!boundaryPts || !boundaryPts.length) && window.CadPlanner && typeof window.CadPlanner.getGpsBoundary === 'function') {
+    let boundaryPts = null;
+    if (window.CadPlanner && typeof window.CadPlanner.getGpsBoundary === 'function') {
       try {
         boundaryPts = window.CadPlanner.getGpsBoundary();
-        this.boundary = boundaryPts;
+        if (boundaryPts && boundaryPts.length >= 3) {
+          this.boundary = boundaryPts;
+        }
       } catch(e) {}
+    }
+    if (!boundaryPts || !boundaryPts.length) {
+      boundaryPts = this.boundary;
     }
     if (boundaryPts && boundaryPts.length >= 3) {
       targetMaps.forEach(map => {
@@ -1681,12 +1726,17 @@ const GoogleMapsManager = {
 
     // Render CAD Barricades (Mojo Pens) across both Visitor and Admin maps
     const allBarricadeLayers = [];
-    let barricadeList = this.barricades;
-    if ((!barricadeList || !barricadeList.length) && window.CadPlanner && typeof window.CadPlanner.getGpsBarricades === 'function') {
+    let barricadeList = null;
+    if (window.CadPlanner && typeof window.CadPlanner.getGpsBarricades === 'function') {
       try {
         barricadeList = window.CadPlanner.getGpsBarricades();
-        this.barricades = barricadeList;
+        if (barricadeList && barricadeList.length > 0) {
+          this.barricades = barricadeList;
+        }
       } catch(e) {}
+    }
+    if (!barricadeList || !barricadeList.length) {
+      barricadeList = this.barricades;
     }
     if (!barricadeList || !barricadeList.length) {
       barricadeList = this.generateDefaultGpsBarricades(venue);
@@ -1768,18 +1818,26 @@ const GoogleMapsManager = {
     const topBadge = document.getElementById('visitorTopViewBadge');
     if (topBadge) topBadge.style.display = 'flex';
 
-    // If map orientation toggle is active, maintain orientation
+    // Maintain orientation matching CAD planner rotation
     ['googleMapDiv', 'googleMapAdminDiv'].forEach(elemId => {
-      if (this.isMapOriented && this.isMapOriented[elemId]) {
-        const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
-        const venueId = this.currentVenueId || 'sona-college';
-        let rot = v.mapRotationDeg !== undefined ? v.mapRotationDeg : 0;
-        try {
-          const mr = localStorage.getItem('cad_map_rot_' + venueId);
-          if (mr !== null) rot = parseInt(mr, 10) || 0;
-        } catch(e) {}
-        const mapDiv = document.getElementById(elemId);
-        if (mapDiv && rot !== 0) {
+      const v = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+      const venueId = this.currentVenueId || 'sona-college';
+      let rot = v.mapRotationDeg !== undefined ? v.mapRotationDeg : 0;
+      try {
+        const mr = localStorage.getItem('cad_map_rot_' + venueId);
+        if (mr !== null) rot = parseInt(mr, 10) || 0;
+      } catch(e) {}
+
+      // Default orientation to follow CAD rotation if not explicitly turned off
+      if (this.isMapOriented[elemId] === undefined) {
+        this.isMapOriented[elemId] = (rot !== 0);
+      }
+
+      const mapDiv = document.getElementById(elemId);
+      if (mapDiv) {
+        mapDiv.style.transformOrigin = '50% 50%';
+        mapDiv.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+        if (this.isMapOriented[elemId] && rot !== 0) {
           mapDiv.style.transform = `scale(1.42) rotate(${rot}deg)`;
           const wrap = mapDiv.parentElement;
           if (wrap) {
@@ -1787,9 +1845,40 @@ const GoogleMapsManager = {
               el.style.transform = `rotate(${-rot}deg)`;
             });
           }
+        } else {
+          mapDiv.style.transform = 'none';
+          const wrap = mapDiv.parentElement;
+          if (wrap) {
+            wrap.querySelectorAll('.custom-pathway-marker, .barricade-pen-marker, .leaflet-popup').forEach(el => {
+              el.style.transform = '';
+            });
+          }
+        }
+      }
+
+      // Sync button state
+      const btn = document.getElementById(elemId === 'googleMapDiv' ? 'visitorMapOrientBtn' : 'adminMapOrientBtn');
+      if (btn) {
+        if (this.isMapOriented[elemId] && rot !== 0) {
+          btn.classList.add('active');
+          btn.style.background = '#2563eb';
+          btn.style.color = '#ffffff';
+          btn.style.borderColor = '#1d4ed8';
+          btn.innerHTML = `🧭 Reset North-Up (${rot}°)`;
+        } else {
+          btn.classList.remove('active');
+          btn.style.background = '';
+          btn.style.color = '';
+          btn.style.borderColor = '';
+          btn.innerHTML = `🔄 CAD Orientation (${rot}°)`;
         }
       }
     });
+
+    // Re-render visitor standing location marker if visitor map is active
+    if (this.mapInstances['googleMapDiv']) {
+      this.initVisitorStandingTracker();
+    }
   },
 
   clearVisitorPathways: function() {
@@ -1809,6 +1898,10 @@ const GoogleMapsManager = {
       this.visitorPathways.markers = [];
       this.visitorPathways.gateMarkers = {};
       this.visitorPathways.barricades = [];
+    }
+    if (this.visitorStandingMarker && this.visitorStandingMarker.remove) {
+      this.visitorStandingMarker.remove();
+      this.visitorStandingMarker = null;
     }
   },
 
@@ -2276,6 +2369,371 @@ const GoogleMapsManager = {
         console.warn('[GoogleMaps] Error updating pathway metric:', err);
       }
     });
+  },
+
+  // -------------------- VISITOR CURRENT LOCATION & STANDING TRACKER --------------------
+  getDistanceMeters: function(lat1, lng1, lat2, lng2) {
+    if (lat1 === undefined || lng1 === undefined || lat2 === undefined || lng2 === undefined) return 0;
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return Math.round(R * c);
+  },
+
+  initVisitorStandingTracker: function() {
+    const map = this.mapInstances['googleMapDiv'];
+    if (!map) return;
+
+    const venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    const vid = this.currentVenueId || 'sona-college';
+
+    let initialPos = null;
+    try {
+      const saved = localStorage.getItem('flow_visitor_standing_' + vid);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 2 && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
+          initialPos = parsed;
+        }
+      }
+    } catch(e) {}
+
+    if (!initialPos) {
+      if (this.activePaths && this.activePaths['B'] && this.activePaths['B'].length > 0) {
+        initialPos = [this.activePaths['B'][0][0], this.activePaths['B'][0][1]];
+      } else {
+        const offset = this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 0.95, 305);
+        initialPos = [offset.lat, offset.lng];
+      }
+      this.visitorStandingSpotLabel = 'Gate B (Concourse Entrance)';
+    }
+
+    this.setVisitorStandingLocation(initialPos[0], initialPos[1], this.visitorStandingSpotLabel || 'Gate B Concourse', false);
+
+    // Tap map to stand listener
+    if (!map._hasStandingClickListener) {
+      map.on('click', (e) => {
+        this.setVisitorStandingLocation(e.latlng.lat, e.latlng.lng, 'Designated Standing Spot', false);
+        this.showToast('📍 Updated your standing location!', 'info');
+      });
+      map._hasStandingClickListener = true;
+    }
+
+    this.bindVisitorStandingControls();
+  },
+
+  setVisitorStandingLocation: function(lat, lng, label = 'Standing Spot', panTo = false) {
+    const map = this.mapInstances['googleMapDiv'];
+    if (!map) return;
+
+    lat = parseFloat(lat);
+    lng = parseFloat(lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    this.visitorStandingPos = [lat, lng];
+    this.visitorStandingSpotLabel = label;
+
+    const vid = this.currentVenueId || 'sona-college';
+    try {
+      localStorage.setItem('flow_visitor_standing_' + vid, JSON.stringify([lat, lng]));
+    } catch(e) {}
+
+    const standingIcon = L.divIcon({
+      className: 'visitor-standing-icon-wrap',
+      html: `
+        <div class="visitor-standing-pin-marker">
+          <div class="visitor-standing-radar-wave"></div>
+          <div class="visitor-standing-radar-wave wave-2"></div>
+          <div class="visitor-standing-core">
+            <span class="visitor-standing-dot"></span>
+          </div>
+          <div class="visitor-standing-pill">
+            <span class="standing-live-dot"></span> <b>YOU ARE HERE</b>
+          </div>
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+
+    if (this.visitorStandingMarker && this.visitorStandingMarker.setLatLng) {
+      this.visitorStandingMarker.setLatLng([lat, lng]);
+      this.visitorStandingMarker.setIcon(standingIcon);
+    } else {
+      this.visitorStandingMarker = L.marker([lat, lng], {
+        icon: standingIcon,
+        draggable: true,
+        zIndexOffset: 10000
+      }).addTo(map);
+
+      this.visitorStandingMarker.on('dragend', (e) => {
+        const pos = e.target.getLatLng();
+        this.setVisitorStandingLocation(pos.lat, pos.lng, 'Custom Dragged Spot', false);
+        this.showToast('📍 Updated your standing location!', 'info');
+      });
+
+      this.visitorStandingMarker.bindPopup(`
+        <div style="font-family:sans-serif; text-align:center; min-width:170px;">
+          <div style="font-size:12px; font-weight:800; color:#1d4ed8; margin-bottom:3px;">📍 YOU ARE HERE (Standing)</div>
+          <div style="font-size:11px; color:#475569;">Drag this pin or tap anywhere on the venue map to update where you are standing.</div>
+        </div>
+      `);
+    }
+
+    if (panTo) {
+      map.panTo([lat, lng], { animate: true, duration: 0.6 });
+    }
+
+    this.updateStandingGuidanceHud([lat, lng], label);
+  },
+
+  updateStandingGuidanceHud: function(pos, spotLabel) {
+    if (!pos || !Array.isArray(pos)) return;
+    const curLat = pos[0];
+    const curLng = pos[1];
+
+    const venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+
+    // Landmark coordinates
+    const pC = (this.activePaths && this.activePaths['C'] && this.activePaths['C'].length > 0) ? this.activePaths['C'][0] : null;
+    const pB = (this.activePaths && this.activePaths['B'] && this.activePaths['B'].length > 0) ? this.activePaths['B'][0] : null;
+    const pA = (this.activePaths && this.activePaths['A'] && this.activePaths['A'].length > 0) ? this.activePaths['A'][0] : null;
+
+    const exC = (this.activePaths && this.activePaths['C'] && this.activePaths['C'].length > 1) ? this.activePaths['C'][this.activePaths['C'].length - 1] : null;
+    const exB = (this.activePaths && this.activePaths['B'] && this.activePaths['B'].length > 1) ? this.activePaths['B'][this.activePaths['B'].length - 1] : null;
+    const exA = (this.activePaths && this.activePaths['A'] && this.activePaths['A'].length > 1) ? this.activePaths['A'][this.activePaths['A'].length - 1] : null;
+
+    const gates = [
+      { name: 'Gate C (Express)', key: 'C', pos: pC, color: '#10b981' },
+      { name: 'Gate B (Secondary)', key: 'B', pos: pB, color: '#f59e0b' },
+      { name: 'Gate A (Main)', key: 'A', pos: pA, color: '#ef4444' }
+    ].filter(g => g.pos);
+
+    let nearestGate = null;
+    let minGateDist = Infinity;
+    gates.forEach(g => {
+      const d = this.getDistanceMeters(curLat, curLng, g.pos[0], g.pos[1]);
+      if (d < minGateDist) {
+        minGateDist = d;
+        nearestGate = { ...g, distance: d };
+      }
+    });
+
+    const exits = [
+      { name: 'Exit EX-1 (North)', key: 'C', pos: exC, color: '#059669' },
+      { name: 'Exit EX-2 (Mid)', key: 'B', pos: exB, color: '#d97706' },
+      { name: 'Exit EX-4 (South)', key: 'A', pos: exA, color: '#dc2626' }
+    ].filter(e => e.pos);
+
+    let nearestExit = null;
+    let minExitDist = Infinity;
+    exits.forEach(e => {
+      const d = this.getDistanceMeters(curLat, curLng, e.pos[0], e.pos[1]);
+      if (d < minExitDist) {
+        minExitDist = d;
+        nearestExit = { ...e, distance: d };
+      }
+    });
+
+    let destPos = [venue.lat, venue.lng];
+    if (window.CadPlanner && typeof window.CadPlanner.cadToGps === 'function') {
+      try {
+        const sg = window.CadPlanner.cadToGps(238, 420);
+        if (sg && !isNaN(sg[0])) destPos = sg;
+      } catch(e) {}
+    }
+    const distStage = this.getDistanceMeters(curLat, curLng, destPos[0], destPos[1]);
+
+    const recRouteKey = nearestGate ? nearestGate.key : 'C';
+    const recRouteName = recRouteKey === 'C' ? 'Route C (Express Walkway)' :
+                         recRouteKey === 'B' ? 'Route B (Secondary Concourse)' : 'Route A (Main Walkway)';
+
+    const spotNameEl = document.getElementById('visitorStandingSpotName');
+    if (spotNameEl) spotNameEl.textContent = spotLabel || 'Designated Standing Spot';
+
+    const gateEl = document.getElementById('visitorHudNearestGate');
+    if (gateEl && nearestGate) {
+      gateEl.innerHTML = `<span style="color:${nearestGate.color}; font-weight:800;">● ${nearestGate.name}: ${nearestGate.distance}m</span>`;
+    }
+
+    const routeEl = document.getElementById('visitorHudRecommendedRoute');
+    if (routeEl) {
+      const rColor = recRouteKey === 'C' ? '#059669' : (recRouteKey === 'B' ? '#d97706' : '#dc2626');
+      routeEl.innerHTML = `<span style="color:${rColor}; font-weight:800;">● ${recRouteName}</span>`;
+    }
+
+    const exitEl = document.getElementById('visitorHudNearestExit');
+    if (exitEl && nearestExit) {
+      exitEl.innerHTML = `<span style="color:${nearestExit.color}; font-weight:800;">● ${nearestExit.name}: ${nearestExit.distance}m</span>`;
+    }
+
+    const stageEl = document.getElementById('visitorHudDistanceStage');
+    if (stageEl) {
+      stageEl.textContent = `${distStage}m (${Math.max(1, Math.round(distStage / 75))} min walk)`;
+    }
+
+    const coordEl = document.getElementById('mapCoordDisplay');
+    if (coordEl) {
+      coordEl.innerHTML = `📍 Standing: ${curLat.toFixed(6)}°, ${curLng.toFixed(6)}°`;
+    }
+  },
+
+  requestVisitorLiveGps: function() {
+    if (!navigator.geolocation) {
+      this.showToast('Geolocation is not supported by your browser.', 'warning');
+      return;
+    }
+
+    this.showToast('📡 Requesting current GPS coordinates...', 'info');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const uLat = pos.coords.latitude;
+        const uLng = pos.coords.longitude;
+        const venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+        const dist = this.getDistanceMeters(uLat, uLng, venue.lat, venue.lng);
+
+        if (dist <= 3000) {
+          this.setVisitorStandingLocation(uLat, uLng, '📍 My Live GPS Location', true);
+          this.showToast(`📍 Located you at the venue (${dist}m from center)!`, 'success');
+        } else {
+          this.setVisitorStandingLocation(uLat, uLng, `📍 Real GPS (${(dist/1000).toFixed(1)}km away)`, true);
+          this.showToast(`📍 GPS detected (${(dist/1000).toFixed(1)}km away). Placed standing beacon! Use preset buttons to jump into venue.`, 'info');
+        }
+      },
+      (err) => {
+        this.showToast('GPS access denied or unavailable. Tap anywhere on the venue map or choose an entrance preset!', 'warning');
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  },
+
+  setVisitorStandingSpotPreset: function(spotKey) {
+    const venue = this.venueConfigs[this.currentVenueId] || this.venueConfigs['sona-college'];
+    let targetPos = null;
+    let label = 'Standing Spot';
+
+    const pC = (this.activePaths && this.activePaths['C'] && this.activePaths['C'].length > 0) ? this.activePaths['C'][0] : null;
+    const pB = (this.activePaths && this.activePaths['B'] && this.activePaths['B'].length > 0) ? this.activePaths['B'][0] : null;
+    const pA = (this.activePaths && this.activePaths['A'] && this.activePaths['A'].length > 0) ? this.activePaths['A'][0] : null;
+
+    if (spotKey === 'gate-c') {
+      targetPos = pC || [this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.05, 220).lat, this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.05, 220).lng];
+      label = 'Gate C (Express Entrance)';
+    } else if (spotKey === 'gate-b') {
+      targetPos = pB || [this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.02, 305).lat, this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.02, 305).lng];
+      label = 'Gate B (Secondary Concourse)';
+    } else if (spotKey === 'gate-a') {
+      targetPos = pA || [this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.0, 175).lat, this.getOffsetLatLng(venue.lat, venue.lng, (venue.groundRadius || 85) * 1.0, 175).lng];
+      label = 'Gate A (Main Entrance)';
+    } else if (spotKey === 'pen-1') {
+      if (this.barricades && this.barricades[0] && this.barricades[0].polygon && this.barricades[0].polygon.length) {
+        const poly = this.barricades[0].polygon;
+        const avgLat = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+        const avgLng = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+        targetPos = [avgLat, avgLng];
+      } else {
+        const o = this.getOffsetLatLng(venue.lat, venue.lng, 35, 330);
+        targetPos = [o.lat, o.lng];
+      }
+      label = 'Barricade Pen 1 (VIP Front)';
+    } else if (spotKey === 'pen-4') {
+      if (this.barricades && this.barricades[3] && this.barricades[3].polygon && this.barricades[3].polygon.length) {
+        const poly = this.barricades[3].polygon;
+        const avgLat = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+        const avgLng = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+        targetPos = [avgLat, avgLng];
+      } else {
+        const o = this.getOffsetLatLng(venue.lat, venue.lng, 45, 140);
+        targetPos = [o.lat, o.lng];
+      }
+      label = 'Barricade Pen 4 (South Sector)';
+    } else if (spotKey === 'stage') {
+      let destPos = [venue.lat, venue.lng];
+      if (window.CadPlanner && typeof window.CadPlanner.cadToGps === 'function') {
+        try {
+          const sg = window.CadPlanner.cadToGps(238, 420);
+          if (sg && !isNaN(sg[0])) destPos = sg;
+        } catch(e) {}
+      }
+      targetPos = destPos;
+      label = 'Central Arena & Main Stage';
+    }
+
+    if (targetPos) {
+      this.setVisitorStandingLocation(targetPos[0], targetPos[1], label, true);
+      this.showToast(`📍 Set standing position to ${label}!`, 'success');
+    }
+  },
+
+  bindVisitorStandingControls: function() {
+    const locBtn = document.getElementById('visitorLocateMeBtn');
+    if (locBtn && !locBtn._hasStandingHandler) {
+      locBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.requestVisitorLiveGps();
+      });
+      locBtn._hasStandingHandler = true;
+    }
+
+    const gpsBtn = document.getElementById('standGpsBtn');
+    if (gpsBtn && !gpsBtn._hasStandingHandler) {
+      gpsBtn.addEventListener('click', () => this.requestVisitorLiveGps());
+      gpsBtn._hasStandingHandler = true;
+    }
+
+    document.querySelectorAll('.standing-spot-btn[data-spot]').forEach(btn => {
+      if (!btn._hasStandingHandler) {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.standing-spot-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.setVisitorStandingSpotPreset(btn.dataset.spot);
+        });
+        btn._hasStandingHandler = true;
+      }
+    });
+
+    const guideBtn = document.getElementById('visitorGuideToExitBtn');
+    if (guideBtn && !guideBtn._hasStandingHandler) {
+      guideBtn.addEventListener('click', () => {
+        if (!this.visitorStandingPos) return;
+        const exB = (this.activePaths && this.activePaths['B'] && this.activePaths['B'].length > 1) ? this.activePaths['B'][this.activePaths['B'].length - 1] : null;
+        const exC = (this.activePaths && this.activePaths['C'] && this.activePaths['C'].length > 1) ? this.activePaths['C'][this.activePaths['C'].length - 1] : null;
+        const exA = (this.activePaths && this.activePaths['A'] && this.activePaths['A'].length > 1) ? this.activePaths['A'][this.activePaths['A'].length - 1] : null;
+
+        const dC = exC ? this.getDistanceMeters(this.visitorStandingPos[0], this.visitorStandingPos[1], exC[0], exC[1]) : 9999;
+        const dB = exB ? this.getDistanceMeters(this.visitorStandingPos[0], this.visitorStandingPos[1], exB[0], exB[1]) : 9999;
+        const dA = exA ? this.getDistanceMeters(this.visitorStandingPos[0], this.visitorStandingPos[1], exA[0], exA[1]) : 9999;
+
+        const bestRoute = (dC <= dB && dC <= dA) ? 'C' : (dB <= dA ? 'B' : 'A');
+        this.highlightRoute(bestRoute);
+        this.showToast(`🧭 Highlighted fastest emergency egress path (Route ${bestRoute}) from your standing spot!`, 'success');
+      });
+      guideBtn._hasStandingHandler = true;
+    }
+  },
+
+  showToast: function(msg, type = 'info') {
+    if (window.CadPlanner && typeof window.CadPlanner.showToast === 'function') {
+      window.CadPlanner.showToast(msg, type);
+      return;
+    }
+    if (typeof document !== 'undefined' && document.body && typeof document.createElement === 'function') {
+      const toast = document.createElement('div');
+      toast.className = `cad-toast cad-toast-${type}`;
+      toast.style.cssText = `position:fixed; bottom:20px; right:20px; z-index:99999; padding:10px 16px; border-radius:8px; font-weight:700; font-size:13px; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,0.3); pointer-events:none; transition:opacity 0.3s ease; background:${type === 'success' ? '#059669' : type === 'warning' ? '#d97706' : type === 'danger' ? '#dc2626' : '#2563eb'};`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove ? toast.remove() : null, 300);
+      }, 3200);
+    }
   },
 
 };

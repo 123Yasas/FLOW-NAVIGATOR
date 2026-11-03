@@ -25,7 +25,7 @@
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&libraries=places,geometry" async defer></script>
   
   <!-- Core Design System CSS -->
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=2.2">
 </head>
 <body>
 
@@ -33,7 +33,7 @@
   <div id="emergencyBanner" class="emergency-banner">
     <i data-lucide="flame" style="width:20px;height:20px;"></i>
     <span id="emergencyBannerText">🚨 CRITICAL EVACUATION PROTOCOL ACTIVE - MOVE CALMLY TOWARDS GREEN MARKED EXITS</span>
-    <button id="clearEmergencyBtn" class="btn btn-sm btn-outline" style="background:#fff;color:#dc2626;font-weight:800;margin-left:1rem;">
+    <button id="clearEmergencyBtn" class="btn btn-sm btn-outline" style="background:#fff;color:#dc2626;font-weight:800;margin-left:1rem;display:none;">
       Clear Emergency
     </button>
   </div>
@@ -42,91 +42,94 @@
   <header class="navbar">
     <div class="container nav-container">
       
-      <!-- Brand & Title -->
-      <div class="nav-brand" id="brandHomeBtn">
-        <div class="brand-icon">
-          <i data-lucide="compass"></i>
-        </div>
-        <div>
-          <div class="brand-title">
-            <span data-i18n="brand.title">FLOW NAVIGATOR</span>
-            <span class="brand-badge">LIVE OPERATIONS</span>
+      <!-- Primary Nav Row (Brand, Role Navigation Tabs, Global Actions) -->
+      <div class="nav-top-row">
+        <!-- Brand & Title -->
+        <div class="nav-brand" id="brandHomeBtn">
+          <div class="brand-icon">
+            <i data-lucide="compass"></i>
           </div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;" data-i18n="brand.subtitle">
-            Autonomous Crowd Telemetry & Dynamic Venue Routing
+          <div>
+            <div class="brand-title">
+              <span data-i18n="brand.title">FLOW NAVIGATOR</span>
+              <span class="brand-badge">LIVE OPERATIONS</span>
+            </div>
+            <div class="brand-subtitle" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;" data-i18n="brand.subtitle">
+              Autonomous Crowd Telemetry & Dynamic Venue Routing
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Venue Selector Dropdown -->
-      <div class="venue-select-box">
-        <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
-        <select id="venueSelect" class="venue-select">
-          <option value="sona-college" selected>Sona College of Technology (Campus Ground)</option>
-          <option value="palani-gathering">Sona College of Technology (Campus Ground) (Tamil Nadu)</option>
-          <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
-          <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
-          <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
-        </select>
-      </div>
-      <!-- CrowdFlow AI Direct Launcher Button -->
-      <button id="openCrowdFlowDirectBtn" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;" title="Open CrowdFlow AI Ground Planning System">
-        <i data-lucide="compass" style="width:15px;height:15px;"></i>
-        <span>🧭 CrowdFlow AI Planner</span>
-      </button>
-      <!-- Add Custom Venue Button -->
-      <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:0.4rem;font-weight:700;border-color:#2563eb;color:#1d4ed8;background:#eff6ff;white-space:nowrap;" title="Add Custom Ground or Venue">
-        <i data-lucide="plus-circle" style="width:15px;height:15px;"></i>
-        <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
-      </button>
-
-      <!-- REAL ESP32 IOT LIVE TELEMETRY BADGE -->
-      <div id="dataModeIndicator" class="live-hardware-badge" title="Live ESP32 IoT Hardware Telemetry Active" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:20px;font-size:0.75rem;font-weight:700;color:#047857;white-space:nowrap;">
-        <i data-lucide="radio" style="width:13px;height:13px;color:#059669;"></i>
-        <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
-      </div>
-
-      <!-- Role Switcher & Nav Actions -->
-      <div class="nav-actions">
-        <!-- Language Switcher (English / Tamil) -->
-        <div class="lang-switcher-box" title="Select Language / மொழியை தேர்ந்தெடுக்கவும்">
-          <i data-lucide="globe" style="width:14px;height:14px;color:#2563eb;"></i>
-          <select id="langSelect" class="lang-select">
-            <option value="en">English (EN)</option>
-            <option value="ta">தமிழ் (Tamil)</option>
-          </select>
-        </div>
-
-        <!-- Senior Citizen Accessibility Toggle -->
-        <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
-          <i data-lucide="accessibility" style="width:18px;height:18px;"></i>
-        </button>
-
-        <!-- Role Selector Buttons -->
+        <!-- Role Selector Buttons (Desktop: Center/Tabs | Mobile: Full-width Segmented Bar) -->
         <div class="role-switcher">
-          <button id="roleLandingBtn" class="role-btn active" data-role="landing">
-            <i data-lucide="home" style="width:15px;height:15px;"></i>
+          <button id="roleLandingBtn" class="role-btn active" data-role="landing" title="Platform Overview & Home">
+            <i data-lucide="home" style="width:14px;height:14px;"></i>
             <span>Home</span>
           </button>
-          <button id="roleVisitorBtn" class="role-btn" data-role="visitor">
-            <i data-lucide="user" style="width:15px;height:15px;"></i>
+          <button id="roleVisitorBtn" class="role-btn" data-role="visitor" title="Visitor Route & Turn-by-Turn Guide">
+            <i data-lucide="user" style="width:14px;height:14px;"></i>
             <span data-i18n="nav.role_visitor">Visitor View</span>
           </button>
-          <button id="roleAdminBtn" class="role-btn" data-role="admin">
-            <i data-lucide="shield" style="width:15px;height:15px;"></i>
+          <button id="roleAdminBtn" class="role-btn" data-role="admin" title="Admin Operations & Command Center">
+            <i data-lucide="shield" style="width:14px;height:14px;"></i>
             <span data-i18n="nav.role_admin">Admin Center</span>
           </button>
-          <button id="roleKioskBtn" class="role-btn" data-role="kiosk">
-            <i data-lucide="tv" style="width:15px;height:15px;"></i>
+          <button id="roleKioskBtn" class="role-btn" data-role="kiosk" title="Public Gate Kiosk Board">
+            <i data-lucide="tv" style="width:14px;height:14px;"></i>
             <span data-i18n="nav.role_kiosk">Public Kiosk</span>
           </button>
         </div>
 
-        <!-- SOS / Evacuation Trigger (Direct from Nav) -->
-        <button id="sosBtn" class="btn-sos" title="Broadcast Emergency Evacuation Protocol">
-          <i data-lucide="alert-triangle" style="width:15px;height:15px;"></i>
-          <span>SOS</span>
-        </button>
+        <!-- Global Actions (Language, Senior Citizen Accessibility, SOS Evacuation) -->
+        <div class="nav-actions">
+          <div class="lang-switcher-box" title="Select Language / மொழியை தேர்ந்தெடுக்கவும்">
+            <i data-lucide="globe" style="width:14px;height:14px;color:#2563eb;"></i>
+            <select id="langSelect" class="lang-select">
+              <option value="en">English (EN)</option>
+              <option value="ta">தமிழ் (Tamil)</option>
+            </select>
+          </div>
+
+          <button id="seniorModeBtn" class="btn-icon" title="Toggle Senior Citizen Mode (Large Text & Audio Guidance)">
+            <i data-lucide="accessibility" style="width:18px;height:18px;"></i>
+          </button>
+
+          <button id="sosBtn" class="btn-sos" style="display:none;" title="Broadcast Emergency Evacuation Protocol (Admin Only)">
+            <i data-lucide="alert-triangle" style="width:15px;height:15px;"></i>
+            <span>SOS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Secondary Sub-Bar (Active Venue Selector & Direct Operation Launchers) -->
+      <div class="nav-sub-row">
+        <!-- Venue Selector Dropdown -->
+        <div class="venue-select-box">
+          <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-blue);"></i>
+          <select id="venueSelect" class="venue-select">
+            <option value="sona-college" selected>Sona College of Technology (Campus Ground)</option>
+            <option value="palani-gathering">Sona College of Technology (Campus Ground) (Tamil Nadu)</option>
+            <option value="meenakshi-temple">Meenakshi Temple Complex (Madurai)</option>
+            <option value="chennai-stadium">Jawaharlal Nehru Stadium (Chennai)</option>
+            <option value="central-transit-hub">Central Metro & Rail Junction Hub</option>
+          </select>
+        </div>
+
+        <!-- Quick Launchers Row -->
+        <div class="nav-quick-actions">
+          <button id="openCrowdFlowDirectBtn" class="btn btn-outline btn-sm" title="Open CrowdFlow AI Ground Planning System">
+            <i data-lucide="compass" style="width:14px;height:14px;"></i>
+            <span>🧭 CrowdFlow AI Planner</span>
+          </button>
+          <button id="openAddVenueModalBtn" class="btn btn-outline btn-sm" title="Add Custom Ground or Venue">
+            <i data-lucide="plus-circle" style="width:14px;height:14px;"></i>
+            <span data-i18n="nav.add_venue">+ Add Custom Venue</span>
+          </button>
+          <div id="dataModeIndicator" class="live-hardware-badge" title="Live ESP32 IoT Hardware Telemetry Active">
+            <i data-lucide="radio" style="width:13px;height:13px;color:#059669;"></i>
+            <span data-i18n="nav.mode_real">Real ESP32 IoT Mode</span>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -495,6 +498,81 @@
               <button type="button" class="ground-preset-pill" data-vid="modi-stadium" data-lat="23.0917" data-lng="72.5973" data-name="Narendra Modi Stadium (Ahmedabad)">🏟️ Modi Stadium</button>
               <button type="button" class="ground-preset-pill" data-vid="eden-gardens" data-lat="22.5646" data-lng="88.3433" data-name="Eden Gardens (Kolkata)">🏟️ Eden Gardens</button>
               <button type="button" class="ground-preset-pill" data-vid="palani-gathering" data-lat="10.4534" data-lng="77.5186" data-name="Sona College of Technology (Campus Ground)">🛕 Palani Grounds</button>
+            </div>
+
+            <!-- Visitor Live Standing Spot Selector Toolbar -->
+            <div class="visitor-standing-toolbar" style="margin-top:0.6rem; padding:0.5rem 0.85rem; background:#f0fdf4; border:1.5px solid #86efac; border-radius:10px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display:flex; align-items:center; gap:0.4rem;">
+                <span class="standing-live-dot"></span>
+                <span style="font-size:0.75rem; font-weight:800; color:#166534; display:inline-flex; align-items:center; gap:0.25rem;">
+                  📍 WHERE ARE YOU STANDING?
+                </span>
+                <span style="font-size:0.68rem; color:#15803d; font-weight:600;">(Tap anywhere on map or choose spot)</span>
+              </div>
+              <div class="standing-spot-pills" style="display:flex; gap:0.35rem; flex-wrap:wrap; align-items:center;">
+                <button type="button" id="standGpsBtn" class="btn btn-sm standing-spot-btn" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#dcfce7; color:#166534; border:1px solid #86efac; cursor:pointer;" title="Detect live GPS coordinates and mark position">
+                  📡 My Live GPS
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn active" data-spot="gate-b" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#fef3c7; color:#92400e; border:1px solid #fde68a; cursor:pointer;" title="Place standing marker at Gate B Concourse">
+                  🟡 Gate B Concourse
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="gate-a" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; cursor:pointer;" title="Place standing marker at Gate A Entrance">
+                  🔴 Gate A Entrance
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="gate-c" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; cursor:pointer;" title="Place standing marker at Gate C Express">
+                  🟢 Gate C Express
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="pen-1" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#e0f2fe; color:#0369a1; border:1px solid #7dd3fc; cursor:pointer;" title="Place standing marker inside VIP Pen 1">
+                  🚧 Pen 1 (VIP)
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="pen-4" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; cursor:pointer;" title="Place standing marker in Pen 4">
+                  🚧 Pen 4 (South)
+                </button>
+                <button type="button" class="btn btn-sm standing-spot-btn" data-spot="stage" style="font-size:0.7rem; padding:0.25rem 0.65rem; border-radius:9999px; font-weight:800; background:#eff6ff; color:#1e40af; border:1px solid #93c5fd; cursor:pointer;" title="Place standing marker near Main Stage">
+                  🏟️ Near Stage
+                </button>
+              </div>
+            </div>
+
+            <!-- Visitor Live Standing Guidance Panel (PLACED OUTSIDE MAP) -->
+            <div id="visitorStandingInfoCard" class="visitor-standing-guidance-card" style="margin-top:0.6rem; padding:0.65rem 0.9rem; background:#ffffff; border:1.5px solid #3b82f6; border-radius:10px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.65rem; box-shadow:0 2px 8px rgba(59,130,246,0.1);">
+              <!-- Spot Indicator -->
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <div style="display:inline-flex; align-items:center; gap:0.35rem; background:#eff6ff; border:1px solid #bfdbfe; padding:0.25rem 0.65rem; border-radius:9999px;">
+                  <span class="visitor-standing-pulse-mini"></span>
+                  <span style="font-size:0.75rem; font-weight:900; color:#1e40af; letter-spacing:0.3px;">YOU ARE HERE:</span>
+                </div>
+                <span id="visitorStandingSpotName" style="font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:9999px; background:#f0fdf4; color:#166534; border:1px solid #86efac; white-space:nowrap;">
+                  Gate B Concourse
+                </span>
+              </div>
+
+              <!-- Distance & Guidance Metrics Chips -->
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🚶 Gate:</span>
+                  <span id="visitorHudNearestGate" style="font-weight:800; color:#059669;">Gate B (35m)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🛣️ Safe Route:</span>
+                  <span id="visitorHudRecommendedRoute" style="font-weight:800; color:#d97706;">Route B (Secondary)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🚪 Nearest Exit:</span>
+                  <span id="visitorHudNearestExit" style="font-weight:800; color:#2563eb;">Exit EX-2 (62m)</span>
+                </div>
+                <div style="display:inline-flex; align-items:center; gap:0.3rem; background:#f8fafc; border:1px solid #e2e8f0; padding:0.25rem 0.6rem; border-radius:8px;">
+                  <span style="color:#64748b; font-weight:600;">🏟️ To Arena:</span>
+                  <span id="visitorHudDistanceStage" style="font-weight:800; color:#334155;">85m (1 min walk)</span>
+                </div>
+              </div>
+
+              <!-- Guide to Exit Button -->
+              <div>
+                <button type="button" id="visitorGuideToExitBtn" class="btn btn-sm btn-primary" style="font-size:0.75rem; font-weight:800; padding:0.35rem 0.85rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.35rem; box-shadow:0 2px 6px rgba(37,99,235,0.25); white-space:nowrap;">
+                  🧭 Guide Me to Nearest Exit
+                </button>
+              </div>
             </div>
           </div>
 

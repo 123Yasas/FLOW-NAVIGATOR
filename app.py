@@ -849,6 +849,9 @@ def toggle_emergency():
     SYSTEM_STATE["emergency_mode"] = data.get("active", not SYSTEM_STATE["emergency_mode"])
     
     if SYSTEM_STATE["emergency_mode"]:
+        SYSTEM_STATE["gate_status"] = "EMERGENCY_EVACUATION_ALL_GATES_OPEN"
+        SYSTEM_STATE["gate_a"] = "OPEN"
+        SYSTEM_STATE["gate_b"] = "OPEN"
         new_alert = {
             "id": f"alert-emergency-{int(datetime.datetime.now().timestamp())}",
             "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
@@ -857,6 +860,20 @@ def toggle_emergency():
             "severity": "emergency",
             "read": False,
             "resolved": False
+        }
+        db.add_alert(new_alert)
+    else:
+        SYSTEM_STATE["gate_status"] = "GATE_A_OPEN_GATE_B_CLOSED"
+        SYSTEM_STATE["gate_a"] = "OPEN"
+        SYSTEM_STATE["gate_b"] = "CLOSED"
+        new_alert = {
+            "id": f"alert-emergency-clear-{int(datetime.datetime.now().timestamp())}",
+            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+            "title": "✅ EMERGENCY PROTOCOL DEACTIVATED",
+            "message": "Evacuation cleared by Ground Command. Normal gate operations and standard visitor pathways restored.",
+            "severity": "info",
+            "read": False,
+            "resolved": True
         }
         db.add_alert(new_alert)
 

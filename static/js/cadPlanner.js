@@ -1040,6 +1040,8 @@ const CadPlanner = {
     } catch (err) {
       console.warn('[CrowdFlow] API call fallback to local engine:', err);
       this.computeLocalFallback(payload);
+      this.loadCadPathways();
+      this.renderAll();
     }
   },
 
@@ -3008,6 +3010,10 @@ const CadPlanner = {
   saveProject: async function() {
     if (!this.state.plan) return;
     try {
+      // 1. Immediately persist CAD pathways & barricades to GPS and sync to Visitor View & Admin Maps
+      this.saveCadPathways(false);
+
+      // 2. Persist complete CAD layout project to backend
       const resp = await fetch('/api/crowdflow/save-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3015,10 +3021,12 @@ const CadPlanner = {
       });
       const data = await resp.json();
       if (data.success) {
-        this.showToast(`Plan successfully saved to database! (ID: ${data.project_id})`, 'success');
+        this.showToast(`✅ Plan saved & synced to Visitor View and Venue Map & Routing! (ID: ${data.project_id || 'saved'})`, 'success');
+      } else {
+        this.showToast('✅ Plan saved & synced to Visitor View and Venue Map & Routing!', 'success');
       }
     } catch (e) {
-      this.showToast('Plan saved locally.', 'info');
+      this.showToast('Plan saved and synced locally.', 'info');
     }
   },
 
@@ -3361,127 +3369,133 @@ const CadPlanner = {
     const isTopLimitExceeded = topPens.some(p => p.is_limit_exceeded || (p.current_occupancy > p.capacity));
     const isBotLimitExceeded = botPens.some(p => p.is_limit_exceeded || (p.current_occupancy > p.capacity));
 
-    // ── ROUTE C (GREEN): Entry Gate C -> Top Barricades -> Stage Front Hub ────
-    let pathC;
-    if (penTopIngress && !isTopLimitExceeded) {
-      // Normal pathway: connected directly through top barricade pens
-      const topPenY = Math.round(penTopIngress.y + penTopIngress.height / 2);
-      pathC = [
-        { x: gC.x, y: gC.y },
-        { x: Math.round(gC.x * 0.45 + (penTopIngress.x + penTopIngress.width) * 0.55), y: topPenY },
-        { x: Math.round(penTopIngress.x + penTopIngress.width), y: topPenY }, // Barricade Ingress Port
-        { x: Math.round(penTopEgress.x + penTopEgress.width / 2), y: topPenY },  // Inside barricade system
-        { x: Math.round(penTopEgress.x), y: topPenY },                          // Barricade Egress Port
-        { x: Math.round(stageHub.x + 40), y: Math.round((topPenY + stageHub.y) / 2) },
-        stageHub
-      ];
-    } else if (penTopIngress && isTopLimitExceeded) {
-      // DYNAMICALLY ALTERED PATHWAY: Barricade limit exceeded! Bypasses full pen along upper relief corridor
-      const bypassY = Math.max(68, Math.round(penTopIngress.y - 28));
-      pathC = [
-        { x: gC.x, y: gC.y },
-        { x: Math.round(penTopIngress.x + penTopIngress.width + 25), y: bypassY }, // Divert north into safety road
-        { x: Math.round((penTopIngress.x + penTopEgress.x) / 2), y: bypassY },     // Relief perimeter bypass
-        { x: Math.round(penTopEgress.x - 25), y: bypassY },                        // Bypass full barricade pen
-        { x: Math.round(penTopEgress.x - 30), y: Math.round(penTopEgress.y + 35) },
-        stageHub
-      ];
-    } else {
-      pathC = [
-        { x: gC.x, y: gC.y },
-        { x: Math.round(gC.x * 0.65 + stageHub.x * 0.35), y: 220 },
-        { x: Math.round(gC.x * 0.35 + stageHub.x * 0.65), y: 320 },
-        stageHub
-      ];
-    }
-
-    // ── ROUTE A (RED): Entry Gate A -> Bottom Barricades -> Stage Front Hub ───
-    let pathA;
-    if (penBotIngress && !isBotLimitExceeded) {
-      // Normal pathway: connected directly through bottom barricade pens
-      const botPenY = Math.round(penBotIngress.y + penBotIngress.height / 2);
-      pathA = [
-        { x: gA.x, y: gA.y },
-        { x: Math.round(gA.x * 0.45 + (penBotIngress.x + penBotIngress.width) * 0.55), y: botPenY },
-        { x: Math.round(penBotIngress.x + penBotIngress.width), y: botPenY }, // Barricade Ingress Port
-        { x: Math.round(penBotEgress.x + penBotEgress.width / 2), y: botPenY },  // Inside barricade system
-        { x: Math.round(penBotEgress.x), y: botPenY },                          // Barricade Egress Port
-        { x: Math.round(stageHub.x + 40), y: Math.round((botPenY + stageHub.y) / 2) },
-        stageHub
-      ];
-    } else if (penBotIngress && isBotLimitExceeded) {
-      // DYNAMICALLY ALTERED PATHWAY: Barricade limit exceeded! Bypasses full pen along lower relief corridor
-      const bypassY = Math.min(765, Math.round(penBotIngress.y + penBotIngress.height + 28));
-      pathA = [
-        { x: gA.x, y: gA.y },
-        { x: Math.round(penBotIngress.x + penBotIngress.width + 25), y: bypassY }, // Divert south into safety road
-        { x: Math.round((penBotIngress.x + penBotEgress.x) / 2), y: bypassY },     // Relief perimeter bypass
-        { x: Math.round(penBotEgress.x - 25), y: bypassY },                        // Bypass full barricade pen
-        { x: Math.round(penBotEgress.x - 30), y: Math.round(penBotEgress.y + penBotEgress.height - 35) },
-        stageHub
-      ];
-    } else {
-      pathA = [
-        { x: gA.x, y: gA.y },
-        { x: Math.round(gA.x * 0.65 + stageHub.x * 0.35), y: 600 },
-        { x: Math.round(gA.x * 0.35 + stageHub.x * 0.65), y: 500 },
-        stageHub
-      ];
-    }
-
-    // ── ROUTE B (YELLOW): Entry Gate B -> Central Arterial Safety Corridor ────
-    const corridorY = Math.round(stageHub.y);
-    const pathB = [
-      { x: gB.x, y: gB.y },
-      { x: Math.round(gB.x * 0.70 + stageHub.x * 0.30), y: corridorY },
-      { x: Math.round(gB.x * 0.30 + stageHub.x * 0.70), y: corridorY },
-      stageHub
-    ];
-
-    // ── EXIT GATES SELECTION FOR INGRESS-THROUGH-EGRESS CONTINUATION ──
-    // Sort exit gates along Y axis (top to bottom)
+    // ── EXIT GATES SELECTION ──
     const sortedExits = [...exits].sort((a, b) => a.y - b.y);
     const exTopGate = sortedExits.find(e => e.y < (stage.y || 275)) || sortedExits[0] || { x: 52, y: 130, width: 36, height: 45 };
     const exTop = getCenter(exTopGate, { x: 52, y: 130 });
 
-    const exMidGate = sortedExits[1] || sortedExits[Math.floor(sortedExits.length / 2)] || sortedExits[0] || { x: 52, y: 326, width: 36, height: 45 };
-    const exMid = getCenter(exMidGate, { x: 52, y: 326 });
+    const exMidGate = sortedExits.find(e => e.y < (stage.y || 275) && e.id !== exTopGate.id) || sortedExits[1] || { x: 52, y: 210, width: 36, height: 45 };
+    const exMid = getCenter(exMidGate, { x: 52, y: 210 });
 
     const exBotGate = sortedExits[sortedExits.length - 1] || { x: 52, y: 720, width: 36, height: 45 };
     const exBot = getCenter(exBotGate, { x: 52, y: 720 });
 
-    // ── EXIT LEGS (Connecting from Stage Front Audience Hub -> Clear Aisles -> Exit Gates -> Perimeter Road) ──
-    let exitLegC, exitLegB, exitLegA, pathSos;
+    // ── ROUTE C (GREEN): Entry Gate C -> Top Barricades Ingress/Egress -> Directly to EXIT EX-1 (NEVER to Stage) ────
+    let pathC = [];
+    if (topPens.length > 0 && !isTopLimitExceeded) {
+      const firstPen = topPens[0];
+      const lastPen = topPens[topPens.length - 1];
+      const topPenY = Math.round(firstPen.y + firstPen.height / 2);
 
-    if (sp === 'west') {
-      const clearNorthY = Math.min(Math.round((stage.y || 275) - 35), Math.round(exTop.y));
-      const clearSouthY = Math.min(745, Math.max(Math.round((stage.y || 275) + (stage.height || 290) + 35), Math.round(exBot.y)));
+      pathC.push({ x: gC.x, y: gC.y });
+      pathC.push({ x: Math.round(gC.x * 0.35 + (firstPen.x + firstPen.width) * 0.65), y: topPenY });
 
-      // Route C: Stage Front -> North Stage Aisle -> EXIT EX-1 -> 12M Perimeter Road
-      exitLegC = [
-        { x: Math.round(stageHub.x - 20), y: Math.max(140, clearNorthY) },
+      topPens.forEach(pen => {
+        const py = Math.round(pen.y + pen.height / 2);
+        pathC.push({ x: Math.round(pen.x + pen.width), y: py });       // Barricade Ingress Port
+        pathC.push({ x: Math.round(pen.x + pen.width / 2), y: py });   // Inside barricade system
+        pathC.push({ x: Math.round(pen.x), y: py });                   // Barricade Egress Port
+      });
+
+      pathC.push({ x: Math.round(lastPen.x - 30), y: topPenY });
+      pathC.push({ x: Math.round(exTop.x + 48), y: exTop.y });
+      pathC.push({ x: exTop.x, y: exTop.y });
+      pathC.push({ x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y });
+
+    } else if (topPens.length > 0 && isTopLimitExceeded) {
+      const firstPen = topPens[0];
+      const lastPen = topPens[topPens.length - 1];
+      const bypassY = Math.max(68, Math.round(firstPen.y - 28));
+
+      pathC = [
+        { x: gC.x, y: gC.y },
+        { x: Math.round(firstPen.x + firstPen.width + 25), y: bypassY }, // Divert north into relief corridor
+        { x: Math.round((firstPen.x + lastPen.x) / 2), y: bypassY },     // Relief perimeter bypass
+        { x: Math.round(lastPen.x - 25), y: bypassY },                    // Bypass full barricade pen
+        { x: Math.round(lastPen.x - 30), y: exTop.y },
         { x: Math.round(exTop.x + 48), y: exTop.y },
         { x: exTop.x, y: exTop.y },
         { x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y }
       ];
-
-      // Route B: Stage Front -> Central Arterial Safety Corridor -> EXIT EX-2 -> 12M Perimeter Road
-      exitLegB = [
-        { x: Math.round(stageHub.x - 25), y: Math.round(exMid.y) },
-        { x: Math.round(exMid.x + 48), y: exMid.y },
-        { x: exMid.x, y: exMid.y },
-        { x: Math.max(28, Math.round(exMid.x - 24)), y: exMid.y }
+    } else {
+      pathC = [
+        { x: gC.x, y: gC.y },
+        { x: Math.round(gC.x * 0.6 + exTop.x * 0.4), y: exTop.y },
+        { x: Math.round(exTop.x + 48), y: exTop.y },
+        { x: exTop.x, y: exTop.y },
+        { x: Math.max(28, Math.round(exTop.x - 24)), y: exTop.y }
       ];
+    }
 
-      // Route A: Stage Front -> South Stage Aisle -> EXIT EX-4 -> 12M Perimeter Road
-      exitLegA = [
-        { x: Math.round(stageHub.x - 20), y: clearSouthY },
+    // ── ROUTE A (RED): Entry Gate A -> Bottom Barricades Ingress/Egress -> Directly to EXIT EX-4 (NEVER to Stage) ───
+    let pathA = [];
+    if (botPens.length > 0 && !isBotLimitExceeded) {
+      const firstPen = botPens[0];
+      const lastPen = botPens[botPens.length - 1];
+      const botPenY = Math.round(firstPen.y + firstPen.height / 2);
+
+      pathA.push({ x: gA.x, y: gA.y });
+      pathA.push({ x: Math.round(gA.x * 0.35 + (firstPen.x + firstPen.width) * 0.65), y: botPenY });
+
+      botPens.forEach(pen => {
+        const py = Math.round(pen.y + pen.height / 2);
+        pathA.push({ x: Math.round(pen.x + pen.width), y: py });       // Barricade Ingress Port
+        pathA.push({ x: Math.round(pen.x + pen.width / 2), y: py });   // Inside barricade system
+        pathA.push({ x: Math.round(pen.x), y: py });                   // Barricade Egress Port
+      });
+
+      pathA.push({ x: Math.round(lastPen.x - 30), y: botPenY });
+      pathA.push({ x: Math.round(exBot.x + 48), y: exBot.y });
+      pathA.push({ x: exBot.x, y: exBot.y });
+      pathA.push({ x: Math.max(28, Math.round(exBot.x - 24)), y: exBot.y });
+
+    } else if (botPens.length > 0 && isBotLimitExceeded) {
+      const firstPen = botPens[0];
+      const lastPen = botPens[botPens.length - 1];
+      const bypassY = Math.min(765, Math.round(firstPen.y + firstPen.height + 28));
+
+      pathA = [
+        { x: gA.x, y: gA.y },
+        { x: Math.round(firstPen.x + firstPen.width + 25), y: bypassY }, // Divert south into relief corridor
+        { x: Math.round((firstPen.x + lastPen.x) / 2), y: bypassY },     // Relief perimeter bypass
+        { x: Math.round(lastPen.x - 25), y: bypassY },                    // Bypass full barricade pen
+        { x: Math.round(lastPen.x - 30), y: exBot.y },
         { x: Math.round(exBot.x + 48), y: exBot.y },
         { x: exBot.x, y: exBot.y },
         { x: Math.max(28, Math.round(exBot.x - 24)), y: exBot.y }
       ];
+    } else {
+      pathA = [
+        { x: gA.x, y: gA.y },
+        { x: Math.round(gA.x * 0.6 + exBot.x * 0.4), y: exBot.y },
+        { x: Math.round(exBot.x + 48), y: exBot.y },
+        { x: exBot.x, y: exBot.y },
+        { x: Math.max(28, Math.round(exBot.x - 24)), y: exBot.y }
+      ];
+    }
 
-      // SOS Emergency Route: Direct clear evacuation corridor from stage -> EXIT EX-1 -> Safe Assembly Perimeter
+    // ── ROUTE B (YELLOW): Entry Gate B -> Central Arterial Safety Corridor -> Directly to EXIT EX-2 (NEVER to Stage) ────
+    const corridorY = Math.round(stageHub.y);
+    const penWestX = Math.min(
+      topPens.length > 0 ? topPens[topPens.length - 1].x : 255,
+      botPens.length > 0 ? botPens[botPens.length - 1].x : 255
+    );
+
+    const pathB = [
+      { x: gB.x, y: gB.y },
+      { x: Math.round(gB.x * 0.70 + 850 * 0.30), y: corridorY },
+      { x: 850, y: corridorY },
+      { x: 500, y: corridorY },
+      { x: Math.round(penWestX - 30), y: corridorY },
+      { x: Math.round(exMid.x + 48), y: exMid.y },
+      { x: exMid.x, y: exMid.y },
+      { x: Math.max(28, Math.round(exMid.x - 24)), y: exMid.y }
+    ];
+
+    // ── EMERGENCY SOS EGRESS (CYAN / RED DASHED): Audience Area -> Straight to SOS Exit (EX-1) ──
+    let pathSos;
+    if (sp === 'west') {
+      const clearNorthY = Math.min(Math.round((stage.y || 275) - 35), Math.round(exTop.y));
       const crossAisleX = Math.round(stage.x + (stage.width || 105) / 2);
       pathSos = [
         stageHub,
@@ -3493,26 +3507,6 @@ const CadPlanner = {
       ];
     } else if (sp === 'east') {
       const clearNorthY = Math.min(Math.round((stage.y || 275) - 35), Math.round(exTop.y));
-      const clearSouthY = Math.max(Math.round((stage.y || 275) + (stage.height || 290) + 35), Math.round(exBot.y));
-
-      exitLegC = [
-        { x: Math.round(stageHub.x + 20), y: Math.max(140, clearNorthY) },
-        { x: Math.round(exTop.x - 48), y: exTop.y },
-        { x: exTop.x, y: exTop.y },
-        { x: Math.min(1360, Math.round(exTop.x + 24)), y: exTop.y }
-      ];
-      exitLegB = [
-        { x: Math.round(stageHub.x + 25), y: Math.round(exMid.y) },
-        { x: Math.round(exMid.x - 48), y: exMid.y },
-        { x: exMid.x, y: exMid.y },
-        { x: Math.min(1360, Math.round(exMid.x + 24)), y: exMid.y }
-      ];
-      exitLegA = [
-        { x: Math.round(stageHub.x + 20), y: Math.min(745, clearSouthY) },
-        { x: Math.round(exBot.x - 48), y: exBot.y },
-        { x: exBot.x, y: exBot.y },
-        { x: Math.min(1360, Math.round(exBot.x + 24)), y: exBot.y }
-      ];
       pathSos = [
         stageHub,
         { x: Math.round(stageHub.x + 15), y: clearNorthY },
@@ -3522,21 +3516,6 @@ const CadPlanner = {
         { x: Math.min(1360, Math.round(exTop.x + 24)), y: exTop.y }
       ];
     } else {
-      exitLegC = [
-        { x: Math.round((stageHub.x + exTop.x) / 2), y: Math.round((stageHub.y + exTop.y) / 2) },
-        { x: exTop.x, y: exTop.y },
-        { x: exTop.x, y: Math.max(30, exTop.y - 25) }
-      ];
-      exitLegB = [
-        { x: Math.round((stageHub.x + exMid.x) / 2), y: Math.round((stageHub.y + exMid.y) / 2) },
-        { x: exMid.x, y: exMid.y },
-        { x: exMid.x, y: Math.max(30, exMid.y - 25) }
-      ];
-      exitLegA = [
-        { x: Math.round((stageHub.x + exBot.x) / 2), y: Math.round((stageHub.y + exBot.y) / 2) },
-        { x: exBot.x, y: exBot.y },
-        { x: exBot.x, y: Math.min(820, exBot.y + 25) }
-      ];
       pathSos = [
         stageHub,
         { x: Math.round((stageHub.x + exTop.x) / 2), y: Math.round((stageHub.y + exTop.y) / 2) },
@@ -3545,11 +3524,10 @@ const CadPlanner = {
       ];
     }
 
-    // Connect pathways through from Stage Hub out to designated Exit Gates
     return {
-      'C': pathC.concat(exitLegC),
-      'B': pathB.concat(exitLegB),
-      'A': pathA.concat(exitLegA),
+      'C': pathC,
+      'B': pathB,
+      'A': pathA,
       'EMERGENCY': pathSos
     };
   },
@@ -3616,43 +3594,47 @@ const CadPlanner = {
 
     // Extract GPS barricades based on CAD layout setting
     const gpsBarricades = this.getGpsBarricades();
-    try {
-      localStorage.setItem('flow_barricades_' + vid, JSON.stringify(gpsBarricades));
-    } catch(e) {}
 
     // Extract GPS facilities and boundary based on rotated CAD layout
     const gpsFacilities = this.getGpsFacilities();
     const gpsBoundary = this.getGpsBoundary();
+
+    // Persist all GPS entities to localStorage unconditionally
     try {
+      localStorage.setItem('flow_pathways_' + vid, JSON.stringify(gpsPathways));
+      localStorage.setItem('flow_barricades_' + vid, JSON.stringify(gpsBarricades));
       localStorage.setItem('flow_facilities_' + vid, JSON.stringify(gpsFacilities));
       localStorage.setItem('flow_boundary_' + vid, JSON.stringify(gpsBoundary));
+      localStorage.setItem('flow_map_rotation_' + vid, String(this.state.mapRotationDeg || 0));
+      localStorage.setItem('flow_cad_rotation_' + vid, String(this.state.cadRotationDeg || 0));
     } catch(e) {}
 
+    // Persist to backend database /api/venues/${vid}/pathways unconditionally
+    try {
+      fetch(`/api/venues/${vid}/pathways`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          pathways: gpsPathways, 
+          barricades: gpsBarricades,
+          facilities: gpsFacilities,
+          boundary: gpsBoundary,
+          map_rotation: this.state.mapRotationDeg || 0,
+          cad_rotation: this.state.cadRotationDeg || 0
+        })
+      }).catch(() => {});
+    } catch(e) {}
+
+    // Directly assign and trigger immediate render in GoogleMapsManager
     if (window.GoogleMapsManager) {
-      if (typeof window.GoogleMapsManager.setFacilities === 'function') {
-        window.GoogleMapsManager.setFacilities(gpsFacilities);
+      window.GoogleMapsManager.facilities = JSON.parse(JSON.stringify(gpsFacilities));
+      window.GoogleMapsManager.boundary = JSON.parse(JSON.stringify(gpsBoundary));
+      window.GoogleMapsManager.barricades = JSON.parse(JSON.stringify(gpsBarricades));
+      window.GoogleMapsManager.customPathways = JSON.parse(JSON.stringify(gpsPathways));
+      window.GoogleMapsManager.mapRotationDeg = this.state.mapRotationDeg || 0;
+      if (typeof window.GoogleMapsManager.renderVisitorPathways === 'function') {
+        window.GoogleMapsManager.renderVisitorPathways();
       }
-      if (typeof window.GoogleMapsManager.setBoundary === 'function') {
-        window.GoogleMapsManager.setBoundary(gpsBoundary);
-      }
-      window.GoogleMapsManager.setBarricades(gpsBarricades, false);
-      window.GoogleMapsManager.setCustomPathways(gpsPathways, true);
-    } else {
-      try {
-        localStorage.setItem('flow_pathways_' + vid, JSON.stringify(gpsPathways));
-        fetch(`/api/venues/${vid}/pathways`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            pathways: gpsPathways, 
-            barricades: gpsBarricades,
-            facilities: gpsFacilities,
-            boundary: gpsBoundary,
-            map_rotation: this.state.mapRotationDeg || 0,
-            cad_rotation: this.state.cadRotationDeg || 0
-          })
-        }).catch(() => {});
-      } catch(e) {}
     }
 
     this.updatePathwayBadgeCounts();

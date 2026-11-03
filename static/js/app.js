@@ -67,7 +67,21 @@ const FlowApp = {
     // Initial data fetch and start background polling
     this.refreshData();
     this.generateAnalyticsData();
-    this.pollTimer = setInterval(() => this.refreshData(), 4000);
+    this.pollTimer = setInterval(() => this.refreshData(), 2000);
+
+    // Instant cross-tab emergency broadcast listener (0ms latency across tabs)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'flow_emergency_event' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && parsed.active !== undefined && parsed.active !== this.emergencyActive) {
+            this.emergencyActive = Boolean(parsed.active);
+            this.updateEmergencyUI(this.emergencyActive);
+            this.refreshData();
+          }
+        } catch(err) {}
+      }
+    });
   },
 
   // -------------------- ROLE NAVIGATION & ADMIN AUTH --------------------
@@ -455,21 +469,37 @@ const FlowApp = {
 
     if (this.isAdminLoggedIn && this.adminUser) {
       if (adminBtn) {
+        const adminName = this.adminUser.name ? this.adminUser.name.split(' ')[0] : 'Active';
         adminBtn.innerHTML = `
-          <i data-lucide="shield-check" style="width:15px;height:15px;color:#10b981;"></i>
-          <span>Admin (${this.adminUser.name ? this.adminUser.name.split(' ')[0] : 'Active'})</span>
+          <i data-lucide="shield-check" style="width:14px;height:14px;color:#10b981;"></i>
+          <span>Admin (${adminName})</span>
         `;
       }
       if (navSignOut) navSignOut.style.display = 'inline-flex';
     } else {
       if (adminBtn) {
         adminBtn.innerHTML = `
-          <i data-lucide="shield-alert" style="width:15px;height:15px;"></i>
-          <span>Admin Center</span>
+          <i data-lucide="shield" style="width:14px;height:14px;"></i>
+          <span data-i18n="nav.role_admin">Admin Center</span>
         `;
       }
       if (navSignOut) navSignOut.style.display = 'none';
     }
+    if (window.lucide) {
+      try { lucide.createIcons(); } catch(e) {}
+    }
+
+    // SOS Button: keep only in admin page only
+    const sosBtn = document.getElementById('sosBtn');
+    if (sosBtn) {
+      sosBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+    }
+
+    const clearEmergBtn = document.getElementById('clearEmergencyBtn');
+    if (clearEmergBtn) {
+      clearEmergBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn && this.emergencyActive) ? 'inline-block' : 'none';
+    }
+
     if (window.lucide) lucide.createIcons();
   },
 
@@ -485,6 +515,18 @@ const FlowApp = {
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
     const target = document.getElementById(`${role}View`);
     if (target) target.classList.add('active');
+
+    // SOS button: ONLY in admin page and only if admin is logged in (removed from home page)
+    const sosBtn = document.getElementById('sosBtn');
+    if (sosBtn) {
+      sosBtn.style.display = (role === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+    }
+
+    // Clear emergency button on banner: only visible to logged-in admin
+    const clearEmergBtn = document.getElementById('clearEmergencyBtn');
+    if (clearEmergBtn) {
+      clearEmergBtn.style.display = (role === 'admin' && this.isAdminLoggedIn && this.emergencyActive) ? 'inline-block' : 'none';
+    }
 
     // Add Venue button: always accessible from navbar
     const addVenueBtn = document.getElementById('openAddVenueModalBtn');
@@ -506,7 +548,9 @@ const FlowApp = {
         }, 150);
       }
       if (role === 'admin') {
-        window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+        const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+        window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', v);
+        window.GoogleMapsManager.renderVisitorPathways(v);
         setTimeout(() => {
           try { window.GoogleMapsManager.mapInstances['googleMapAdminDiv']?.invalidateSize(); } catch(e) {}
         }, 150);
@@ -593,7 +637,7 @@ const FlowApp = {
     }
 
     const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
-    if (evacBtn) evacBtn.addEventListener('click', () => this.triggerEmergency(true));
+    if (evacBtn) evacBtn.addEventListener('click', () => this.triggerEmergency(!this.emergencyActive));
 
     const simBurstBtn = document.getElementById('adminSimulateTickBtn');
     if (simBurstBtn) {
@@ -659,7 +703,9 @@ const FlowApp = {
     if (window.lucide) lucide.createIcons();
 
     if (tab === 'google-maps-tab' && window.GoogleMapsManager) {
-      window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', window.GoogleMapsManager.venueConfigs[this.activeVenueId]);
+      const v = window.GoogleMapsManager.venueConfigs[this.activeVenueId] || window.GoogleMapsManager.venueConfigs['sona-college'];
+      window.GoogleMapsManager.mountSingleMap('googleMapAdminDiv', v);
+      window.GoogleMapsManager.renderVisitorPathways(v);
       setTimeout(() => {
         try {
           if (window.GoogleMapsManager.mapInstances['googleMapAdminDiv']) {
@@ -1272,35 +1318,78 @@ const FlowApp = {
   },
 
   speakText: function(text) {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.SpeechSynthesisUtterance) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      } catch(e) {}
     } else {
-      alert(text);
+      console.log('[FlowApp Voice Broadcast]:', text);
     }
   },
 
   // -------------------- EMERGENCY EVACUATION --------------------
   bindEmergencyProtocol: function() {
     const sosBtn = document.getElementById('sosBtn') || document.getElementById('emergencyBtn');
-    if (sosBtn) sosBtn.addEventListener('click', () => this.triggerEmergency(true));
+    if (sosBtn) {
+      sosBtn.addEventListener('click', () => {
+        // Only authenticated admins can trigger evacuation protocol
+        if (!this.isAdminLoggedIn) {
+          this.openAdminLoginModal();
+          return;
+        }
+        this.triggerEmergency(!this.emergencyActive);
+      });
+    }
 
     const clearBtn = document.getElementById('clearEmergencyBtn');
-    if (clearBtn) clearBtn.addEventListener('click', () => this.triggerEmergency(false));
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (!this.isAdminLoggedIn) {
+          this.openAdminLoginModal();
+          return;
+        }
+        this.triggerEmergency(false);
+      });
+    }
+
+    const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
+    if (evacBtn) {
+      evacBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerEmergency(!this.emergencyActive);
+      });
+    }
   },
 
   triggerEmergency: async function(active) {
+    // 1. Optimistic immediate local reflection (0ms latency across UI components)
+    this.emergencyActive = Boolean(active);
+    this.updateEmergencyUI(this.emergencyActive);
+
+    // 2. Broadcast immediately across open tabs via localStorage event (0ms)
+    try {
+      localStorage.setItem('flow_emergency_event', JSON.stringify({ active: this.emergencyActive, time: Date.now() }));
+    } catch(e) {}
+
+    // 3. Immediately send to backend
     try {
       const resp = await fetch('/api/emergency/toggle', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: active })
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.getAuthHeaders ? this.getAuthHeaders() : {})
+        },
+        body: JSON.stringify({ active: this.emergencyActive })
       });
       const data = await resp.json();
-      this.emergencyActive = data.emergency_mode;
+      if (data && data.emergency_mode !== undefined) {
+        this.emergencyActive = Boolean(data.emergency_mode);
+      }
       this.updateEmergencyUI(this.emergencyActive);
       this.refreshData();
     } catch (e) {
@@ -1311,15 +1400,137 @@ const FlowApp = {
   updateEmergencyUI: function(active) {
     const banner = document.getElementById('emergencyBanner');
     const statEmergency = document.getElementById('adminStatEmergency');
+    const clearBtn = document.getElementById('clearEmergencyBtn');
+    const evacBtn = document.getElementById('adminEvacuateTriggerBtn');
+    const sosBtn = document.getElementById('sosBtn');
     
-    if (banner) banner.classList.toggle('active', active);
+    // 1. Top emergency banner
+    if (banner) {
+      banner.classList.toggle('active', active);
+    }
+
+    // 2. Clear button on banner: only visible when emergency is active AND admin is logged in
+    if (clearBtn) {
+      clearBtn.style.display = (this.isAdminLoggedIn && active) ? 'inline-block' : 'none';
+    }
+
+    // 3. Admin status widget
     if (statEmergency) {
       statEmergency.textContent = active ? 'EVACUATING' : 'NORMAL';
       statEmergency.style.color = active ? 'var(--color-critical)' : 'var(--color-safe)';
     }
 
+    // 4. Admin center evacuation trigger button state
+    if (evacBtn) {
+      if (active) {
+        evacBtn.style.borderColor = '#dc2626';
+        evacBtn.style.background = '#fef2f2';
+        evacBtn.innerHTML = `
+          <i data-lucide="alert-octagon" style="color:#dc2626; width:22px; height:22px;"></i>
+          <div>
+            <div style="font-weight:800; color:#dc2626;">⚠️ EVACUATION ACTIVE (Click to Reset/Clear Protocol)</div>
+            <div style="font-size:0.75rem; color:#991b1b;">All outward egress gates active. Click here to restore normal operations.</div>
+          </div>
+        `;
+      } else {
+        evacBtn.style.borderColor = 'rgba(239,68,68,0.4)';
+        evacBtn.style.background = 'rgba(239,68,68,0.06)';
+        evacBtn.innerHTML = `
+          <i data-lucide="alert-octagon" style="color:var(--color-critical); width:22px; height:22px;"></i>
+          <div>
+            <div style="font-weight:700; color:var(--color-critical);">Trigger Venue Evacuation Protocol</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Opens all emergency gates outward and highlights green exit corridors.</div>
+          </div>
+        `;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // 5. SOS Nav Button state (in admin view only)
+    if (sosBtn) {
+      sosBtn.style.display = (this.currentRole === 'admin' && this.isAdminLoggedIn) ? 'inline-flex' : 'none';
+      if (active) {
+        sosBtn.style.background = '#dc2626';
+        sosBtn.style.color = '#ffffff';
+        sosBtn.innerHTML = '<i data-lucide="alert-octagon" style="width:15px;height:15px;"></i><span>RESET SOS</span>';
+      } else {
+        sosBtn.style.background = '';
+        sosBtn.style.color = '';
+        sosBtn.innerHTML = '<i data-lucide="alert-triangle" style="width:15px;height:15px;"></i><span>SOS</span>';
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // 6. Real-time Map Pathway Synchronization: highlight emergency evacuation route
+    if (window.GoogleMapsManager && typeof window.GoogleMapsManager.highlightRoute === 'function') {
+      window.GoogleMapsManager.highlightRoute(active ? 'EMERGENCY' : 'ALL');
+    }
+
+    // 7. Visitor Standing Guidance Card & HUD
+    const hudCard = document.getElementById('visitorStandingInfoCard');
+    const hudRoute = document.getElementById('visitorHudRecommendedRoute');
+    const hudExit = document.getElementById('visitorHudNearestExit');
+    const hudSpotName = document.getElementById('visitorStandingSpotName');
+    const guideToExitBtn = document.getElementById('visitorGuideToExitBtn');
+
+    if (hudCard) {
+      if (active) {
+        hudCard.style.borderColor = '#dc2626';
+        hudCard.style.boxShadow = '0 0 16px rgba(220,38,38,0.35)';
+        if (hudSpotName) {
+          hudSpotName.textContent = '🚨 EVACUATION ACTIVE';
+          hudSpotName.style.background = '#fee2e2';
+          hudSpotName.style.color = '#dc2626';
+          hudSpotName.style.borderColor = '#fca5a5';
+        }
+        if (hudRoute) {
+          hudRoute.innerHTML = `<span style="color:#06b6d4; font-weight:800;">🚨 EMERGENCY EGRESS (Route SOS to Exit EX-1/EX-2)</span>`;
+        }
+        if (hudExit) {
+          hudExit.innerHTML = `<span style="color:#dc2626; font-weight:800;">⚡ PROCEED IMMEDIATELY TO NEAREST UNBLOCKED EXIT</span>`;
+        }
+        if (guideToExitBtn) {
+          guideToExitBtn.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
+          guideToExitBtn.innerHTML = '🚨 Guide Me Out Now (Emergency Egress)';
+        }
+      } else {
+        hudCard.style.borderColor = '#3b82f6';
+        hudCard.style.boxShadow = '0 2px 8px rgba(59,130,246,0.1)';
+        if (guideToExitBtn) {
+          guideToExitBtn.style.background = 'linear-gradient(135deg, #1d4ed8, #2563eb)';
+          guideToExitBtn.innerHTML = '🧭 Guide Me to Nearest Exit';
+        }
+      }
+    }
+
+    // 8. Visitor Gate Status Card
+    const gateTitle = document.getElementById('visitorGateTitle');
+    const gateDesc = document.getElementById('visitorGateDesc');
+    const servoBadge = document.getElementById('visitorGateServoBadge');
+    const badgeA = document.getElementById('visitorGateBadgeA');
+    const badgeB = document.getElementById('visitorGateBadgeB');
+
     if (active) {
-      this.speakText('Attention! Emergency evacuation initiated. All turnstiles are open outwards. Follow green illuminated bypass pathways immediately to parking grounds.');
+      if (gateTitle) gateTitle.innerHTML = '<span style="color:#dc2626; font-weight:800;">🚨 EMERGENCY EVACUATION — ALL GATES OPENED</span>';
+      if (gateDesc) gateDesc.textContent = 'Hardware safety override active. All turnstiles and gates unlocked and swung outward for unhindered emergency egress. Follow green lighted pathways immediately.';
+      if (servoBadge) {
+        servoBadge.textContent = '🔓 SERVO MOTOR OVERRIDE: 90° OUTWARD EVACUATION CLEAR';
+        servoBadge.style.color = '#dc2626';
+        servoBadge.style.background = '#fee2e2';
+      }
+      if (badgeA) {
+        badgeA.textContent = '🟢 Gate A: Outward Egress Active';
+        badgeA.className = 'badge badge-safe';
+      }
+      if (badgeB) {
+        badgeB.textContent = '🟢 Gate B: Outward Egress Active';
+        badgeB.className = 'badge badge-safe';
+      }
+    }
+
+    // 9. Voice evacuation broadcast
+    if (active) {
+      this.speakText('Attention all visitors! Emergency evacuation protocol has been activated. All turnstiles and perimeter gates are open outward. Please proceed calmly along the illuminated emergency routes to the nearest exit portal.');
     }
   },
 
@@ -1871,6 +2082,33 @@ const FlowApp = {
 
     if (countDisplay) {
       countDisplay.textContent = `${liveCrowd} / ${capacityLimit}`;
+    }
+
+    // Emergency Evacuation Override across Gate Display
+    if (this.emergencyActive || (systemState && systemState.emergency_mode)) {
+      card.style.borderLeft = '6px solid #dc2626';
+      card.style.background = '#fef2f2';
+      card.style.boxShadow = '0 0 24px rgba(220, 38, 38, 0.3)';
+      if (iconWrap) {
+        iconWrap.style.background = '#fee2e2';
+        iconWrap.style.color = '#dc2626';
+        iconWrap.innerHTML = '<i data-lucide="alert-octagon" style="width:26px; height:26px;"></i>';
+      }
+      if (title) title.innerHTML = '<span style="color:#dc2626; font-weight:800;">🚨 CRITICAL EVACUATION PROTOCOL ENGAGED</span>';
+      if (desc) desc.textContent = 'Hardware safety override active. All turnstiles and perimeter gates are open outward for rapid egress. Follow illuminated green bypass pathways to safe parking grounds.';
+      if (servoBadge) {
+        servoBadge.textContent = '🔓 90° SERVO OVERRIDE: OUTWARD EVACUATION CLEAR';
+        servoBadge.style.color = '#dc2626';
+        servoBadge.style.background = '#fee2e2';
+      }
+      if (badgeA) { badgeA.textContent = '🟢 Gate A: Outward Egress Open'; badgeA.className = 'badge badge-safe'; }
+      if (badgeB) { badgeB.textContent = '🟢 Gate B: Outward Egress Open'; badgeB.className = 'badge badge-safe'; }
+      if (boxA) { boxA.style.borderColor = '#22c55e'; boxA.style.background = '#f0fdf4'; }
+      if (boxB) { boxB.style.borderColor = '#22c55e'; boxB.style.background = '#f0fdf4'; }
+      if (indicatorA) { indicatorA.innerHTML = '<span style="color:#16a34a; font-weight:800;">● OUTWARD EGRESS ONLY</span>'; }
+      if (indicatorB) { indicatorB.innerHTML = '<span style="color:#16a34a; font-weight:800;">● OUTWARD EGRESS ONLY</span>'; }
+      if (window.lucide) lucide.createIcons();
+      return;
     }
 
     if (isGateAClosed) {
